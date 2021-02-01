@@ -35,7 +35,7 @@ pub const Format = struct {
             .memories = Memories.init(self.alloc),
             .globals = Globals.init(self.alloc),
             .exports = Exports.init(self.alloc),
-            // .starts = Starts.init(self.alloc),
+            .start = undefined,
             // .elements = Elements.init(self.alloc),
             // .codes = Codes.init(self.alloc),
             // .datas = Datas.init(self.alloc),
@@ -78,6 +78,10 @@ pub const Format = struct {
             .Export => {
                 const count = try self.readExportSection(module);
                 std.debug.warn("read {} Export\n", .{count});
+            },
+            .Start => {
+                const count = try self.readStartSection(module);
+                std.debug.warn("read {} Start\n", .{count});
             },
             else => {},
         }
@@ -289,6 +293,15 @@ pub const Format = struct {
 
         return count;
     }
+
+    fn readStartSection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        const index = try leb.readULEB128(u32, rd);
+
+        module.start = index;
+
+        return 1;
+    }
 };
 
 const Module = struct {
@@ -302,7 +315,7 @@ const Module = struct {
     memories: Memories,
     globals: Globals,
     exports: Exports,
-    // starts: Starts,
+    start: u32,
     // elements: Elements,
     // codes: Codes,
     // datas: Datas,
