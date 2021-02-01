@@ -32,7 +32,7 @@ pub const Format = struct {
             .imports = Imports.init(self.alloc),
             .functions = Functions.init(self.alloc),
             .tables = Tables.init(self.alloc),
-            // .memories = Memories.init(self.alloc),
+            .memories = Memories.init(self.alloc),
             // .globals = Globals.init(self.alloc),
             // .exports = Exports.init(self.alloc),
             // .starts = Starts.init(self.alloc),
@@ -69,6 +69,10 @@ pub const Format = struct {
             .Table => {
                 const count = try self.readTableSection(module);
                 std.debug.warn("read {} Table\n", .{count});
+            },
+            .Memory => {
+                const count = try self.readMemorySection(module);
+                std.debug.warn("read {} Memory\n", .{count});
             },
             else => {},
         }
@@ -197,6 +201,37 @@ pub const Format = struct {
 
         return count;
     }
+
+    fn readMemorySection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        const count = try leb.readULEB128(u32, rd);
+
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const limit_type = try rd.readEnum(LimitType, .Little);
+            switch (limit_type) {
+                .Min => {
+                    const min = try leb.readULEB128(u32, rd);
+
+                    try module.tables.append(Limit{
+                        .min = min,
+                        .max = std.math.maxInt(u32),
+                    });
+                },
+                .MinMax => {
+                    const min = try leb.readULEB128(u32, rd);
+                    const max = try leb.readULEB128(u32, rd);
+
+                    try module.tables.append(Limit{
+                        .min = min,
+                        .max = max,
+                    });
+                },
+            }
+        }
+
+        return count;
+    }
 };
 
 const Module = struct {
@@ -207,7 +242,7 @@ const Module = struct {
     imports: Imports,
     functions: Functions,
     tables: Tables,
-    // memories: Memories,
+    memories: Memories,
     // globals: Globals,
     // exports: Exports,
     // starts: Starts,
@@ -261,7 +296,7 @@ const ValueTypes = ArrayList(ValueType);
 const Imports = ArrayList(Import);
 const Functions = ArrayList(u32); // We can't use view into data because values are leb
 const Tables = ArrayList(Limit);
-// const Memories = ArrayList(Memory);
+const Memories = ArrayList(Limit);
 // const Globals = ArrayList(Global);
 // const Exports = ArrayList(Export);
 // const Starts = ArrayList(Start);
@@ -273,8 +308,6 @@ const FuncType = struct {
     params_count: usize,
     results_offset: usize,
     results_count: usize,
-    // params: []const u8,
-    // results: []const u8,
 };
 
 const Import = struct {
