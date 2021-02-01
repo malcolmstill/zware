@@ -4,21 +4,22 @@ const leb = std.debug.leb;
 
 pub const Format = struct {
     module: []const u8 = undefined,
-    offset: []const u8 = undefined,
+    buf: std.io.FixedBufferStream([]const u8) = undefined,
 
     pub fn init(module: []const u8) Format {
         return Format{
             .module = module,
-            .offset = module,
+            .buf = std.io.fixedBufferStream(module),
         };
     }
 
     pub fn readModule(self: *Format) !Module {
-        if (!mem.eql(u8, self.module[0..4], "\x00asm")) return error.MagicNumberNotFound;
-        self.offset = self.offset[4..];
+        const rd = self.buf.reader();
 
-        const version = mem.readInt(u32, @ptrCast(*const [@sizeOf(u32)]u8, &self.offset[0]), .Little);
-        self.offset = self.offset[4..];
+        const magic = try rd.readBytesNoEof(4);
+        if (!mem.eql(u8, magic[0..], "\x00asm")) return error.MagicNumberNotFound;
+
+        const version = try rd.readIntBig(u32);
 
         return Module{
             .version = version,
@@ -26,19 +27,18 @@ pub const Format = struct {
     }
 
     pub fn readSection(self: *Format) !Section {
-        const id: SectionType = @intToEnum(SectionType, self.offset[0]);
-        self.offset = self.offset[1..];
+        const rd = self.buf.reader();
+        const id: SectionType = @intToEnum(SectionType, try rd.readByte());
 
-        var reader = std.io.fixedBufferStream(self.offset);
-        const size = try leb.readULEB128(u32, reader.reader());
-        self.offset = self.offset[4..];
+        const size = try leb.readULEB128(u32, rd);
 
-        defer self.offset = self.offset[size..];
+        try rd.skipBytes(size, .{});
+        const offset = rd.context.pos;
 
         return Section{
             .id = id,
             .size = size,
-            .contents = self.offset[0..size],
+            .contents = self.module[offset .. offset + size],
         };
     }
 };

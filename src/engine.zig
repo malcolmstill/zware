@@ -24,6 +24,12 @@ pub const Engine = struct {
 
         var third_section = try buffer.readSection();
         std.log.info("section[2]: {}\n", .{third_section});
+
+        var fourth_section = try buffer.readSection();
+        std.log.info("section[3]: {}\n", .{fourth_section});
+
+        var fifth_section = try buffer.readSection();
+        std.log.info("section[4]: {}\n", .{fifth_section});
     }
 
     pub fn getFunction(self: *Self, function_name: []const u8) usize {}
