@@ -150,12 +150,10 @@ pub const Format = struct {
     fn readFunctionSection(self: *Format, module: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
-        std.debug.warn("function count: {}\n", .{count});
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const type_index = try leb.readULEB128(u32, rd);
-
             try module.functions.append(type_index);
         }
 
