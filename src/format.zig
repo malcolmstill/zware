@@ -142,7 +142,7 @@ pub const Format = struct {
             try rd.skipBytes(name_length, .{});
             std.debug.warn("string: {}\n", .{name});
 
-            const desc_tag = try rd.readByte();
+            const desc_tag = try rd.readEnum(DescTag, .Little);
             const desc = try rd.readByte(); // TODO: not sure if this is a byte or leb
 
             try module.imports.append(Import{
@@ -250,7 +250,6 @@ pub const Format = struct {
                 if (byte == @enumToInt(Instructions.End)) break;
             }
             const code = self.module[offset .. offset + j + 1];
-            std.debug.warn("code: {x}\n", .{code});
 
             try module.globals.append(Global{
                 .value_type = global_type,
@@ -351,7 +350,14 @@ const Global = struct {
 };
 
 const Import = struct {
-    module: []const u8, name: []const u8, desc_tag: u8, desc: u8
+    module: []const u8, name: []const u8, desc_tag: DescTag, desc: u8
+};
+
+const DescTag = enum(u8) {
+    Func,
+    Table,
+    Mem,
+    Global,
 };
 
 const Instructions = enum(u8) {
