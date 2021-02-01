@@ -246,10 +246,11 @@ pub const Format = struct {
 
             var j: usize = 0;
             while (true) : (j += 1) {
-                const byte = try rd.readEnum(Instructions, .Little);
-                if (byte == Instructions.End) break;
+                const byte = try rd.readByte();
+                if (byte == @enumToInt(Instructions.End)) break;
             }
-            const code = self.module[offset .. offset + j];
+            const code = self.module[offset .. offset + j + 1];
+            std.debug.warn("code: {x}\n", .{code});
 
             try module.globals.append(Global{
                 .value_type = global_type,
@@ -532,4 +533,5 @@ const Instructions = enum(u8) {
     I64Extend16S = 0xc3,
     I64Extend32S = 0xc4,
     // reserved
+    // I32TruncSatF32S = 0xfc,
 };
