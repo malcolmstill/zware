@@ -34,7 +34,7 @@ pub const Format = struct {
             .tables = Tables.init(self.alloc),
             .memories = Memories.init(self.alloc),
             .globals = Globals.init(self.alloc),
-            // .exports = Exports.init(self.alloc),
+            .exports = Exports.init(self.alloc),
             // .starts = Starts.init(self.alloc),
             // .elements = Elements.init(self.alloc),
             // .codes = Codes.init(self.alloc),
@@ -74,6 +74,10 @@ pub const Format = struct {
             .Global => {
                 const count = try self.readGlobalSection(module);
                 std.debug.warn("read {} Global\n", .{count});
+            },
+            .Export => {
+                const count = try self.readExportSection(module);
+                std.debug.warn("read {} Export\n", .{count});
             },
             else => {},
         }
@@ -260,6 +264,31 @@ pub const Format = struct {
 
         return count;
     }
+
+    fn readExportSection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        const count = try leb.readULEB128(u32, rd);
+        std.debug.warn("export count: {}\n", .{count});
+
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const name_length = try leb.readULEB128(u32, rd);
+            const name = self.module[rd.context.pos .. rd.context.pos + name_length];
+            try rd.skipBytes(name_length, .{});
+            std.debug.warn("string: {}\n", .{name});
+
+            const tag = try rd.readEnum(DescTag, .Little);
+            const index = try leb.readULEB128(u32, rd);
+
+            try module.exports.append(Export{
+                .name = name,
+                .tag = tag,
+                .index = index,
+            });
+        }
+
+        return count;
+    }
 };
 
 const Module = struct {
@@ -272,7 +301,7 @@ const Module = struct {
     tables: Tables,
     memories: Memories,
     globals: Globals,
-    // exports: Exports,
+    exports: Exports,
     // starts: Starts,
     // elements: Elements,
     // codes: Codes,
@@ -331,7 +360,7 @@ const Functions = ArrayList(u32); // We can't use view into data because values 
 const Tables = ArrayList(Limit);
 const Memories = ArrayList(Limit);
 const Globals = ArrayList(Global);
-// const Exports = ArrayList(Export);
+const Exports = ArrayList(Export);
 // const Starts = ArrayList(Start);
 // const Codes = ArrayList(Code);
 // const Datas = ArrayList(Data);
@@ -350,7 +379,16 @@ const Global = struct {
 };
 
 const Import = struct {
-    module: []const u8, name: []const u8, desc_tag: DescTag, desc: u8
+    module: []const u8,
+    name: []const u8,
+    desc_tag: DescTag,
+    desc: u8,
+};
+
+const Export = struct {
+    name: []const u8,
+    tag: DescTag,
+    index: u32,
 };
 
 const DescTag = enum(u8) {
