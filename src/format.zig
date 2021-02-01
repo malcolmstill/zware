@@ -44,11 +44,9 @@ pub const Format = struct {
 
     pub fn readSection(self: *Format, module: *Module) !SectionType {
         const rd = self.buf.reader();
-        std.debug.warn("pos: {}, byte: {x}\n", .{ rd.context.pos, self.module[rd.context.pos] });
         const id: SectionType = @intToEnum(SectionType, try rd.readByte());
 
         const size = try leb.readULEB128(u32, rd);
-        std.debug.warn("section bytes: {}, next byte {}\n", .{ size, self.module[rd.context.pos] });
 
         switch (id) {
             .Type => {
@@ -136,19 +134,16 @@ pub const Format = struct {
     fn readImportSection(self: *Format, module: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
-        std.debug.warn("import count: {}\n", .{count});
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const module_name_length = try leb.readULEB128(u32, rd);
             const module_name = self.module[rd.context.pos .. rd.context.pos + module_name_length];
             try rd.skipBytes(module_name_length, .{});
-            std.debug.warn("string: {}\n", .{module_name});
 
             const name_length = try leb.readULEB128(u32, rd);
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             try rd.skipBytes(name_length, .{});
-            std.debug.warn("string: {}\n", .{name});
 
             const desc_tag = try rd.readEnum(DescTag, .Little);
             const desc = try rd.readByte(); // TODO: not sure if this is a byte or leb
@@ -272,14 +267,12 @@ pub const Format = struct {
     fn readExportSection(self: *Format, module: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
-        std.debug.warn("export count: {}\n", .{count});
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const name_length = try leb.readULEB128(u32, rd);
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             try rd.skipBytes(name_length, .{});
-            std.debug.warn("string: {}\n", .{name});
 
             const tag = try rd.readEnum(DescTag, .Little);
             const index = try leb.readULEB128(u32, rd);
@@ -374,7 +367,6 @@ const Tables = ArrayList(Limit);
 const Memories = ArrayList(Limit);
 const Globals = ArrayList(Global);
 const Exports = ArrayList(Export);
-// const Starts = ArrayList(Start);
 // const Codes = ArrayList(Code);
 // const Datas = ArrayList(Data);
 

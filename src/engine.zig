@@ -14,13 +14,10 @@ pub const Engine = struct {
     pub fn loadModule(self: *Self, alloc: *mem.Allocator, data: []const u8) !void {
         var buffer = Format.init(alloc, data);
         var module = try buffer.readModule();
-        std.log.info("module: {}\n", .{module});
 
         var i: usize = 0;
         while (true) : (i += 1) {
             var section = try buffer.readSection(&module);
-            std.log.info("section[{}]: {}\n", .{ i, section });
-            // std.log.info("section[{}]: {}\n", .{ i, section });
         }
     }
 
