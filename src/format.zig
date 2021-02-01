@@ -30,7 +30,7 @@ pub const Format = struct {
             .types = Types.init(self.alloc),
             .value_types = ValueTypes.init(self.alloc),
             .imports = Imports.init(self.alloc),
-            // .functions = Functions.init(self.alloc),
+            .functions = Functions.init(self.alloc),
             // .tables = Tables.init(self.alloc),
             // .memories = Memories.init(self.alloc),
             // .globals = Globals.init(self.alloc),
@@ -61,6 +61,10 @@ pub const Format = struct {
             .Import => {
                 const count = try self.readImportSection(module);
                 std.debug.warn("read {} Import\n", .{count});
+            },
+            .Function => {
+                const count = try self.readFunctionSection(module);
+                std.debug.warn("read {} Function\n", .{count});
             },
             else => {},
         }
@@ -142,6 +146,21 @@ pub const Format = struct {
 
         return count;
     }
+
+    fn readFunctionSection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        const count = try leb.readULEB128(u32, rd);
+        std.debug.warn("function count: {}\n", .{count});
+
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const type_index = try leb.readULEB128(u32, rd);
+
+            try module.functions.append(type_index);
+        }
+
+        return count;
+    }
 };
 
 const Module = struct {
@@ -150,7 +169,7 @@ const Module = struct {
     types: Types,
     value_types: ValueTypes,
     imports: Imports,
-    // functions: Functions,
+    functions: Functions,
     // tables: Tables,
     // memories: Memories,
     // globals: Globals,
@@ -194,7 +213,7 @@ const ValueType = enum(u8) {
 const Types = ArrayList(FuncType);
 const ValueTypes = ArrayList(ValueType);
 const Imports = ArrayList(Import);
-// const Functions = ArrayList(Functions);
+const Functions = ArrayList(u32); // We can't use view into data because values are leb
 // const Tables = ArrayList(Table);
 // const Memories = ArrayList(Memory);
 // const Globals = ArrayList(Global);
