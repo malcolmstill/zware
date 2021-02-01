@@ -11,25 +11,17 @@ pub const Engine = struct {
         return Self{};
     }
 
-    pub fn loadModule(self: *Self, module: []const u8) !void {
-        var buffer = Format.init(module);
-        var header = try buffer.readModule();
-        std.log.info("header: {}\n", .{header});
+    pub fn loadModule(self: *Self, alloc: *mem.Allocator, data: []const u8) !void {
+        var buffer = Format.init(alloc, data);
+        var module = try buffer.readModule();
+        std.log.info("module: {}\n", .{module});
 
-        var first_section = try buffer.readSection();
-        std.log.info("section[0]: {}\n", .{first_section});
-
-        var second_section = try buffer.readSection();
-        std.log.info("section[1]: {}\n", .{second_section});
-
-        var third_section = try buffer.readSection();
-        std.log.info("section[2]: {}\n", .{third_section});
-
-        var fourth_section = try buffer.readSection();
-        std.log.info("section[3]: {}\n", .{fourth_section});
-
-        var fifth_section = try buffer.readSection();
-        std.log.info("section[4]: {}\n", .{fifth_section});
+        var i: usize = 0;
+        while (true) : (i += 1) {
+            var section = try buffer.readSection(&module);
+            std.log.info("section[{}]: {}\n", .{ i, section });
+            // std.log.info("section[{}]: {}\n", .{ i, section });
+        }
     }
 
     pub fn getFunction(self: *Self, function_name: []const u8) usize {}
