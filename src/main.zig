@@ -18,5 +18,16 @@ pub fn main() anyerror!void {
     const program = try fs.cwd().readFileAlloc(&arena.allocator, "test.wasm", 0xFFFFFFF);
 
     var e = Engine.init();
-    _ = try e.loadModule(&arena.allocator, program);
+    var module = try e.loadModule(&arena.allocator, program);
+
+    std.debug.warn("Functypes: {}\n", .{module.types.items.len});
+    std.debug.warn("Functions: {}\n", .{module.functions.items.len});
+    std.debug.warn("Tables: {}\n", .{module.tables.items.len});
+    std.debug.warn("Memories: {}\n", .{module.memories.items.len});
+    std.debug.warn("Globals: {}\n", .{module.globals.items.len});
+    std.debug.warn("Exports: {}\n", .{module.exports.items.len});
+    std.debug.warn("Imports: {}\n", .{module.imports.items.len});
+    std.debug.warn("Codes: {}\n", .{module.codes.items.len});
+    std.debug.warn("Datas: {}\n", .{module.datas.items.len});
+    std.debug.warn("Customs: {}\n", .{module.customs.items.len});
 }
