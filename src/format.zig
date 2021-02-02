@@ -37,7 +37,8 @@ pub const Format = struct {
             .exports = Exports.init(self.alloc),
             .start = undefined,
             // .elements = Elements.init(self.alloc),
-            // .codes = Codes.init(self.alloc),
+            .codes = Codes.init(self.alloc),
+            .locals = Locals.init(self.alloc),
             // .datas = Datas.init(self.alloc),
         };
     }
@@ -80,6 +81,10 @@ pub const Format = struct {
             .Start => {
                 const count = try self.readStartSection(module);
                 std.debug.warn("read {} Start\n", .{count});
+            },
+            .Code => {
+                const count = try self.readCodeSection(module);
+                std.debug.warn("read {} Code\n", .{count});
             },
             else => {},
         }
@@ -295,6 +300,41 @@ pub const Format = struct {
 
         return 1;
     }
+
+    fn readCodeSection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        var x = rd.context.pos;
+        const count = try leb.readULEB128(u32, rd);
+        std.debug.warn("leb bytes: {}\n", .{rd.context.pos - x});
+        std.debug.warn("code count: {}\n", .{count});
+
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const size = try leb.readULEB128(u32, rd); // includes bytes defining locals
+            std.debug.warn("code size: {}\n", .{size});
+            const locals_count = try leb.readULEB128(u32, rd);
+            std.debug.warn("locals: {}\n", .{locals_count});
+
+            var j: usize = 0;
+            while (j < locals_count) : (j += 1) {
+                const n = try leb.readULEB128(u32, rd);
+                const value_type = try rd.readEnum(ValueType, .Little);
+                try module.locals.append(Local{
+                    .n = n,
+                    .value_type = value_type,
+                });
+            }
+
+            const offset = rd.context.pos;
+            try rd.skipBytes(size - 1, .{});
+            std.debug.warn("bite: {x}\n", .{self.module[offset]});
+            const code = self.module[offset .. offset + size - 1];
+            std.debug.warn("CODE: {x}\n", .{code});
+            std.debug.warn("boot: {x}\n", .{self.module[rd.context.pos]});
+        }
+
+        return count;
+    }
 };
 
 const Module = struct {
@@ -310,7 +350,8 @@ const Module = struct {
     exports: Exports,
     start: u32,
     // elements: Elements,
-    // codes: Codes,
+    codes: Codes,
+    locals: Locals,
     // datas: Datas,
 };
 
@@ -367,7 +408,8 @@ const Tables = ArrayList(Limit);
 const Memories = ArrayList(Limit);
 const Globals = ArrayList(Global);
 const Exports = ArrayList(Export);
-// const Codes = ArrayList(Code);
+const Codes = ArrayList(Code);
+const Locals = ArrayList(Local);
 // const Datas = ArrayList(Data);
 
 const FuncType = struct {
@@ -383,6 +425,11 @@ const Global = struct {
     code: []const u8,
 };
 
+const Local = struct {
+    n: u32,
+    value_type: ValueType,
+};
+
 const Import = struct {
     module: []const u8,
     name: []const u8,
@@ -395,6 +442,8 @@ const Export = struct {
     tag: DescTag,
     index: u32,
 };
+
+const Code = struct {};
 
 const DescTag = enum(u8) {
     Func,

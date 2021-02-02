@@ -15,7 +15,7 @@ pub fn main() anyerror!void {
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
 
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, "main.wasm", 0xFFFFFFF);
+    const program = try fs.cwd().readFileAlloc(&arena.allocator, "test.wasm", 0xFFFFFFF);
 
     var e = Engine.init();
     _ = try e.loadModule(&arena.allocator, program);
