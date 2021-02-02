@@ -38,7 +38,6 @@ pub const Format = struct {
             .start = undefined,
             // .elements = Elements.init(self.alloc),
             .codes = Codes.init(self.alloc),
-            .locals = Locals.init(self.alloc),
             // .datas = Datas.init(self.alloc),
         };
     }
@@ -311,26 +310,9 @@ pub const Format = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const size = try leb.readULEB128(u32, rd); // includes bytes defining locals
-            std.debug.warn("code size: {}\n", .{size});
-            const locals_count = try leb.readULEB128(u32, rd);
-            std.debug.warn("locals: {}\n", .{locals_count});
-
-            var j: usize = 0;
-            while (j < locals_count) : (j += 1) {
-                const n = try leb.readULEB128(u32, rd);
-                const value_type = try rd.readEnum(ValueType, .Little);
-                try module.locals.append(Local{
-                    .n = n,
-                    .value_type = value_type,
-                });
-            }
-
             const offset = rd.context.pos;
-            try rd.skipBytes(size - 1, .{});
-            std.debug.warn("bite: {x}\n", .{self.module[offset]});
-            const code = self.module[offset .. offset + size - 1];
-            std.debug.warn("CODE: {x}\n", .{code});
-            std.debug.warn("boot: {x}\n", .{self.module[rd.context.pos]});
+            try rd.skipBytes(size, .{});
+            const code = self.module[offset..rd.context.pos];
         }
 
         return count;
@@ -351,7 +333,6 @@ const Module = struct {
     start: u32,
     // elements: Elements,
     codes: Codes,
-    locals: Locals,
     // datas: Datas,
 };
 
@@ -423,11 +404,6 @@ const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
     code: []const u8,
-};
-
-const Local = struct {
-    n: u32,
-    value_type: ValueType,
 };
 
 const Import = struct {
