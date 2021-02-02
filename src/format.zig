@@ -336,12 +336,9 @@ pub const Format = struct {
             const mem_offset = try leb.readULEB128(u32, rd);
             const data_length = try leb.readULEB128(u32, rd);
 
-            std.debug.warn("mem_idx: {}, instr: {x}, mem_offset: {}, lenght: {}\n", .{ mem_idx, instr, mem_offset, data_length });
-
             const offset = rd.context.pos;
             try rd.skipBytes(data_length, .{});
             const data = self.module[offset..rd.context.pos];
-            std.debug.warn("data: {x}\n", .{data});
 
             try module.datas.append(Data{
                 .mem_idx = mem_idx,

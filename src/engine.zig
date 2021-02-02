@@ -17,7 +17,12 @@ pub const Engine = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            var section = try buffer.readSection(&module);
+            var section = buffer.readSection(&module) catch |err| {
+                switch (err) {
+                    error.EndOfStream => break,
+                    else => return err,
+                }
+            };
         }
     }
 
