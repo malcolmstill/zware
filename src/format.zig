@@ -319,6 +319,10 @@ pub const Format = struct {
             const offset = rd.context.pos;
             try rd.skipBytes(size, .{});
             const code = self.module[offset..rd.context.pos];
+
+            try module.codes.append(Code{
+                .code = code,
+            });
         }
 
         return count;
@@ -481,7 +485,9 @@ const Export = struct {
     index: u32,
 };
 
-const Code = struct {};
+const Code = struct {
+    code: []const u8,
+};
 
 const Data = struct {
     mem_idx: u32,
