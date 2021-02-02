@@ -48,53 +48,19 @@ pub const Format = struct {
 
         const size = try leb.readULEB128(u32, rd);
 
-        switch (id) {
-            .Custom => {
-                const count = try self.readCustomSection(module, size);
-                std.debug.warn("read {} Custom\n", .{count});
-            },
-            .Type => {
-                const count = try self.readTypeSection(module);
-                std.debug.warn("read {} FuncTypes\n", .{count});
-            },
-            .Import => {
-                const count = try self.readImportSection(module);
-                std.debug.warn("read {} Import\n", .{count});
-            },
-            .Function => {
-                const count = try self.readFunctionSection(module);
-                std.debug.warn("read {} Function\n", .{count});
-            },
-            .Table => {
-                const count = try self.readTableSection(module);
-                std.debug.warn("read {} Table\n", .{count});
-            },
-            .Memory => {
-                const count = try self.readMemorySection(module);
-                std.debug.warn("read {} Memory\n", .{count});
-            },
-            .Global => {
-                const count = try self.readGlobalSection(module);
-                std.debug.warn("read {} Global\n", .{count});
-            },
-            .Export => {
-                const count = try self.readExportSection(module);
-                std.debug.warn("read {} Export\n", .{count});
-            },
-            .Start => {
-                const count = try self.readStartSection(module);
-                std.debug.warn("read {} Start\n", .{count});
-            },
-            .Code => {
-                const count = try self.readCodeSection(module);
-                std.debug.warn("read {} Code\n", .{count});
-            },
-            .Data => {
-                const count = try self.readDataSection(module, size);
-                std.debug.warn("read {} Data\n", .{count});
-            },
-            else => {},
-        }
+        _ = switch (id) {
+            .Custom => try self.readCustomSection(module, size),
+            .Type => try self.readTypeSection(module),
+            .Import => try self.readImportSection(module),
+            .Function => try self.readFunctionSection(module),
+            .Table => try self.readTableSection(module),
+            .Memory => try self.readMemorySection(module),
+            .Global => try self.readGlobalSection(module),
+            .Export => try self.readExportSection(module),
+            .Start => try self.readStartSection(module),
+            .Code => try self.readCodeSection(module),
+            .Data => try self.readDataSection(module, size),
+        };
 
         return id;
     }
@@ -424,18 +390,18 @@ const Mutability = enum(u8) {
 };
 
 const SectionType = enum(u8) {
-    Custom,
-    Type,
-    Import,
-    Function,
-    Table,
-    Memory,
-    Global,
-    Export,
-    Start,
-    Element,
-    Code,
-    Data,
+    Custom = 0x00,
+    Type = 0x01,
+    Import = 0x02,
+    Function = 0x03,
+    Table = 0x04,
+    Memory = 0x05,
+    Global = 0x06,
+    Export = 0x07,
+    Start = 0x08,
+    // Element = 0x09,
+    Code = 0x0a,
+    Data = 0x0b,
 };
 
 const ValueType = enum(u8) {
