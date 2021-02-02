@@ -285,6 +285,9 @@ pub const Format = struct {
             const size = try leb.readULEB128(u32, rd); // includes bytes defining locals
             const offset = rd.context.pos;
             try rd.skipBytes(size, .{});
+
+            // TODO: run some verification on the code
+            //      e.g. check last value is End instruction
             const code = self.module[offset..rd.context.pos];
 
             try module.codes.append(Code{
