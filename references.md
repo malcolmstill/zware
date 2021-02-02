@@ -1,0 +1,3 @@
+- https://webassembly.github.io/spec/core/exec/index.html
+- https://github.com/WebAssembly/spec/tree/master/test/core
+- http://troubles.md/wasm-is-not-a-stack-machine/
