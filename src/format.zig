@@ -26,7 +26,7 @@ pub const Format = struct {
 
         return Module{
             .version = version,
-            // .customs = Customs.init(self.alloc),
+            .customs = Customs.init(self.alloc),
             .types = Types.init(self.alloc),
             .value_types = ValueTypes.init(self.alloc),
             .imports = Imports.init(self.alloc),
@@ -49,6 +49,10 @@ pub const Format = struct {
         const size = try leb.readULEB128(u32, rd);
 
         switch (id) {
+            .Custom => {
+                const count = try self.readCustomSection(module, size);
+                std.debug.warn("read {} Custom\n", .{count});
+            },
             .Type => {
                 const count = try self.readTypeSection(module);
                 std.debug.warn("read {} FuncTypes\n", .{count});
@@ -86,7 +90,7 @@ pub const Format = struct {
                 std.debug.warn("read {} Code\n", .{count});
             },
             .Data => {
-                const count = try self.readDataSection(module);
+                const count = try self.readDataSection(module, size);
                 std.debug.warn("read {} Data\n", .{count});
             },
             else => {},
@@ -320,9 +324,9 @@ pub const Format = struct {
         return count;
     }
 
-    fn readDataSection(self: *Format, module: *Module) !usize {
+    fn readDataSection(self: *Format, module: *Module, size: u32) !usize {
         const rd = self.buf.reader();
-        var x = rd.context.pos;
+        var section_offset = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
 
         var i: usize = 0;
@@ -332,9 +336,12 @@ pub const Format = struct {
             const mem_offset = try leb.readULEB128(u32, rd);
             const data_length = try leb.readULEB128(u32, rd);
 
+            std.debug.warn("mem_idx: {}, instr: {x}, mem_offset: {}, lenght: {}\n", .{ mem_idx, instr, mem_offset, data_length });
+
             const offset = rd.context.pos;
             try rd.skipBytes(data_length, .{});
             const data = self.module[offset..rd.context.pos];
+            std.debug.warn("data: {x}\n", .{data});
 
             try module.datas.append(Data{
                 .mem_idx = mem_idx,
@@ -344,13 +351,37 @@ pub const Format = struct {
             });
         }
 
+        const remaining_data = size - (rd.context.pos - section_offset);
+        try rd.skipBytes(remaining_data, .{});
+
         return count;
+    }
+
+    fn readCustomSection(self: *Format, module: *Module, size: u32) !usize {
+        const rd = self.buf.reader();
+        const offset = rd.context.pos;
+
+        const name_length = try leb.readULEB128(u32, rd);
+        const name = self.module[rd.context.pos .. rd.context.pos + name_length];
+        try rd.skipBytes(name_length, .{});
+
+        const remaining_size = size - (rd.context.pos - offset);
+
+        const data = self.module[rd.context.pos .. rd.context.pos + remaining_size];
+        try rd.skipBytes(remaining_size, .{});
+
+        try module.customs.append(Custom{
+            .name = name,
+            .data = data,
+        });
+
+        return 1;
     }
 };
 
 const Module = struct {
     version: u32,
-    // customs: Customs,
+    customs: Customs,
     types: Types,
     value_types: ValueTypes,
     imports: Imports,
@@ -369,6 +400,11 @@ const Section = struct {
     id: SectionType,
     size: u32,
     contents: []const u8,
+};
+
+const Custom = struct {
+    name: []const u8,
+    data: []const u8,
 };
 
 const LimitType = enum(u8) {
@@ -409,7 +445,7 @@ const ValueType = enum(u8) {
 };
 
 // TODO: should we define these?
-// const Customs = ArrayList(Custom);
+const Customs = ArrayList(Custom);
 const Types = ArrayList(FuncType);
 const ValueTypes = ArrayList(ValueType);
 const Imports = ArrayList(Import);
