@@ -38,7 +38,7 @@ pub const Format = struct {
             .start = undefined,
             // .elements = Elements.init(self.alloc),
             .codes = Codes.init(self.alloc),
-            // .datas = Datas.init(self.alloc),
+            .datas = Datas.init(self.alloc),
         };
     }
 
@@ -84,6 +84,10 @@ pub const Format = struct {
             .Code => {
                 const count = try self.readCodeSection(module);
                 std.debug.warn("read {} Code\n", .{count});
+            },
+            .Data => {
+                const count = try self.readDataSection(module);
+                std.debug.warn("read {} Data\n", .{count});
             },
             else => {},
         }
@@ -254,7 +258,7 @@ pub const Format = struct {
             var j: usize = 0;
             while (true) : (j += 1) {
                 const byte = try rd.readByte();
-                if (byte == @enumToInt(Instructions.End)) break;
+                if (byte == @enumToInt(Instruction.End)) break;
             }
             const code = self.module[offset .. offset + j + 1];
 
@@ -304,8 +308,6 @@ pub const Format = struct {
         const rd = self.buf.reader();
         var x = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
-        std.debug.warn("leb bytes: {}\n", .{rd.context.pos - x});
-        std.debug.warn("code count: {}\n", .{count});
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -313,6 +315,33 @@ pub const Format = struct {
             const offset = rd.context.pos;
             try rd.skipBytes(size, .{});
             const code = self.module[offset..rd.context.pos];
+        }
+
+        return count;
+    }
+
+    fn readDataSection(self: *Format, module: *Module) !usize {
+        const rd = self.buf.reader();
+        var x = rd.context.pos;
+        const count = try leb.readULEB128(u32, rd);
+
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const mem_idx = try leb.readULEB128(u32, rd);
+            const instr = try rd.readEnum(Instruction, .Little);
+            const mem_offset = try leb.readULEB128(u32, rd);
+            const data_length = try leb.readULEB128(u32, rd);
+
+            const offset = rd.context.pos;
+            try rd.skipBytes(data_length, .{});
+            const data = self.module[offset..rd.context.pos];
+
+            try module.datas.append(Data{
+                .mem_idx = mem_idx,
+                .instr = instr,
+                .mem_offset = mem_offset,
+                .data = data,
+            });
         }
 
         return count;
@@ -333,7 +362,7 @@ const Module = struct {
     start: u32,
     // elements: Elements,
     codes: Codes,
-    // datas: Datas,
+    datas: Datas,
 };
 
 const Section = struct {
@@ -391,7 +420,7 @@ const Globals = ArrayList(Global);
 const Exports = ArrayList(Export);
 const Codes = ArrayList(Code);
 const Locals = ArrayList(Local);
-// const Datas = ArrayList(Data);
+const Datas = ArrayList(Data);
 
 const FuncType = struct {
     params_offset: usize,
@@ -421,6 +450,13 @@ const Export = struct {
 
 const Code = struct {};
 
+const Data = struct {
+    mem_idx: u32,
+    instr: Instruction,
+    mem_offset: u32,
+    data: []const u8,
+};
+
 const DescTag = enum(u8) {
     Func,
     Table,
@@ -428,7 +464,7 @@ const DescTag = enum(u8) {
     Global,
 };
 
-const Instructions = enum(u8) {
+const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,
     Block = 0x02, // bt
