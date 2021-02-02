@@ -14,6 +14,8 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("zig-wasm", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
+    exe.single_threaded = true;
+    exe.strip = true;
     exe.install();
 
     const run_cmd = exe.run();
