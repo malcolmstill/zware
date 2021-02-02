@@ -365,6 +365,14 @@ pub const Module = struct {
     // elements: Elements,
     codes: Codes,
     datas: Datas,
+
+    pub fn getExport(self: *Module, tag: DescTag, name: []const u8) ?usize {
+        for (self.exports.items) |exported| {
+            if (tag == exported.tag and mem.eql(u8, name, exported.name)) return exported.index;
+        }
+
+        return null;
+    }
 };
 
 const Section = struct {

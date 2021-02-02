@@ -15,7 +15,7 @@ pub fn main() anyerror!void {
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
 
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, "test.wasm", 0xFFFFFFF);
+    const program = try fs.cwd().readFileAlloc(&arena.allocator, "export.wasm", 0xFFFFFFF);
 
     var e = Engine.init();
     var module = try e.loadModule(&arena.allocator, program);
@@ -30,4 +30,10 @@ pub fn main() anyerror!void {
     std.debug.warn("Codes: {}\n", .{module.codes.items.len});
     std.debug.warn("Datas: {}\n", .{module.datas.items.len});
     std.debug.warn("Customs: {}\n", .{module.customs.items.len});
+
+    if (module.getExport(.Func, "add")) |func| {
+        std.debug.warn("func index: {}\n", .{func});
+    } else {
+        return error.FunctionNotExported;
+    }
 }
