@@ -229,7 +229,7 @@ pub const Format = struct {
                 .Min => {
                     const min = try leb.readULEB128(u32, rd);
 
-                    try module.tables.append(Limit{
+                    try module.memories.append(Limit{
                         .min = min,
                         .max = std.math.maxInt(u32),
                     });
@@ -238,7 +238,7 @@ pub const Format = struct {
                     const min = try leb.readULEB128(u32, rd);
                     const max = try leb.readULEB128(u32, rd);
 
-                    try module.tables.append(Limit{
+                    try module.memories.append(Limit{
                         .min = min,
                         .max = max,
                     });
@@ -380,7 +380,7 @@ pub const Format = struct {
     }
 };
 
-const Module = struct {
+pub const Module = struct {
     version: u32,
     customs: Customs,
     types: Types,
