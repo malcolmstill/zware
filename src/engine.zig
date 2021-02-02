@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const Format = @import("format.zig").Format;
+const Module = @import("format.zig").Module;
 
 pub const Engine = struct {
     exe: []const u8 = undefined,
@@ -11,7 +12,7 @@ pub const Engine = struct {
         return Self{};
     }
 
-    pub fn loadModule(self: *Self, alloc: *mem.Allocator, data: []const u8) !void {
+    pub fn loadModule(self: *Self, alloc: *mem.Allocator, data: []const u8) !Module {
         var buffer = Format.init(alloc, data);
         var module = try buffer.readModule();
 
@@ -24,6 +25,8 @@ pub const Engine = struct {
                 }
             };
         }
+
+        return module;
     }
 
     pub fn getFunction(self: *Self, function_name: []const u8) usize {}
