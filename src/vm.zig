@@ -11,4 +11,6 @@ pub const VM = struct {
             else => unreachable,
         }
     }
+
+    // fn funcall(self: *VM, )
 };

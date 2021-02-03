@@ -31,9 +31,13 @@ pub fn main() anyerror!void {
     std.debug.warn("Datas: {}\n", .{module.datas.items.len});
     std.debug.warn("Customs: {}\n", .{module.customs.items.len});
 
-    if (module.getExport(.Func, "add")) |func| {
-        std.debug.warn("func index: {}\n", .{func});
-    } else {
-        return error.FunctionNotExported;
-    }
+    const idx = try module.getExport(.Func, "add");
+    std.debug.warn("func index: {}\n", .{idx});
+
+    const add = try module.getFunction("add", .{ i32, i32 }, i32);
+    // std.debug.warn("typeof add: {}\n", .{@typeInfo(@TypeOf(add))});
+    // const r = add(0, 0);
+    // const r = add.call(.{ 0, 0 });
+    // const r = @call(.{}, add, .{ 43, 34 });
+    // const module.wasmFuncall(add, .{0, 0});
 }
