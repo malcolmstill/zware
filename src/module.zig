@@ -9,38 +9,38 @@ pub const Module = struct {
     module: []const u8 = undefined,
     buf: std.io.FixedBufferStream([]const u8) = undefined,
     version: u32 = 0,
-    customs: Customs,
-    types: Types,
-    value_types: ValueTypes,
-    imports: Imports,
-    functions: Functions,
-    tables: Tables,
-    memories: Memories,
-    globals: Globals,
-    exports: Exports,
+    customs: ArrayList(Custom),
+    types: ArrayList(FuncType),
+    value_types: ArrayList(ValueType),
+    imports: ArrayList(Import),
+    functions: ArrayList(u32),
+    tables: ArrayList(Limit),
+    memories: ArrayList(Limit),
+    globals: ArrayList(Global),
+    exports: ArrayList(Export),
     start: u32,
     // elements: Elements,
-    codes: Codes,
-    datas: Datas,
+    codes: ArrayList(Code),
+    datas: ArrayList(Data),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
             .alloc = alloc,
             .module = module,
             .buf = std.io.fixedBufferStream(module),
-            .customs = Customs.init(alloc),
-            .types = Types.init(alloc),
-            .value_types = ValueTypes.init(alloc),
-            .imports = Imports.init(alloc),
-            .functions = Functions.init(alloc),
-            .tables = Tables.init(alloc),
-            .memories = Memories.init(alloc),
-            .globals = Globals.init(alloc),
-            .exports = Exports.init(alloc),
+            .customs = ArrayList(Custom).init(alloc),
+            .types = ArrayList(FuncType).init(alloc),
+            .value_types = ArrayList(ValueType).init(alloc),
+            .imports = ArrayList(Import).init(alloc),
+            .functions = ArrayList(u32).init(alloc),
+            .tables = ArrayList(Limit).init(alloc),
+            .memories = ArrayList(Limit).init(alloc),
+            .globals = ArrayList(Global).init(alloc),
+            .exports = ArrayList(Export).init(alloc),
             .start = undefined,
             // .elements = Elements.init(alloc),
-            .codes = Codes.init(alloc),
-            .datas = Datas.init(alloc),
+            .codes = ArrayList(Code).init(alloc),
+            .datas = ArrayList(Data).init(alloc),
         };
     }
 
@@ -377,22 +377,24 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn getFunction(self: *Module, name: []const u8, args: anytype, result: anytype) !usize {
+    pub fn getFunction(self: *Module, comptime len: usize, name: []const u8, comptime args: [2]ValueType, comptime result: ValueType) !usize {
         const index = try self.getExport(.Func, name);
         if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
 
         const func_type = self.types.items[index];
+        const params = self.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+        const results = self.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
-        // for (args) |arg, i| {
-        //     if (!(arg == i32 or arg == i64 or arg == f32 or arg == f64)) {
-        //         @compileError("Arg type must be in ValueType, found " ++ @typeName(arg));
-        //     }
-        //     fn_args[i] = std.builtin.TypeInfo.FnArg{
-        //         .is_generic = false,
-        //         .is_noalias = false,
-        //         .arg_type = arg,
-        //     };
-        // }
+        if (params.len != args.len) return error.ParamCountMismatch;
+
+        for (args) |arg, i| {
+            if (arg != params[i]) return error.ParamTypeMismatch;
+        }
+
+        if (results.len > 1) return error.OnlySingleReturnValueSupported;
+        if (results.len == 1) {
+            if (results[0] != result) return error.ResultTypeMismatch;
+        }
 
         return index;
     }
@@ -472,26 +474,12 @@ const SectionType = enum(u8) {
     Data = 0x0b,
 };
 
-const ValueType = enum(u8) {
+pub const ValueType = enum(u8) {
     I32 = 0x7F,
     I64 = 0x7E,
     F32 = 0x7D,
     F64 = 0x7C,
 };
-
-// TODO: should we define these?
-const Customs = ArrayList(Custom);
-const Types = ArrayList(FuncType);
-const ValueTypes = ArrayList(ValueType);
-const Imports = ArrayList(Import);
-const Functions = ArrayList(u32); // We can't use view into data because values are leb
-const Tables = ArrayList(Limit);
-const Memories = ArrayList(Limit);
-const Globals = ArrayList(Global);
-const Exports = ArrayList(Export);
-const Codes = ArrayList(Code);
-const Locals = ArrayList(Local);
-const Datas = ArrayList(Data);
 
 const FuncType = struct {
     params_offset: usize,
