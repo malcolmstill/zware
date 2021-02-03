@@ -144,7 +144,7 @@ pub const Module = struct {
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             try rd.skipBytes(name_length, .{});
 
-            const desc_tag = try rd.readEnum(DescTag, .Little);
+            const desc_tag = try rd.readEnum(Tag, .Little);
             const desc = try rd.readByte(); // TODO: not sure if this is a byte or leb
 
             try self.imports.append(Import{
@@ -273,7 +273,7 @@ pub const Module = struct {
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             try rd.skipBytes(name_length, .{});
 
-            const tag = try rd.readEnum(DescTag, .Little);
+            const tag = try rd.readEnum(Tag, .Little);
             const index = try leb.readULEB128(u32, rd);
 
             try self.exports.append(Export{
@@ -369,7 +369,7 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn getExport(self: *Module, tag: DescTag, name: []const u8) !usize {
+    pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
         for (self.exports.items) |exported| {
             if (tag == exported.tag and mem.eql(u8, name, exported.name)) return exported.index;
         }
@@ -509,13 +509,13 @@ const Global = struct {
 const Import = struct {
     module: []const u8,
     name: []const u8,
-    desc_tag: DescTag,
+    desc_tag: Tag,
     desc: u8,
 };
 
 const Export = struct {
     name: []const u8,
-    tag: DescTag,
+    tag: Tag,
     index: u32,
 };
 
@@ -530,7 +530,7 @@ const Data = struct {
     data: []const u8,
 };
 
-const DescTag = enum(u8) {
+const Tag = enum(u8) {
     Func,
     Table,
     Mem,
