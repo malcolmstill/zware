@@ -4,20 +4,47 @@ const leb = std.debug.leb;
 const ArrayList = std.ArrayList;
 const Instruction = @import("instruction.zig").Instruction;
 
-pub const Format = struct {
+pub const Module = struct {
     alloc: *mem.Allocator,
     module: []const u8 = undefined,
     buf: std.io.FixedBufferStream([]const u8) = undefined,
+    version: u32 = 0,
+    customs: Customs,
+    types: Types,
+    value_types: ValueTypes,
+    imports: Imports,
+    functions: Functions,
+    tables: Tables,
+    memories: Memories,
+    globals: Globals,
+    exports: Exports,
+    start: u32,
+    // elements: Elements,
+    codes: Codes,
+    datas: Datas,
 
-    pub fn init(alloc: *mem.Allocator, module: []const u8) Format {
-        return Format{
+    pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
+        return Module{
             .alloc = alloc,
             .module = module,
             .buf = std.io.fixedBufferStream(module),
+            .customs = Customs.init(alloc),
+            .types = Types.init(alloc),
+            .value_types = ValueTypes.init(alloc),
+            .imports = Imports.init(alloc),
+            .functions = Functions.init(alloc),
+            .tables = Tables.init(alloc),
+            .memories = Memories.init(alloc),
+            .globals = Globals.init(alloc),
+            .exports = Exports.init(alloc),
+            .start = undefined,
+            // .elements = Elements.init(alloc),
+            .codes = Codes.init(alloc),
+            .datas = Datas.init(alloc),
         };
     }
 
-    pub fn readModule(self: *Format) !Module {
+    pub fn parse(self: *Module) !void {
         const rd = self.buf.reader();
 
         const magic = try rd.readBytesNoEof(4);
@@ -25,48 +52,41 @@ pub const Format = struct {
 
         const version = try rd.readIntLittle(u32);
 
-        return Module{
-            .version = version,
-            .customs = Customs.init(self.alloc),
-            .types = Types.init(self.alloc),
-            .value_types = ValueTypes.init(self.alloc),
-            .imports = Imports.init(self.alloc),
-            .functions = Functions.init(self.alloc),
-            .tables = Tables.init(self.alloc),
-            .memories = Memories.init(self.alloc),
-            .globals = Globals.init(self.alloc),
-            .exports = Exports.init(self.alloc),
-            .start = undefined,
-            // .elements = Elements.init(self.alloc),
-            .codes = Codes.init(self.alloc),
-            .datas = Datas.init(self.alloc),
-        };
+        var i: usize = 0;
+        while (true) : (i += 1) {
+            var section = self.parseSection() catch |err| {
+                switch (err) {
+                    error.EndOfStream => break,
+                    else => return err,
+                }
+            };
+        }
     }
 
-    pub fn readSection(self: *Format, module: *Module) !SectionType {
+    pub fn parseSection(self: *Module) !SectionType {
         const rd = self.buf.reader();
         const id: SectionType = @intToEnum(SectionType, try rd.readByte());
 
         const size = try leb.readULEB128(u32, rd);
 
         _ = switch (id) {
-            .Custom => try self.readCustomSection(module, size),
-            .Type => try self.readTypeSection(module),
-            .Import => try self.readImportSection(module),
-            .Function => try self.readFunctionSection(module),
-            .Table => try self.readTableSection(module),
-            .Memory => try self.readMemorySection(module),
-            .Global => try self.readGlobalSection(module),
-            .Export => try self.readExportSection(module),
-            .Start => try self.readStartSection(module),
-            .Code => try self.readCodeSection(module),
-            .Data => try self.readDataSection(module, size),
+            .Custom => try self.parseCustomSection(size),
+            .Type => try self.parseTypeSection(),
+            .Import => try self.parseImportSection(),
+            .Function => try self.parseFunctionSection(),
+            .Table => try self.parseTableSection(),
+            .Memory => try self.parseMemorySection(),
+            .Global => try self.parseGlobalSection(),
+            .Export => try self.parseExportSection(),
+            .Start => try self.parseStartSection(),
+            .Code => try self.parseCodeSection(),
+            .Data => try self.parseDataSection(size),
         };
 
         return id;
     }
 
-    fn readTypeSection(self: *Format, module: *Module) !usize {
+    fn parseTypeSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const functype_count = try leb.readULEB128(u32, rd);
 
@@ -76,30 +96,30 @@ pub const Format = struct {
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
             const param_count = try leb.readULEB128(u32, rd);
-            const param_offset = module.value_types.items.len;
+            const param_offset = self.value_types.items.len;
 
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
                     const v = try rd.readEnum(ValueType, .Little);
-                    try module.value_types.append(v);
+                    try self.value_types.append(v);
                 }
             }
 
             const results_count = try leb.readULEB128(u32, rd);
-            const results_offset = module.value_types.items.len;
+            const results_offset = self.value_types.items.len;
 
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
                     const r = try rd.readEnum(ValueType, .Little);
-                    try module.value_types.append(r);
+                    try self.value_types.append(r);
                 }
             }
 
             // TODO: rather than count we could store the first element / last element + 1
             // TODO: should we just index into the existing module data?
-            try module.types.append(FuncType{
+            try self.types.append(FuncType{
                 .params_offset = param_offset,
                 .params_count = param_count,
                 .results_offset = results_offset,
@@ -110,7 +130,7 @@ pub const Format = struct {
         return functype_count;
     }
 
-    fn readImportSection(self: *Format, module: *Module) !usize {
+    fn parseImportSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -127,7 +147,7 @@ pub const Format = struct {
             const desc_tag = try rd.readEnum(DescTag, .Little);
             const desc = try rd.readByte(); // TODO: not sure if this is a byte or leb
 
-            try module.imports.append(Import{
+            try self.imports.append(Import{
                 .module = module_name,
                 .name = name,
                 .desc_tag = desc_tag,
@@ -138,20 +158,20 @@ pub const Format = struct {
         return count;
     }
 
-    fn readFunctionSection(self: *Format, module: *Module) !usize {
+    fn parseFunctionSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const type_index = try leb.readULEB128(u32, rd);
-            try module.functions.append(type_index);
+            try self.functions.append(type_index);
         }
 
         return count;
     }
 
-    fn readTableSection(self: *Format, module: *Module) !usize {
+    fn parseTableSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -165,7 +185,7 @@ pub const Format = struct {
                 .Min => {
                     const min = try leb.readULEB128(u32, rd);
 
-                    try module.tables.append(Limit{
+                    try self.tables.append(Limit{
                         .min = min,
                         .max = std.math.maxInt(u32),
                     });
@@ -174,7 +194,7 @@ pub const Format = struct {
                     const min = try leb.readULEB128(u32, rd);
                     const max = try leb.readULEB128(u32, rd);
 
-                    try module.tables.append(Limit{
+                    try self.tables.append(Limit{
                         .min = min,
                         .max = max,
                     });
@@ -185,7 +205,7 @@ pub const Format = struct {
         return count;
     }
 
-    fn readMemorySection(self: *Format, module: *Module) !usize {
+    fn parseMemorySection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -196,7 +216,7 @@ pub const Format = struct {
                 .Min => {
                     const min = try leb.readULEB128(u32, rd);
 
-                    try module.memories.append(Limit{
+                    try self.memories.append(Limit{
                         .min = min,
                         .max = std.math.maxInt(u32),
                     });
@@ -205,7 +225,7 @@ pub const Format = struct {
                     const min = try leb.readULEB128(u32, rd);
                     const max = try leb.readULEB128(u32, rd);
 
-                    try module.memories.append(Limit{
+                    try self.memories.append(Limit{
                         .min = min,
                         .max = max,
                     });
@@ -216,7 +236,7 @@ pub const Format = struct {
         return count;
     }
 
-    fn readGlobalSection(self: *Format, module: *Module) !usize {
+    fn parseGlobalSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -233,7 +253,7 @@ pub const Format = struct {
             }
             const code = self.module[offset .. offset + j + 1];
 
-            try module.globals.append(Global{
+            try self.globals.append(Global{
                 .value_type = global_type,
                 .mutability = mutability,
                 .code = code,
@@ -243,7 +263,7 @@ pub const Format = struct {
         return count;
     }
 
-    fn readExportSection(self: *Format, module: *Module) !usize {
+    fn parseExportSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -256,7 +276,7 @@ pub const Format = struct {
             const tag = try rd.readEnum(DescTag, .Little);
             const index = try leb.readULEB128(u32, rd);
 
-            try module.exports.append(Export{
+            try self.exports.append(Export{
                 .name = name,
                 .tag = tag,
                 .index = index,
@@ -266,16 +286,16 @@ pub const Format = struct {
         return count;
     }
 
-    fn readStartSection(self: *Format, module: *Module) !usize {
+    fn parseStartSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const index = try leb.readULEB128(u32, rd);
 
-        module.start = index;
+        self.start = index;
 
         return 1;
     }
 
-    fn readCodeSection(self: *Format, module: *Module) !usize {
+    fn parseCodeSection(self: *Module) !usize {
         const rd = self.buf.reader();
         var x = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
@@ -290,7 +310,7 @@ pub const Format = struct {
             //      e.g. check last value is End instruction
             const code = self.module[offset..rd.context.pos];
 
-            try module.codes.append(Code{
+            try self.codes.append(Code{
                 .code = code,
             });
         }
@@ -298,7 +318,7 @@ pub const Format = struct {
         return count;
     }
 
-    fn readDataSection(self: *Format, module: *Module, size: u32) !usize {
+    fn parseDataSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
@@ -314,7 +334,7 @@ pub const Format = struct {
             try rd.skipBytes(data_length, .{});
             const data = self.module[offset..rd.context.pos];
 
-            try module.datas.append(Data{
+            try self.datas.append(Data{
                 .mem_idx = mem_idx,
                 .instr = instr,
                 .mem_offset = mem_offset,
@@ -328,7 +348,7 @@ pub const Format = struct {
         return count;
     }
 
-    fn readCustomSection(self: *Format, module: *Module, size: u32) !usize {
+    fn parseCustomSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         const offset = rd.context.pos;
 
@@ -341,30 +361,13 @@ pub const Format = struct {
         const data = self.module[rd.context.pos .. rd.context.pos + remaining_size];
         try rd.skipBytes(remaining_size, .{});
 
-        try module.customs.append(Custom{
+        try self.customs.append(Custom{
             .name = name,
             .data = data,
         });
 
         return 1;
     }
-};
-
-pub const Module = struct {
-    version: u32,
-    customs: Customs,
-    types: Types,
-    value_types: ValueTypes,
-    imports: Imports,
-    functions: Functions,
-    tables: Tables,
-    memories: Memories,
-    globals: Globals,
-    exports: Exports,
-    start: u32,
-    // elements: Elements,
-    codes: Codes,
-    datas: Datas,
 
     pub fn getExport(self: *Module, tag: DescTag, name: []const u8) !usize {
         for (self.exports.items) |exported| {
@@ -393,8 +396,6 @@ pub const Module = struct {
 
         return index;
     }
-
-    // pub fn executeFunction(self: *Module, function_index: usize)
 };
 
 fn WasmFunctionType(args: anytype, result: anytype) type {

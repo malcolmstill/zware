@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const process = std.process;
 const fs = std.fs;
-const Engine = @import("engine.zig").Engine;
+const Module = @import("module.zig").Module;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
@@ -17,8 +17,10 @@ pub fn main() anyerror!void {
 
     const program = try fs.cwd().readFileAlloc(&arena.allocator, "export.wasm", 0xFFFFFFF);
 
-    var e = Engine.init();
-    var module = try e.loadModule(&arena.allocator, program);
+    // var e = Engine.init();
+    // var module = try e.loadModule(&arena.allocator, program);
+    var module = Module.init(&arena.allocator, program);
+    try module.parse();
 
     std.debug.warn("Functypes: {}\n", .{module.types.items.len});
     std.debug.warn("Functions: {}\n", .{module.functions.items.len});
