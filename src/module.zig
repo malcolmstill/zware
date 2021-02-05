@@ -377,7 +377,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn getFunction(self: *Module, comptime len: usize, name: []const u8, comptime args: [len]ValueType, comptime result: ValueType) !usize {
+    pub fn getFunction(self: *Module, comptime len: usize, name: []const u8, args: anytype, comptime result: ValueType) !usize {
         const index = try self.getExport(.Func, name);
         if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
 
@@ -387,8 +387,8 @@ pub const Module = struct {
 
         if (params.len != args.len) return error.ParamCountMismatch;
 
-        for (args) |arg, i| {
-            if (arg != params[i]) return error.ParamTypeMismatch;
+        for (params) |p, i| {
+            if (p != args[i]) return error.ParamTypeMismatch;
         }
 
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
@@ -400,16 +400,16 @@ pub const Module = struct {
     }
 
     pub fn print(module: *Module) void {
-        std.debug.warn("Functypes: {}\n", .{module.types.items.len});
+        std.debug.warn("    Types: {}\n", .{module.types.items.len});
         std.debug.warn("Functions: {}\n", .{module.functions.items.len});
-        std.debug.warn("Tables: {}\n", .{module.tables.items.len});
-        std.debug.warn("Memories: {}\n", .{module.memories.items.len});
-        std.debug.warn("Globals: {}\n", .{module.globals.items.len});
-        std.debug.warn("Exports: {}\n", .{module.exports.items.len});
-        std.debug.warn("Imports: {}\n", .{module.imports.items.len});
-        std.debug.warn("Codes: {}\n", .{module.codes.items.len});
-        std.debug.warn("Datas: {}\n", .{module.datas.items.len});
-        std.debug.warn("Customs: {}\n", .{module.customs.items.len});
+        std.debug.warn("   Tables: {}\n", .{module.tables.items.len});
+        std.debug.warn(" Memories: {}\n", .{module.memories.items.len});
+        std.debug.warn("  Globals: {}\n", .{module.globals.items.len});
+        std.debug.warn("  Exports: {}\n", .{module.exports.items.len});
+        std.debug.warn("  Imports: {}\n", .{module.imports.items.len});
+        std.debug.warn("    Codes: {}\n", .{module.codes.items.len});
+        std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
+        std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
     }
 };
 
