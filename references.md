@@ -1,3 +1,10 @@
 - https://webassembly.github.io/spec/core/exec/index.html
 - https://github.com/WebAssembly/spec/tree/master/test/core
 - http://troubles.md/wasm-is-not-a-stack-machine/
+- https://stackoverflow.com/questions/48638653/can-anyone-help-explain-the-one-pass-verification-process-shows-in-webassembly
+- https://binji.github.io/posts/webassembly-type-checking/
+- https://webassembly.github.io/spec/core/appendix/algorithm.html
+- https://00f.net/2018/11/25/webassembly-doesnt-make-unsafe-languages-safe/
+- https://news.ycombinator.com/item?id=18527535
+- https://webassembly.github.io/spec/core/appendix/algorithm.html
+- https://news.ycombinator.com/item?id=22399368
