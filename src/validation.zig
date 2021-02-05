@@ -50,6 +50,12 @@ pub const Validator = struct {
             .I64Const => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
+            .F32Const => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
+            },
+            .F64Const => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
             else => unreachable,
         }
     }
