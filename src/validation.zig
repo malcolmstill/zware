@@ -5,27 +5,6 @@ const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 
-const ValueTypeUnknownTag = enum {
-    Known,
-    Unknown,
-};
-
-const ValueTypeUnknown = union(ValueTypeUnknownTag) {
-    Known: ValueType,
-    Unknown: void,
-};
-
-const OperandStack = ArrayList(ValueTypeUnknown);
-const ControlStack = ArrayList(ControlFrame);
-
-const ControlFrame = struct {
-    opcode: Instruction = undefined,
-    start_types: []const ValueType,
-    end_types: []const ValueType,
-    height: usize = 0,
-    unreachable_flag: bool = false,
-};
-
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
@@ -149,6 +128,27 @@ pub const Validator = struct {
     }
 
     fn setUnreachable(v: *Validator) void {}
+};
+
+const ValueTypeUnknownTag = enum {
+    Known,
+    Unknown,
+};
+
+const ValueTypeUnknown = union(ValueTypeUnknownTag) {
+    Known: ValueType,
+    Unknown: void,
+};
+
+const OperandStack = ArrayList(ValueTypeUnknown);
+const ControlStack = ArrayList(ControlFrame);
+
+const ControlFrame = struct {
+    opcode: Instruction = undefined,
+    start_types: []const ValueType,
+    end_types: []const ValueType,
+    height: usize = 0,
+    unreachable_flag: bool = false,
 };
 
 const testing = std.testing;
