@@ -152,7 +152,7 @@ pub const Validator = struct {
 };
 
 const testing = std.testing;
-test "validate add" {
+test "validate add i32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -164,6 +164,48 @@ test "validate add" {
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Add);
+}
+
+test "validate add i64" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var v = Validator.init(&arena.allocator);
+
+    var in: [0]ValueType = [_]ValueType{} ** 0;
+    var out: [1]ValueType = [_]ValueType{.I64} ** 1;
+    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.validate(.I64Const);
+    _ = try v.validate(.I64Const);
+    _ = try v.validate(.I64Add);
+}
+
+test "validate add i32" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var v = Validator.init(&arena.allocator);
+
+    var in: [0]ValueType = [_]ValueType{} ** 0;
+    var out: [1]ValueType = [_]ValueType{.F32} ** 1;
+    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.validate(.F32Const);
+    _ = try v.validate(.F32Const);
+    _ = try v.validate(.F32Add);
+}
+
+test "validate add F64" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+    var v = Validator.init(&arena.allocator);
+
+    var in: [0]ValueType = [_]ValueType{} ** 0;
+    var out: [1]ValueType = [_]ValueType{.F64} ** 1;
+    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.validate(.F64Const);
+    _ = try v.validate(.F64Const);
+    _ = try v.validate(.F64Add);
 }
 
 test "validate add error on mismatched types" {
