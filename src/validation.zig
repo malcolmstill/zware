@@ -44,6 +44,21 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
+            .I64Add => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            .F32Add => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
+            },
+            .F64Add => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
             .I32Const => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
