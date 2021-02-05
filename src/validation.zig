@@ -180,7 +180,7 @@ test "validate add i64" {
     _ = try v.validate(.I64Add);
 }
 
-test "validate add i32" {
+test "validate add f32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
@@ -194,7 +194,7 @@ test "validate add i32" {
     _ = try v.validate(.F32Add);
 }
 
-test "validate add F64" {
+test "validate add f64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
