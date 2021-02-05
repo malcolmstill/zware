@@ -1,8 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
-const ValueType = @import("module.zig").ValueType;
 const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
+const ValueType = @import("module.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 
 const ValueTypeUnknownTag = enum {
@@ -22,8 +22,6 @@ const ControlFrame = struct {
     opcode: Instruction = undefined,
     start_types: []const ValueType,
     end_types: []const ValueType,
-    // start_types: ArrayList(ValueType),
-    // end_types: ArrayList(ValueType),
     height: usize = 0,
     unreachable_flag: bool = false,
 };
@@ -37,6 +35,23 @@ pub const Validator = struct {
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
         };
+    }
+
+    pub fn validate(v: *Validator, opcode: Instruction) !void {
+        switch (opcode) {
+            .I32Add => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .I32Const => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .I64Const => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            else => unreachable,
+        }
     }
 
     fn pushOperand(v: *Validator, t: ValueTypeUnknown) !void {
@@ -113,23 +128,6 @@ pub const Validator = struct {
     }
 
     fn setUnreachable(v: *Validator) void {}
-
-    pub fn validate(v: *Validator, opcode: Instruction) !void {
-        switch (opcode) {
-            .I32Add => {
-                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
-            },
-            .I32Const => {
-                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
-            },
-            .I64Const => {
-                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
-            },
-            else => unreachable,
-        }
-    }
 };
 
 const testing = std.testing;
