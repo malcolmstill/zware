@@ -26,4 +26,5 @@ pub fn main() anyerror!void {
     // Get index of add function
     // const idx = try module.getExport(.Func, "add");
     const add = try module.getFunction(2, "add", [2]ValueType{ .I32, .I32 }, .I32);
+    // const result = add.call(0, 0);
 }

@@ -2,6 +2,7 @@ pub const VM = struct {
     module: *Module, // current module
     function: u32, // current function index
     ip: u32,
+    stack: ArrayList(u64),
 
     fn execute(self: *VM) !void {
         const code = self.module.codes.items[function];
@@ -11,6 +12,4 @@ pub const VM = struct {
             else => unreachable,
         }
     }
-
-    // fn funcall(self: *VM, )
 };
