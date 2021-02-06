@@ -100,7 +100,7 @@ pub const Validator = struct {
     fn popOperands(v: *Validator, operands: []const ValueType) !void {
         const len = operands.len;
         for (operands) |op, i| {
-            _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = operands[len - i] });
+            _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = operands[len - i - 1] });
         }
     }
 
@@ -177,6 +177,7 @@ test "validate add i32" {
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Add);
+    _ = try v.validate(.End);
 }
 
 test "validate add i64" {
