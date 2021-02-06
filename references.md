@@ -8,3 +8,12 @@
 - https://news.ycombinator.com/item?id=18527535
 - https://webassembly.github.io/spec/core/appendix/algorithm.html
 - https://news.ycombinator.com/item?id=22399368
+- https://coinexchain.medium.com/wasm-introduction-part-2-instruction-set-operand-stack-38e5171b52e6
+- https://docs.google.com/document/d/1CieRxPy3Fp62LQdtWfhymikb_veZI7S9MnuCZw7biII/edit
+- https://stanford-cs242.github.io/f19/assignments/assign5/
+- https://github.com/WebAssembly/design/issues/736
+- https://www.cl.cam.ac.uk/~caw77/papers/mechanising-and-verifying-the-webassembly-specification-draft.pdf
+- https://cseweb.ucsd.edu/classes/fa19/cse127-ab/slides/3-lowlevelmitigations.pdf
+- https://arxiv.org/pdf/2010.01723.pdf
+- https://blog.veitheller.de/Speeding_up_an_Interpreter.html
+- https://medium.com/bumble-tech/when-pigs-fly-optimising-bytecode-interpreters-f64fb6bfa20f
