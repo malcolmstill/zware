@@ -21,6 +21,7 @@ pub const Interpreter = struct {
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
+            .Drop => try i.popAnyOperand(),
             .I32Add => {
                 // TODO: does wasm wrap?
                 const a = try i.popOperand(i32);
@@ -81,6 +82,11 @@ pub const Interpreter = struct {
             f64 => @bitCast(f64, value),
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
+    }
+
+    fn popAnyOperand(i: *Interpreter) !void {
+        if (i.op_stack_size == 0) return error.OperandStackUnderflow;
+        i.op_stack_size -= 1;
     }
 };
 
