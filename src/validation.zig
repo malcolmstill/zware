@@ -24,6 +24,9 @@ pub const Validator = struct {
                 const frame = try v.popControlFrame();
                 _ = try v.pushOperands(frame.end_types);
             },
+            .Drop => {
+                _ = try v.popOperand();
+            },
             .I32Add => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
@@ -174,6 +177,8 @@ test "validate add i32" {
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
     _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
+    _ = try v.validate(.I32Const);
+    _ = try v.validate(.Drop);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Add);
