@@ -18,6 +18,12 @@ pub const Validator = struct {
 
     pub fn validate(v: *Validator, opcode: Instruction) !void {
         switch (opcode) {
+            .Unreachable => try v.setUnreachable(),
+            .Nop => {},
+            .End => {
+                const frame = try v.popControlFrame();
+                _ = try v.pushOperands(frame.end_types);
+            },
             .I32Add => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
@@ -94,7 +100,7 @@ pub const Validator = struct {
     fn popOperands(v: *Validator, operands: []const ValueType) !void {
         const len = operands.len;
         for (operands) |op, i| {
-            try popOperandExpecting(operands[len - i]);
+            _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = operands[len - i] });
         }
     }
 
@@ -111,9 +117,10 @@ pub const Validator = struct {
     }
 
     fn popControlFrame(v: *Validator) !ControlFrame {
+        // TODO: control stack size check should maybe only be in debug builds
         if (v.ctrl_stack.items.len == 0) return error.ValidatorPopControlFrameControlStackEmpty;
-        const frame = v.ctrl_stack.items[v.ctrl_stack.items - 1];
-        try popOperands(frame.end_types);
+        const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1];
+        try v.popOperands(frame.end_types);
         if (v.op_stack.items.len != frame.height) return error.ValidatorPopControlFrameMismatchedSizes;
         _ = v.ctrl_stack.pop();
         return frame;
@@ -127,7 +134,13 @@ pub const Validator = struct {
         }
     }
 
-    fn setUnreachable(v: *Validator) void {}
+    fn setUnreachable(v: *Validator) !void {
+        // TODO: control stack size check should maybe only be in debug builds
+        if (v.ctrl_stack.items.len == 0) return error.ValidatorPopControlFrameControlStackEmpty;
+        const frame = &v.ctrl_stack.items[v.ctrl_stack.items.len - 1];
+        v.op_stack.shrinkRetainingCapacity(frame.height);
+        frame.unreachable_flag = true;
+    }
 };
 
 const ValueTypeUnknownTag = enum {
@@ -160,7 +173,7 @@ test "validate add i32" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Const);
     _ = try v.validate(.I32Add);
@@ -174,7 +187,7 @@ test "validate add i64" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I64} ** 1;
-    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
     _ = try v.validate(.I64Const);
     _ = try v.validate(.I64Const);
     _ = try v.validate(.I64Add);
@@ -188,7 +201,7 @@ test "validate add f32" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F32} ** 1;
-    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
     _ = try v.validate(.F32Const);
     _ = try v.validate(.F32Const);
     _ = try v.validate(.F32Add);
@@ -202,7 +215,7 @@ test "validate add f64" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F64} ** 1;
-    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
     _ = try v.validate(.F64Const);
     _ = try v.validate(.F64Const);
     _ = try v.validate(.F64Add);
