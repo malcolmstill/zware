@@ -17,3 +17,4 @@
 - https://arxiv.org/pdf/2010.01723.pdf
 - https://blog.veitheller.de/Speeding_up_an_Interpreter.html
 - https://medium.com/bumble-tech/when-pigs-fly-optimising-bytecode-interpreters-f64fb6bfa20f
+- https://chromium.googlesource.com/external/github.com/WebAssembly/binaryen/+/daf0b9cf0a5cf32727bfd06960fac48b30813d93/README.md
