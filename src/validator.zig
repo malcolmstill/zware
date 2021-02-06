@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
-const ValueType = @import("module.zig").ValueType;
+const ValueType = @import("common.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 
 pub const Validator = struct {

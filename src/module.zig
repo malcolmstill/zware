@@ -3,6 +3,17 @@ const mem = std.mem;
 const leb = std.debug.leb;
 const ArrayList = std.ArrayList;
 const Instruction = @import("instruction.zig").Instruction;
+const FuncType = @import("common.zig").FuncType;
+const ValueType = @import("common.zig").ValueType;
+const Import = @import("common.zig").Import;
+const Export = @import("common.zig").Export;
+const Limit = @import("common.zig").Limit;
+const LimitType = @import("common.zig").LimitType;
+const Mutability = @import("common.zig").Mutability;
+const Global = @import("common.zig").Global;
+const Code = @import("common.zig").Code;
+const Data = @import("common.zig").Data;
+const Tag = @import("common.zig").Tag;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
@@ -459,21 +470,6 @@ const Custom = struct {
     data: []const u8,
 };
 
-const LimitType = enum(u8) {
-    Min,
-    MinMax,
-};
-
-const Limit = struct {
-    min: u32,
-    max: u32,
-};
-
-const Mutability = enum(u8) {
-    Immutable,
-    Mutable,
-};
-
 const SectionType = enum(u8) {
     Custom = 0x00,
     Type = 0x01,
@@ -489,60 +485,15 @@ const SectionType = enum(u8) {
     Data = 0x0b,
 };
 
-pub const ValueType = enum(u8) {
-    I32 = 0x7F,
-    I64 = 0x7E,
-    F32 = 0x7D,
-    F64 = 0x7C,
-};
-
-const FuncType = struct {
-    params_offset: usize,
-    params_count: usize,
-    results_offset: usize,
-    results_count: usize,
-};
-
-const Global = struct {
-    value_type: ValueType,
-    mutability: Mutability,
-    code: []const u8,
-};
-
-const Import = struct {
-    module: []const u8,
-    name: []const u8,
-    desc_tag: Tag,
-    desc: u8,
-};
-
-const Export = struct {
-    name: []const u8,
-    tag: Tag,
-    index: u32,
-};
-
-const Code = struct {
-    code: []const u8,
-};
-
-const Data = struct {
-    mem_idx: u32,
-    instr: Instruction,
-    mem_offset: u32,
-    data: []const u8,
-};
-
-const Tag = enum(u8) {
-    Func,
-    Table,
-    Mem,
-    Global,
-};
-
 const testing = std.testing;
 
 test "module loading" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
     const bytes = @embedFile("../export.wasm");
-    const module = Module.init(testing.allocator, bytes);
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
 }
