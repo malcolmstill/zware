@@ -492,7 +492,7 @@ test "module loading" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
 
-    const bytes = @embedFile("../export.wasm");
+    const bytes = @embedFile("../test/test.wasm");
 
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
