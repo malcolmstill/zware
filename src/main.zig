@@ -2,7 +2,8 @@ const std = @import("std");
 const mem = std.mem;
 const process = std.process;
 const fs = std.fs;
-const Engine = @import("engine.zig").Engine;
+const Module = @import("module.zig").Module;
+const ValueType = @import("module.zig").ValueType;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
@@ -10,30 +11,20 @@ var gpa = GeneralPurposeAllocator(.{}){};
 
 pub fn main() anyerror!void {
     defer _ = gpa.deinit();
-    std.log.info("Booting wasm runtime...", .{});
 
+    // We will allocate the module with an arena allocator and free it all once
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
 
     const program = try fs.cwd().readFileAlloc(&arena.allocator, "export.wasm", 0xFFFFFFF);
 
-    var e = Engine.init();
-    var module = try e.loadModule(&arena.allocator, program);
+    // Load and parse a module
+    var module = Module.init(&arena.allocator, program);
+    try module.parse();
+    module.print();
 
-    std.debug.warn("Functypes: {}\n", .{module.types.items.len});
-    std.debug.warn("Functions: {}\n", .{module.functions.items.len});
-    std.debug.warn("Tables: {}\n", .{module.tables.items.len});
-    std.debug.warn("Memories: {}\n", .{module.memories.items.len});
-    std.debug.warn("Globals: {}\n", .{module.globals.items.len});
-    std.debug.warn("Exports: {}\n", .{module.exports.items.len});
-    std.debug.warn("Imports: {}\n", .{module.imports.items.len});
-    std.debug.warn("Codes: {}\n", .{module.codes.items.len});
-    std.debug.warn("Datas: {}\n", .{module.datas.items.len});
-    std.debug.warn("Customs: {}\n", .{module.customs.items.len});
-
-    if (module.getExport(.Func, "add")) |func| {
-        std.debug.warn("func index: {}\n", .{func});
-    } else {
-        return error.FunctionNotExported;
-    }
+    // Get index of add function
+    // const idx = try module.getExport(.Func, "add");
+    const add = try module.getFunction(2, "add", [2]ValueType{ .I32, .I32 }, .I32);
+    // const result = add.call(0, 0);
 }
