@@ -413,6 +413,8 @@ pub const Module = struct {
     }
 };
 
+// TODO: this is cool, but I'm not sure we can use this because what I want to do
+//       is generate a function, but comptime won't let me do that
 fn WasmFunctionType(args: anytype, result: anytype) type {
     var fn_args: [65536]std.builtin.TypeInfo.FnArg = undefined;
     if (@typeInfo(@TypeOf(args)) != .Struct) {
@@ -537,3 +539,10 @@ const Tag = enum(u8) {
     Mem,
     Global,
 };
+
+const testing = std.testing;
+
+test "module loading" {
+    const bytes = @embedFile("../export.wasm");
+    const module = Module.init(testing.allocator, bytes);
+}

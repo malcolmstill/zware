@@ -28,3 +28,9 @@ pub fn main() anyerror!void {
     const add = try module.getFunction(2, "add", [2]ValueType{ .I32, .I32 }, .I32);
     // const result = add.call(0, 0);
 }
+
+test "" {
+    _ = @import("validator.zig");
+    _ = @import("interpreter.zig");
+    _ = @import("module.zig");
+}
