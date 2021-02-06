@@ -216,7 +216,7 @@ test "validate: add error on mismatched types" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-    _ = try v.pushControlFrame(.Nop, in[0..], out[0..]);
+    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
     _ = try v.validate(.I64Const);
     _ = try v.validate(.I32Const);
     _ = v.validate(.I32Add) catch |err| {
