@@ -20,15 +20,32 @@ pub const Interpreter = struct {
     pub fn interpret(i: *Interpreter, opcode: Instruction) !void {
         switch (opcode) {
             .I32Add => {
+                // TODO: does wasm wrap?
                 const a = try i.popOperand(i32);
                 const b = try i.popOperand(i32);
                 try i.pushOperand(i32, a + b);
+            },
+            .I64Add => {
+                const a = try i.popOperand(i64);
+                const b = try i.popOperand(i64);
+                try i.pushOperand(i64, a + b);
+            },
+            .F32Add => {
+                const a = try i.popOperand(f32);
+                const b = try i.popOperand(f32);
+                try i.pushOperand(f32, a + b);
+            },
+            .F64Add => {
+                const a = try i.popOperand(f64);
+                const b = try i.popOperand(f64);
+                try i.pushOperand(f64, a + b);
             },
             else => unreachable,
         }
     }
 
     fn pushOperand(i: *Interpreter, comptime T: type, value: T) !void {
+        // TODO: if we've validated the wasm, do we need to perform this check:
         if (i.op_stack_size == i.op_stack.len) return error.OperandStackOverflow;
         i.op_stack_size += 1;
         i.op_stack[i.op_stack_size - 1] = switch (T) {
