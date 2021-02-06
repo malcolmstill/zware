@@ -208,7 +208,7 @@ test "validate add f64" {
     _ = try v.validate(.F64Add);
 }
 
-test "validate add error on mismatched types" {
+test "validate: add error on mismatched types" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
