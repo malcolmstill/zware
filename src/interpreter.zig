@@ -19,7 +19,11 @@ pub const Interpreter = struct {
 
     pub fn interpret(i: *Interpreter, opcode: Instruction) !void {
         switch (opcode) {
-            .I32Add => {},
+            .I32Add => {
+                const a = try i.popOperand(i32);
+                const b = try i.popOperand(i32);
+                try i.pushOperand(i32, a + b);
+            },
             else => unreachable,
         }
     }
@@ -89,4 +93,17 @@ test "operand push / pop test" {
     } else |err| {
         if (err != error.OperandStackUnderflow) return error.TestUnexpectedError;
     }
+}
+
+test "simple interpret tests" {
+    var op_stack: [6]u64 = [_]u64{0} ** 6;
+    var ctrl_stack: [1024]ControlFrame = [_]ControlFrame{undefined} ** 1024;
+    var i = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
+
+    try i.pushOperand(i32, 22);
+    try i.pushOperand(i32, -23);
+
+    try i.interpret(.I32Add);
+
+    testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }
