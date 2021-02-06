@@ -192,6 +192,7 @@ test "validate add i64" {
     _ = try v.validate(.I64Const);
     _ = try v.validate(.I64Const);
     _ = try v.validate(.I64Add);
+    _ = try v.validate(.End);
 }
 
 test "validate add f32" {
@@ -206,6 +207,7 @@ test "validate add f32" {
     _ = try v.validate(.F32Const);
     _ = try v.validate(.F32Const);
     _ = try v.validate(.F32Add);
+    _ = try v.validate(.End);
 }
 
 test "validate add f64" {
@@ -220,6 +222,7 @@ test "validate add f64" {
     _ = try v.validate(.F64Const);
     _ = try v.validate(.F64Const);
     _ = try v.validate(.F64Add);
+    _ = try v.validate(.End);
 }
 
 test "validate: add error on mismatched types" {
