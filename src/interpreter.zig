@@ -19,11 +19,23 @@ pub const Interpreter = struct {
 
     pub fn interpret(i: *Interpreter, opcode: Instruction) !void {
         switch (opcode) {
+            .Unreachable => return error.TrapUnreachable,
+            .Nop => return,
             .I32Add => {
                 // TODO: does wasm wrap?
                 const a = try i.popOperand(i32);
                 const b = try i.popOperand(i32);
                 try i.pushOperand(i32, a + b);
+            },
+            .I32Sub => {
+                const a = try i.popOperand(i32);
+                const b = try i.popOperand(i32);
+                try i.pushOperand(i32, b - a);
+            },
+            .I32Mul => {
+                const a = try i.popOperand(i32);
+                const b = try i.popOperand(i32);
+                try i.pushOperand(i32, a * b);
             },
             .I64Add => {
                 const a = try i.popOperand(i64);
