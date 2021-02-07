@@ -10,11 +10,14 @@ const Instruction = @import("instruction.zig").Instruction;
 // The Interpreter interprets WebAssembly bytecode, i.e. it
 // is the engine of execution and the whole reason we're here.
 //
-// Whilst executing code, the Interpreter maintains four stacks.
-// An operand stack, a control stack, a locals stack and a label stack.
+// Whilst executing code, the Interpreter maintains three stacks.
+// An operand stack, a control stack and a label stack.
 // The WebAssembly spec models execution as a single stack where operands,
-// activation frames, locals and labels are all interleaved. Here we split
+// activation frames, and labels are all interleaved. Here we split
 // those out for convenience.
+//
+// Note: I had considered four stacks (separating out the params / locals) to
+// there own stack, but I don't think that's necessary.
 //
 pub const Interpreter = struct {
     op_stack: []u64 = undefined,
