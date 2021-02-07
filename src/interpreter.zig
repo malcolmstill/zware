@@ -8,6 +8,7 @@ pub const Interpreter = struct {
     op_stack: []u64 = undefined,
     op_stack_size: usize = 0,
     ctrl_stack: []ControlFrame = undefined,
+    ctrl_stack_size: usize = 0,
 
     pub fn init(op_stack: []u64, ctrl_stack: []ControlFrame) Interpreter {
         return Interpreter{
@@ -87,17 +88,23 @@ pub const Interpreter = struct {
         if (i.op_stack_size == 0) return error.OperandStackUnderflow;
         i.op_stack_size -= 1;
     }
-};
 
-pub const ControlFrame = struct {
-    arity: usize = 0,
+    pub fn pushControlFrame(i: *Interpreter, frame: ControlFrame) !void {
+        if (i.ctrl_stack_size == i.ctrl_stack.len) return error.ControlStackOverflow;
+        i.ctrl_stack_size += 1;
+        i.ctrl_stack[i.ctrl_stack_size - 1] = frame;
+    }
+
+    pub const ControlFrame = struct {
+        arity: usize = 0,
+    };
 };
 
 const testing = std.testing;
 
 test "operand push / pop test" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack: [1024]ControlFrame = [_]ControlFrame{undefined} ** 1024;
+    var ctrl_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
     var i = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
 
     try i.pushOperand(i32, 22);
@@ -131,7 +138,7 @@ test "operand push / pop test" {
 
 test "simple interpret tests" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack: [1024]ControlFrame = [_]ControlFrame{undefined} ** 1024;
+    var ctrl_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
     var i = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
 
     try i.pushOperand(i32, 22);

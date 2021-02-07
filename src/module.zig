@@ -16,7 +16,6 @@ const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
-const ControlFrame = @import("interpreter.zig").ControlFrame;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
@@ -391,37 +390,59 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type) !Result {
+    // callFunction:
+    //  1. Lookup our function by name with getExport
+    //  2. Get the function type signature
+    //  3. Check that the incoming arguments in `args` match the function signature
+    //  4. Check that the return type in `Result` matches the function signature
+    //  5. Get the code for our function
+    //  6. Set up the stacks (operand stack, control stack)
+    //  7. Push a control frame and our parameters
+    //  8. Execute our function
+    //  9. Pop our result and return it
+    pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
+        // 1.
         const index = try self.getExport(.Func, name);
         if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
 
+        // 2.
         const func_type = self.types.items[index];
         const params = self.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
         const results = self.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
         if (params.len != args.len) return error.ParamCountMismatch;
 
-        // check the types of params
+        // 3. check the types of params
         inline for (args) |arg, i| {
             if (params[i] != common.toValueType(@TypeOf(arg))) return error.ParamTypeMismatch;
         }
 
-        // check the result type
+        // 4. check the result type
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
         if (results.len == 1) {
             if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
         }
 
-        // get the function bytecode
+        // 5. get the function bytecode
         const func = self.codes.items[index];
-        var op_stack: [4096]u64 = [_]u64{0} ** 4096;
-        var ctrl_stack: [4096]ControlFrame = [_]ControlFrame{undefined} ** 4096;
+
+        // 6. set up our stacks
+        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var ctrl_stack: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
         var interp = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
+
+        // 7.
+        try interp.pushControlFrame(Interpreter.ControlFrame{
+            .arity = 0,
+        });
 
         inline for (args) |arg, i| {
             try interp.pushOperand(@TypeOf(arg), arg);
         }
 
+        // 8. TODO: Execute our function
+
+        // 9.
         return try interp.popOperand(Result);
     }
 
@@ -437,6 +458,12 @@ pub const Module = struct {
         std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
         std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
     }
+};
+
+// Default stack sizes
+const InterpreterOptions = struct {
+    operand_stack_size: comptime_int = 64 * 1024,
+    control_stack_size: comptime_int = 64 * 1024,
 };
 
 // TODO: this is cool, but I'm not sure we can use this because what I want to do
@@ -512,6 +539,6 @@ test "module loading" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32);
+    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     // testing.expectEqual(@as(i32, 45), result);
 }
