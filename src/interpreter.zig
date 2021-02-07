@@ -1,13 +1,31 @@
 const std = @import("std");
 const mem = std.mem;
+const leb = std.debug.leb;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const Instruction = @import("instruction.zig").Instruction;
 
+// Interpreter:
+//
+// The Interpreter interprets WebAssembly bytecode, i.e. it
+// is the engine of execution and the whole reason we're here.
+//
+// Whilst executing code, the Interpreter maintains three stacks.
+// An operand stack, a control stack and a label stack.
+// The WebAssembly spec models execution as a single stack where operands,
+// activation frames, and labels are all interleaved. Here we split
+// those out for convenience.
+//
+// Note: I had considered four stacks (separating out the params / locals) to
+// there own stack, but I don't think that's necessary.
+//
 pub const Interpreter = struct {
     op_stack: []u64 = undefined,
     op_stack_size: usize = 0,
     ctrl_stack: []ControlFrame = undefined,
+    ctrl_stack_size: usize = 0,
+    function_code: []const u8 = undefined,
+    window: []const u8 = undefined,
 
     pub fn init(op_stack: []u64, ctrl_stack: []ControlFrame) Interpreter {
         return Interpreter{
@@ -16,11 +34,28 @@ pub const Interpreter = struct {
         };
     }
 
+    pub fn interpretFunction(i: *Interpreter, code: []const u8) !void {
+        i.function_code = code;
+        i.window = code;
+        while (i.window.len > 0) {
+            const instr = i.window[0];
+            i.window = i.window[1..];
+            try i.interpret(@intToEnum(Instruction, instr));
+        }
+    }
+
     pub fn interpret(i: *Interpreter, opcode: Instruction) !void {
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
+            .End => return,
             .Drop => try i.popAnyOperand(),
+            .LocalGet => {
+                const frame = i.ctrl_stack[i.ctrl_stack_size - 1];
+                const local_index = try readULEB128Mem(u32, &i.window);
+                const local_value: u64 = frame.locals[local_index];
+                try i.pushOperand(u64, local_value);
+            },
             .I32Add => {
                 // TODO: does wasm wrap?
                 const a = try i.popOperand(i32);
@@ -52,7 +87,10 @@ pub const Interpreter = struct {
                 const b = try i.popOperand(f64);
                 try i.pushOperand(f64, a + b);
             },
-            else => unreachable,
+            else => {
+                std.debug.warn("unimplemented instruction: {}\n", .{opcode});
+                unreachable;
+            },
         }
     }
 
@@ -65,6 +103,7 @@ pub const Interpreter = struct {
             i64 => @bitCast(u64, value),
             f32 => @bitCast(u64, @floatCast(f64, value)),
             f64 => @bitCast(u64, value),
+            u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
     }
@@ -87,17 +126,34 @@ pub const Interpreter = struct {
         if (i.op_stack_size == 0) return error.OperandStackUnderflow;
         i.op_stack_size -= 1;
     }
+
+    pub fn pushControlFrame(i: *Interpreter, frame: ControlFrame, params_and_locals_count: usize) !void {
+        if (i.ctrl_stack_size == i.ctrl_stack.len) return error.ControlStackOverflow;
+        i.ctrl_stack_size += 1;
+        i.ctrl_stack[i.ctrl_stack_size - 1] = frame;
+        i.ctrl_stack[i.ctrl_stack_size - 1].locals = i.op_stack[i.op_stack_size .. i.op_stack_size + params_and_locals_count];
+    }
+
+    pub const ControlFrame = struct {
+        locals: []u64 = undefined,
+        return_arity: usize = 0,
+    };
 };
 
-pub const ControlFrame = struct {
-    arity: usize = 0,
-};
+pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const value = try leb.readULEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
 
 const testing = std.testing;
 
 test "operand push / pop test" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack: [1024]ControlFrame = [_]ControlFrame{undefined} ** 1024;
+    var ctrl_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
+
     var i = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
 
     try i.pushOperand(i32, 22);
@@ -131,7 +187,7 @@ test "operand push / pop test" {
 
 test "simple interpret tests" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack: [1024]ControlFrame = [_]ControlFrame{undefined} ** 1024;
+    var ctrl_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
     var i = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
 
     try i.pushOperand(i32, 22);
