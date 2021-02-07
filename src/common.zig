@@ -58,7 +58,15 @@ pub const Export = struct {
     index: u32,
 };
 
+// Code
+//
+// - locals: slice of locals definition [count type]*
+// - locals_count: the total number of locals (this does not include params)
+// - code: []u8 byte slice of wasm code (index 0 is immediately after
+//         the locals definitions)
 pub const Code = struct {
+    locals: []const u8,
+    locals_count: usize,
     code: []const u8,
 };
 
