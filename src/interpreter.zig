@@ -57,7 +57,7 @@ pub const Interpreter = struct {
         }
     }
 
-    fn pushOperand(i: *Interpreter, comptime T: type, value: T) !void {
+    pub fn pushOperand(i: *Interpreter, comptime T: type, value: T) !void {
         // TODO: if we've validated the wasm, do we need to perform this check:
         if (i.op_stack_size == i.op_stack.len) return error.OperandStackOverflow;
         i.op_stack_size += 1;
@@ -70,7 +70,7 @@ pub const Interpreter = struct {
         };
     }
 
-    fn popOperand(i: *Interpreter, comptime T: type) !T {
+    pub fn popOperand(i: *Interpreter, comptime T: type) !T {
         if (i.op_stack_size == 0) return error.OperandStackUnderflow;
         defer i.op_stack_size -= 1;
 
@@ -84,13 +84,13 @@ pub const Interpreter = struct {
         };
     }
 
-    fn popAnyOperand(i: *Interpreter) !void {
+    pub fn popAnyOperand(i: *Interpreter) !void {
         if (i.op_stack_size == 0) return error.OperandStackUnderflow;
         i.op_stack_size -= 1;
     }
 };
 
-const ControlFrame = struct {
+pub const ControlFrame = struct {
     arity: usize = 0,
 };
 

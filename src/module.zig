@@ -14,6 +14,9 @@ const Global = @import("common.zig").Global;
 const Code = @import("common.zig").Code;
 const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
+const common = @import("common.zig");
+const Interpreter = @import("interpreter.zig").Interpreter;
+const ControlFrame = @import("interpreter.zig").ControlFrame;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
@@ -388,7 +391,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn getFunction(self: *Module, comptime len: usize, name: []const u8, args: anytype, comptime result: ValueType) !usize {
+    pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type) !Result {
         const index = try self.getExport(.Func, name);
         if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
 
@@ -398,16 +401,28 @@ pub const Module = struct {
 
         if (params.len != args.len) return error.ParamCountMismatch;
 
-        for (params) |p, i| {
-            if (p != args[i]) return error.ParamTypeMismatch;
+        // check the types of params
+        inline for (args) |arg, i| {
+            if (params[i] != common.toValueType(@TypeOf(arg))) return error.ParamTypeMismatch;
         }
 
+        // check the result type
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
         if (results.len == 1) {
-            if (results[0] != result) return error.ResultTypeMismatch;
+            if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
         }
 
-        return index;
+        // get the function bytecode
+        const func = self.codes.items[index];
+        var op_stack: [4096]u64 = [_]u64{0} ** 4096;
+        var ctrl_stack: [4096]ControlFrame = [_]ControlFrame{undefined} ** 4096;
+        var interp = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
+
+        inline for (args) |arg, i| {
+            try interp.pushOperand(@TypeOf(arg), arg);
+        }
+
+        return try interp.popOperand(Result);
     }
 
     pub fn print(module: *Module) void {
@@ -496,4 +511,7 @@ test "module loading" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
+
+    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32);
+    testing.expectEqual(@as(i32, 45), result);
 }

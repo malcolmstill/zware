@@ -22,6 +22,16 @@ pub const ValueType = enum(u8) {
     F64 = 0x7C,
 };
 
+pub fn toValueType(comptime t: type) ValueType {
+    return switch (t) {
+        i32 => .I32,
+        i64 => .I64,
+        f32 => .F32,
+        f64 => .F64,
+        else => @compileError("toValueType: unsupported type: " ++ @typeName(t)),
+    };
+}
+
 pub const FuncType = struct {
     params_offset: usize,
     params_count: usize,
