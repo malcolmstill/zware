@@ -11,7 +11,7 @@ pub fn build(b: *Builder) void {
     // between Debug, ReleaseSafe, ReleaseFast, and ReleaseSmall.
     const mode = b.standardReleaseOptions();
 
-    const exe = b.addExecutable("zig-wasm", "src/main.zig");
+    const exe = b.addExecutable("foxwren", "src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.single_threaded = true;

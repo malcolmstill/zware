@@ -1,4 +1,4 @@
-name: zig-wasm tests
+name: foxwren tests
 on: push
 jobs:
   test:
