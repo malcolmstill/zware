@@ -18,3 +18,10 @@
 - https://blog.veitheller.de/Speeding_up_an_Interpreter.html
 - https://medium.com/bumble-tech/when-pigs-fly-optimising-bytecode-interpreters-f64fb6bfa20f
 - https://chromium.googlesource.com/external/github.com/WebAssembly/binaryen/+/daf0b9cf0a5cf32727bfd06960fac48b30813d93/README.md
+- https://bytecodealliance.org/articles/multi-value-all-the-wasm
+- https://hackernoon.com/webassembly-the-journey-jit-compilers-dfa4081a6ffb
+- https://wingolog.org/archives/2011/06/21/security-implications-of-jit-compilation
+- https://blog.cloudflare.com/building-fast-interpreters-in-rust/
+- https://news.ycombinator.com/item?id=22024758
+- http://www.complang.tuwien.ac.at/forth/threaded-code.html
+- http://www.software-lab.org/publications/Wasabi_arXiv_1808.10652.pdf
