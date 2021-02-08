@@ -12,11 +12,12 @@ pub const InstructionIterator = struct {
         };
     }
 
-    pub fn next(self: *InstructionIterator) !?Instruction {
+    pub fn next(self: *InstructionIterator) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
         const instr = @intToEnum(Instruction, self.code[0]);
+        const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
         // 2. Find the start of the next instruction
@@ -31,8 +32,16 @@ pub const InstructionIterator = struct {
             else => {},
         }
 
-        return instr;
+        return InstructionMeta{
+            .instruction = instr,
+            .offset = offset,
+        };
     }
+};
+
+const InstructionMeta = struct {
+    instruction: Instruction,
+    offset: usize, // offset from start of function
 };
 
 const testing = std.testing;
@@ -51,24 +60,24 @@ test "instruction iterator" {
     const func = module.codes.items[0];
 
     var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(), Instruction.LocalGet);
-    testing.expectEqual(try it.next(), Instruction.I32Const);
-    testing.expectEqual(try it.next(), Instruction.I32LtS);
-    testing.expectEqual(try it.next(), Instruction.If);
-    testing.expectEqual(try it.next(), Instruction.I32Const);
-    testing.expectEqual(try it.next(), Instruction.Return);
-    testing.expectEqual(try it.next(), Instruction.End);
-    testing.expectEqual(try it.next(), Instruction.LocalGet);
-    testing.expectEqual(try it.next(), Instruction.I32Const);
-    testing.expectEqual(try it.next(), Instruction.I32Sub);
-    testing.expectEqual(try it.next(), Instruction.Call);
-    testing.expectEqual(try it.next(), Instruction.LocalGet);
-    testing.expectEqual(try it.next(), Instruction.I32Const);
-    testing.expectEqual(try it.next(), Instruction.I32Sub);
-    testing.expectEqual(try it.next(), Instruction.Call);
-    testing.expectEqual(try it.next(), Instruction.I32Add);
-    testing.expectEqual(try it.next(), Instruction.Return);
-    testing.expectEqual(try it.next(), Instruction.End);
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
 
     testing.expectEqual(try it.next(), null);
 }
