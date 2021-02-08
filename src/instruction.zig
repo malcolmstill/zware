@@ -40,6 +40,35 @@ pub const InstructionIterator = struct {
     }
 };
 
+// findEnd
+//
+// Finds the end instruction corresponding to the instruction at index 0
+// of `code`. The offset is relative to `code[0]` (not the start of the function)
+//
+// Errors:
+// - CouldntFindEnd if we run out of elements in `code`
+// - NotBranchTarget if the instruction at `code[0]` isn't branch target
+pub fn findEnd(code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
+        if (i == 0) return meta;
+        if (meta.offset == 0) {
+            switch (meta.instruction) {
+                .Block, .Loop, .If => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (meta.instruction) {
+            .Block, .Loop, .If => i += 1,
+            .End => i -= 1,
+            else => {},
+        }
+    }
+    return error.CouldntFindEnd;
+}
+
 const InstructionMeta = struct {
     instruction: Instruction,
     offset: usize, // offset from start of function
@@ -65,6 +94,10 @@ test "instruction iterator" {
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+
+    const if_end_meta = try findEnd(func.code[5..]);
+    testing.expectEqual(if_end_meta.offset, 6);
+
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
