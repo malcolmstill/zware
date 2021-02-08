@@ -1,3 +1,86 @@
+const std = @import("std");
+const leb = std.debug.leb;
+
+pub const InstructionIterator = struct {
+    function: []const u8,
+    code: []const u8,
+
+    pub fn init(function: []const u8) InstructionIterator {
+        return InstructionIterator{
+            .code = function,
+            .function = function,
+        };
+    }
+
+    pub fn next(self: *InstructionIterator) !?Instruction {
+        if (self.code.len == 0) return null;
+
+        // 1. Get the instruction we're going to return and increment code
+        const instr = @intToEnum(Instruction, self.code[0]);
+        self.code = self.code[1..];
+
+        // 2. Find the start of the next instruction
+        switch (instr) {
+            .I32Const,
+            .I64Const,
+            .LocalGet,
+            .If,
+            .Call,
+            => _ = try readULEB128Mem(u32, &self.code),
+            .F32Const, .F64Const => self.code = self.code[4..],
+            else => {},
+        }
+
+        return instr;
+    }
+};
+
+const testing = std.testing;
+
+test "instruction iterator" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    const Module = @import("module.zig").Module;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/fib.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
+
+    const func = module.codes.items[0];
+
+    var it = InstructionIterator.init(func.code);
+    testing.expectEqual(try it.next(), Instruction.LocalGet);
+    testing.expectEqual(try it.next(), Instruction.I32Const);
+    testing.expectEqual(try it.next(), Instruction.I32LtS);
+    testing.expectEqual(try it.next(), Instruction.If);
+    testing.expectEqual(try it.next(), Instruction.I32Const);
+    testing.expectEqual(try it.next(), Instruction.Return);
+    testing.expectEqual(try it.next(), Instruction.End);
+    testing.expectEqual(try it.next(), Instruction.LocalGet);
+    testing.expectEqual(try it.next(), Instruction.I32Const);
+    testing.expectEqual(try it.next(), Instruction.I32Sub);
+    testing.expectEqual(try it.next(), Instruction.Call);
+    testing.expectEqual(try it.next(), Instruction.LocalGet);
+    testing.expectEqual(try it.next(), Instruction.I32Const);
+    testing.expectEqual(try it.next(), Instruction.I32Sub);
+    testing.expectEqual(try it.next(), Instruction.Call);
+    testing.expectEqual(try it.next(), Instruction.I32Add);
+    testing.expectEqual(try it.next(), Instruction.Return);
+    testing.expectEqual(try it.next(), Instruction.End);
+
+    testing.expectEqual(try it.next(), null);
+}
+
+pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const value = try leb.readULEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
 pub const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,
