@@ -21,6 +21,7 @@ pub const InstructionIterator = struct {
         self.code = self.code[1..];
 
         // 2. Find the start of the next instruction
+        // TODO: complete this for all opcodes
         switch (instr) {
             .I32Const,
             .I64Const,
