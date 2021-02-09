@@ -69,6 +69,31 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     return error.CouldntFindEnd;
 }
 
+// findElse
+//
+// Similar to findEnd but finds the match else branch, if
+// one exists
+pub fn findElse(code: []const u8) !?InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
+        if (i == 0) return meta;
+        if (meta.offset == 0) {
+            switch (meta.instruction) {
+                .If => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (meta.instruction) {
+            .If => i += 1,
+            .Else => i -= 1,
+            else => {},
+        }
+    }
+    return null;
+}
+
 const InstructionMeta = struct {
     instruction: Instruction,
     offset: usize, // offset from start of function
