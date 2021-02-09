@@ -499,41 +499,6 @@ const InterpreterOptions = struct {
     label_stack_size: comptime_int = 64 * 1024,
 };
 
-// TODO: this is cool, but I'm not sure we can use this because what I want to do
-//       is generate a function, but comptime won't let me do that
-fn WasmFunctionType(args: anytype, result: anytype) type {
-    var fn_args: [65536]std.builtin.TypeInfo.FnArg = undefined;
-    if (@typeInfo(@TypeOf(args)) != .Struct) {
-        @compileError("Expected tuple or struct argument, found " ++ @typeName(@TypeOf(args)));
-    }
-
-    if (!(result == i32 or result == i64 or result == f32 or result == f64)) {
-        @compileError("Return type must be in ValueType, found " ++ @typeName(result));
-    }
-
-    for (args) |arg, i| {
-        if (!(arg == i32 or arg == i64 or arg == f32 or arg == f64)) {
-            @compileError("Arg type must be in ValueType, found " ++ @typeName(arg));
-        }
-        fn_args[i] = std.builtin.TypeInfo.FnArg{
-            .is_generic = false,
-            .is_noalias = false,
-            .arg_type = arg,
-        };
-    }
-
-    return @Type(std.builtin.TypeInfo{
-        .Fn = std.builtin.TypeInfo.Fn{
-            .calling_convention = .Unspecified,
-            .alignment = 0,
-            .is_generic = false,
-            .is_var_args = false,
-            .return_type = result,
-            .args = fn_args[0..args.len],
-        },
-    });
-}
-
 const Section = struct {
     id: SectionType,
     size: u32,
