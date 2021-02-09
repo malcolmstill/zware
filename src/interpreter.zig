@@ -28,7 +28,7 @@ pub const Interpreter = struct {
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
     function_code: []const u8 = undefined,
-    window: []const u8 = undefined,
+    continuation: []const u8 = undefined,
     module: ?*Module = undefined,
 
     pub fn init(op_stack_mem: []u64, ctrl_stack_mem: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
@@ -45,11 +45,11 @@ pub const Interpreter = struct {
 
     pub fn interpretFunction(self: *Interpreter, code: []const u8) !void {
         self.function_code = code;
-        self.window = code;
-        while (self.window.len > 0) {
-            const instr = self.window[0];
-            const instr_code = self.window;
-            self.window = self.window[1..];
+        self.continuation = code;
+        while (self.continuation.len > 0) {
+            const instr = self.continuation[0];
+            const instr_code = self.continuation;
+            self.continuation = self.continuation[1..];
             try self.interpret(@intToEnum(Instruction, instr), instr_code);
         }
     }
@@ -76,14 +76,14 @@ pub const Interpreter = struct {
             // },
             .If => {
                 // TODO: perform findEnd during parsing
-                const block_type = try instruction.readILEB128Mem(i32, &self.window);
+                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
 
                 const x = try self.popOperand(i32);
                 const end = try instruction.findEnd(code);
                 const continuation = code[end.offset..];
 
                 if (x == 0) {
-                    self.window = continuation;
+                    self.continuation = continuation;
                 } else {
                     try self.pushLabel(Label{
                         .op_stack_start = self.op_stack.len,
@@ -93,7 +93,7 @@ pub const Interpreter = struct {
             },
             .End => {
                 const label = try self.peekNthLabel(0);
-                self.window = label.code;
+                self.continuation = label.code;
             },
             .Return => {
                 // Pop labels and control frame
@@ -107,7 +107,7 @@ pub const Interpreter = struct {
                         _ = try self.popLabel();
 
                         if (label.op_stack_start == frame.locals_start) {
-                            self.window = label.code;
+                            self.continuation = label.code;
                         }
                     }
                 }
@@ -127,7 +127,7 @@ pub const Interpreter = struct {
                 // TODO: we need to verify that we're okay to lookup this function.
                 //       we can (and probably should) do that at validation time.
                 const module = self.module orelse return error.NoModule;
-                const function_index = try instruction.readULEB128Mem(usize, &self.window);
+                const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
                 const func_type = module.types.items[function_index];
                 const func = module.codes.items[function_index];
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
@@ -142,7 +142,7 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 try self.pushLabel(Interpreter.Label{
                     .op_stack_start = self.op_stack.len - params.len,
-                    .code = self.window,
+                    .code = self.continuation,
                 });
 
                 // Make space for locals (again, params already on stack)
@@ -151,17 +151,17 @@ pub const Interpreter = struct {
                     try self.pushOperand(u64, 0);
                 }
 
-                self.window = func.code;
+                self.continuation = func.code;
             },
             .Drop => _ = try self.popAnyOperand(),
             .LocalGet => {
                 const frame = try self.peekNthControlFrame(0);
-                const local_index = try instruction.readULEB128Mem(u32, &self.window);
+                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const local_value: u64 = frame.locals[local_index];
                 try self.pushOperand(u64, local_value);
             },
             .I32Const => {
-                const x = try instruction.readILEB128Mem(i32, &self.window);
+                const x = try instruction.readILEB128Mem(i32, &self.continuation);
                 try self.pushOperand(i32, x);
             },
             .I32LtS => {
