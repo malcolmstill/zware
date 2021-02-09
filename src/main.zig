@@ -23,7 +23,7 @@ pub fn main() anyerror!void {
     try module.parse();
     module.print();
 
-    const result = try module.callFunction("fib", .{@as(i32, 40)}, i32, .{});
+    const result = try module.callFunction("fib", .{@as(i32, 30)}, i32, .{});
     std.debug.warn("result: {}\n", .{result});
 }
 
