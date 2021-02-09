@@ -114,16 +114,13 @@ pub const Interpreter = struct {
 
                 if (frame.return_arity == 1) {
                     const value = try self.popAnyOperand();
-                    // self.op_stack_size = frame.locals_start;
                     self.op_stack = self.op_stack[0..frame.locals_start];
+
                     _ = try self.popControlFrame();
                     try self.pushOperand(u64, value);
-                    // std.debug.warn("return: {}\n", .{value});
                 } else {
-                    // self.op_stack_size = frame.locals_start;
                     self.op_stack = self.op_stack[0..frame.locals_start];
                     _ = try self.popControlFrame();
-                    // std.debug.warn("return (none)\n", .{});
                 }
             },
             .Call => {
