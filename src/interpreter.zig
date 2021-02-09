@@ -22,7 +22,7 @@ const instruction = @import("instruction.zig");
 //
 pub const Interpreter = struct {
     op_stack: []u64 = undefined,
-    op_stack_size: usize = 0,
+    op_stack_mem: []u64 = undefined,
     ctrl_stack_mem: []ControlFrame = undefined,
     ctrl_stack: []ControlFrame = undefined,
     label_stack_mem: []Label = undefined,
@@ -31,11 +31,12 @@ pub const Interpreter = struct {
     window: []const u8 = undefined,
     module: ?*Module = undefined,
 
-    pub fn init(op_stack: []u64, ctrl_stack: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
+    pub fn init(op_stack_mem: []u64, ctrl_stack_mem: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
         return Interpreter{
-            .op_stack = op_stack,
-            .ctrl_stack_mem = ctrl_stack,
-            .ctrl_stack = ctrl_stack[0..0],
+            .op_stack_mem = op_stack_mem,
+            .op_stack = op_stack_mem[0..0],
+            .ctrl_stack_mem = ctrl_stack_mem,
+            .ctrl_stack = ctrl_stack_mem[0..0],
             .label_stack_mem = label_stack_mem,
             .label_stack = label_stack_mem[0..0],
             .module = module,
@@ -85,7 +86,7 @@ pub const Interpreter = struct {
                     i.window = continuation;
                 } else {
                     try i.pushLabel(Label{
-                        .op_stack_start = i.op_stack_size,
+                        .op_stack_start = i.op_stack.len,
                         .code = continuation,
                     });
                 }
@@ -113,12 +114,14 @@ pub const Interpreter = struct {
 
                 if (frame.return_arity == 1) {
                     const value = try i.popAnyOperand();
-                    i.op_stack_size = frame.locals_start;
+                    // i.op_stack_size = frame.locals_start;
+                    i.op_stack = i.op_stack[0..frame.locals_start];
                     _ = try i.popControlFrame();
                     try i.pushOperand(u64, value);
                     // std.debug.warn("return: {}\n", .{value});
                 } else {
-                    i.op_stack_size = frame.locals_start;
+                    // i.op_stack_size = frame.locals_start;
+                    i.op_stack = i.op_stack[0..frame.locals_start];
                     _ = try i.popControlFrame();
                     // std.debug.warn("return (none)\n", .{});
                 }
@@ -135,13 +138,13 @@ pub const Interpreter = struct {
 
                 // We assume params are already on stack
                 try i.pushControlFrame(Interpreter.ControlFrame{
-                    .locals_start = i.op_stack_size - params.len,
+                    .locals_start = i.op_stack.len - params.len,
                     .return_arity = results.len,
                 }, func.locals_count + params.len);
 
                 // Our continuation is the code after call
                 try i.pushLabel(Interpreter.Label{
-                    .op_stack_start = i.op_stack_size - params.len,
+                    .op_stack_start = i.op_stack.len - params.len,
                     .code = i.window,
                 });
 
@@ -210,11 +213,13 @@ pub const Interpreter = struct {
         }
     }
 
-    pub fn pushOperand(i: *Interpreter, comptime T: type, value: T) !void {
+    pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
         // TODO: if we've validated the wasm, do we need to perform this check:
-        if (i.op_stack_size == i.op_stack.len) return error.OperandStackOverflow;
-        i.op_stack_size += 1;
-        i.op_stack[i.op_stack_size - 1] = switch (T) {
+        if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
+        // Increase stack height by 1
+        self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
+
+        self.op_stack[self.op_stack.len - 1] = switch (T) {
             i32 => @bitCast(u64, @intCast(i64, value)),
             i64 => @bitCast(u64, value),
             f32 => @bitCast(u64, @floatCast(f64, value)),
@@ -224,11 +229,11 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn popOperand(i: *Interpreter, comptime T: type) !T {
-        if (i.op_stack_size == 0) return error.OperandStackUnderflow;
-        defer i.op_stack_size -= 1;
+    pub fn popOperand(self: *Interpreter, comptime T: type) !T {
+        if (self.op_stack.len == 0) return error.OperandStackUnderflow;
+        defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
 
-        const value = i.op_stack[i.op_stack_size - 1];
+        const value = self.op_stack[self.op_stack.len - 1];
         return switch (T) {
             i32 => @intCast(i32, @bitCast(i64, value)),
             i64 => @bitCast(i64, value),
@@ -238,11 +243,11 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn popAnyOperand(i: *Interpreter) !u64 {
-        if (i.op_stack_size == 0) return error.OperandStackUnderflow;
-        const value = i.op_stack[i.op_stack_size - 1];
-        i.op_stack_size -= 1;
-        return value;
+    pub fn popAnyOperand(self: *Interpreter) !u64 {
+        if (self.op_stack.len == 0) return error.OperandStackUnderflow;
+        defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
+
+        return self.op_stack[self.op_stack.len - 1];
     }
 
     // TODO: if the code is validated, do we need to know the params count
