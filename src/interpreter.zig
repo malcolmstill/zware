@@ -268,9 +268,9 @@ pub const Interpreter = struct {
 
     pub fn popControlFrame(self: *Interpreter) !ControlFrame {
         if (self.ctrl_stack.len == 0) return error.ControlStackUnderflow;
-        const frame = self.ctrl_stack[self.ctrl_stack.len - 1];
-        self.ctrl_stack = self.ctrl_stack[0 .. self.ctrl_stack.len - 1];
-        return frame;
+        defer self.ctrl_stack = self.ctrl_stack[0 .. self.ctrl_stack.len - 1];
+
+        return self.ctrl_stack[self.ctrl_stack.len - 1];
     }
 
     // peekNthControlFrame
@@ -291,9 +291,9 @@ pub const Interpreter = struct {
 
     pub fn popLabel(self: *Interpreter) !Label {
         if (self.label_stack.len == 0) return error.ControlStackUnderflow;
-        const label = self.label_stack[self.label_stack.len - 1];
-        self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
-        return label;
+        defer self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
+
+        return self.label_stack[self.label_stack.len - 1];
     }
 
     // peekNthLabel
