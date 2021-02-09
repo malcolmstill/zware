@@ -122,11 +122,11 @@ pub const Interpreter = struct {
                     i.op_stack_size = frame.locals_start;
                     _ = try i.popControlFrame();
                     try i.pushOperand(u64, value);
-                    std.debug.warn("return: {}\n", .{value});
+                    // std.debug.warn("return: {}\n", .{value});
                 } else {
                     i.op_stack_size = frame.locals_start;
                     _ = try i.popControlFrame();
-                    std.debug.warn("return (none)\n", .{});
+                    // std.debug.warn("return (none)\n", .{});
                 }
             },
             .Call => {
@@ -139,7 +139,7 @@ pub const Interpreter = struct {
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
-                // Assume params are already on stack
+                // We assume params are already on stack
                 try i.pushControlFrame(Interpreter.ControlFrame{
                     .locals_start = i.op_stack_size - params.len,
                     .return_arity = results.len,
@@ -151,24 +151,13 @@ pub const Interpreter = struct {
                     .code = i.window,
                 });
 
-                // call takes parameters from what's on the stack so we don't
-                // need to pop and then repush
-                // inline for (args) |arg, j| {
-                //    try i.pushOperand(@TypeOf(arg), arg);
-                // }
-
-                // but we do need to make space for new locals
+                // Make space for locals (again, params already on stack)
                 var j: usize = 0;
                 while (j < func.locals_count) {
                     try i.pushOperand(u64, 0);
                 }
 
-                // TODO: not sure we want to call this recursively. Could we replace i.window?
-                // THOUGHT: the label is exactly what lets us do this without recursion
-                // try i.interpretFunction(func.code);
                 i.window = func.code;
-
-                // return try i.popOperand(Result);
             },
             .Drop => _ = try i.popAnyOperand(),
             .LocalGet => {
@@ -184,20 +173,20 @@ pub const Interpreter = struct {
             .I32LtS => {
                 const a = try i.popOperand(i32);
                 const b = try i.popOperand(i32);
-                std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
+                // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
                 try i.pushOperand(i32, @as(i32, if (b < a) 1 else 0));
             },
             .I32Add => {
                 // TODO: does wasm wrap?
                 const a = try i.popOperand(i32);
                 const b = try i.popOperand(i32);
-                std.debug.warn("a + b = {} + {} = {}\n", .{ a, b, a + b });
+                // std.debug.warn("a + b = {} + {} = {}\n", .{ a, b, a + b });
                 try i.pushOperand(i32, a + b);
             },
             .I32Sub => {
                 const a = try i.popOperand(i32);
                 const b = try i.popOperand(i32);
-                std.debug.warn("b - a = {} - {} = {}\n", .{ b, a, b - a });
+                // std.debug.warn("b - a = {} - {} = {}\n", .{ b, a, b - a });
                 try i.pushOperand(i32, b - a);
             },
             .I32Mul => {
@@ -272,9 +261,9 @@ pub const Interpreter = struct {
         const current_frame = &self.ctrl_stack[self.ctrl_stack.len - 1];
         current_frame.* = frame;
         current_frame.locals = self.op_stack[frame.locals_start .. frame.locals_start + params_and_locals_count];
-        for (current_frame.locals) |local, i| {
-            std.debug.warn("pushControlFrame.local[{}] = {}\n", .{ i, local });
-        }
+        // for (current_frame.locals) |local, i| {
+        //     std.debug.warn("pushControlFrame.local[{}] = {}\n", .{ i, local });
+        // }
         // current_frame.locals_start = self.op_stack_size;
     }
 
