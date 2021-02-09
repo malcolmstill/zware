@@ -16,14 +16,14 @@ pub fn main() anyerror!void {
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
 
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, "test/test.wasm", 0xFFFFFFF);
+    const program = try fs.cwd().readFileAlloc(&arena.allocator, "test/fib.wasm", 0xFFFFFFF);
 
     // Load and parse a module
     var module = Module.init(&arena.allocator, program);
     try module.parse();
     module.print();
 
-    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32);
+    const result = try module.callFunction("fib", .{@as(i32, 3)}, i32, .{});
     std.debug.warn("result: {}\n", .{result});
 }
 

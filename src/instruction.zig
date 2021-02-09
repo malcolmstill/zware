@@ -124,6 +124,14 @@ pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     return value;
 }
 
+pub fn readILEB128Mem(comptime T: type, ptr: *[]const u8) !T {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const value = try leb.readILEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
 pub const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,

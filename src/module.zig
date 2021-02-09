@@ -438,22 +438,32 @@ pub const Module = struct {
         // 5. get the function bytecode
         const func = self.codes.items[index];
 
-        // I think everything below here should probably live in interpret
-
         // 6. set up our stacks
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
         var ctrl_stack: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
+        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var interp = Interpreter.init(op_stack[0..], ctrl_stack[0..], label_stack[0..], self);
 
-        // 7a. push control frame
-        try interp.pushControlFrame(Interpreter.ControlFrame{
-            .return_arity = results.len,
-        }, func.locals_count + params.len);
+        // I think everything below here should probably live in interpret
 
         // 7b. push params
         inline for (args) |arg, i| {
             try interp.pushOperand(@TypeOf(arg), arg);
         }
+
+        // 7a. push control frame
+        try interp.pushControlFrame(Interpreter.ControlFrame{
+            .locals_start = 0,
+            .return_arity = results.len,
+        }, func.locals_count + params.len);
+
+        // 7a.2. push label for our implicit function block. We know we don't have
+        // any code to execute after calling interpretFunction, but we will need to
+        // pop a Label
+        try interp.pushLabel(Interpreter.Label{
+            .op_stack_start = 0,
+            .code = func.code[0..0],
+        });
 
         // 7c. push (i.e. make space for) locals
         var i: usize = 0;
@@ -484,8 +494,9 @@ pub const Module = struct {
 
 // Default stack sizes
 const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 64 * 1024,
+    operand_stack_size: comptime_int = 128,
     control_stack_size: comptime_int = 64 * 1024,
+    label_stack_size: comptime_int = 64 * 1024,
 };
 
 // TODO: this is cool, but I'm not sure we can use this because what I want to do
@@ -551,7 +562,7 @@ const SectionType = enum(u8) {
 
 const testing = std.testing;
 
-test "module loading" {
+test "module loading (simple add function)" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -563,4 +574,23 @@ test "module loading" {
 
     const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
+}
+
+test "module loading (fib)" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/fib.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
+
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
 }
