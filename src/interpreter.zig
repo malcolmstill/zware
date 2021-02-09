@@ -55,45 +55,68 @@ pub const Interpreter = struct {
     }
 
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        // defer {
-        //     std.debug.warn("stack after: {}\n", .{opcode});
-        //     var j: usize = 0;
-        //     while (j < i.op_stack_size) : (j += 1) {
-        //         std.debug.warn("stack[{}] = {}\n", .{ j, i.op_stack[j] });
-        //     }
-        //     std.debug.warn("\n", .{});
-        // }
+        defer {
+            std.debug.warn("stack after: {}\n", .{opcode});
+            var i: usize = 0;
+            while (i < self.op_stack.len) : (i += 1) {
+                std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+            }
+            std.debug.warn("\n", .{});
+        }
+
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
             // .Block => {
             //     const meta = try instruction.findEnd(i.window);
             // },
-            // .Loop => {
-            //     // 1. We need to push a new label onto our label stack.
-            //     //    The continuation for a loop is the the loop body.
-            //     //    Or is it the loop body + the rest of the function?
-            // },
+            .Loop => {
+                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+
+                // For loop control flow, the continuation for the label
+                // we push is the start of the loop
+                const continuation = code[0..];
+                try self.pushLabel(Label{
+                    .op_stack_start = self.op_stack.len,
+                    .continuation = continuation,
+                });
+            },
             .If => {
                 // TODO: perform findEnd during parsing
                 const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
-
-                const x = try self.popOperand(i32);
                 const end = try instruction.findEnd(code);
+                const else_branch = try instruction.findElse(code);
+
+                // For if control flow, the continuation for our label
+                // is the continuation of code after end
                 const continuation = code[end.offset..];
 
-                if (x == 0) {
+                const condition = try self.popOperand(i32);
+                if (condition == 0) {
+                    // We'll skip to end
                     self.continuation = continuation;
+                    // unless we have an else branch
+                    if (else_branch) |eb| self.continuation = code[eb.offset..];
                 } else {
                     try self.pushLabel(Label{
                         .op_stack_start = self.op_stack.len,
-                        .code = continuation,
+                        .continuation = continuation,
                     });
                 }
             },
             .End => {
-                const label = try self.peekNthLabel(0);
-                self.continuation = label.code;
+                const label = try self.popLabels(0);
+            },
+            .BrIf => {
+                const relative_label = try instruction.readULEB128Mem(u32, &self.continuation);
+                const condition = try self.popOperand(i32);
+                if (condition != 0) {
+                    // Our condition is true, we want to jump back up to loop
+                    // 1. Pop the existing label including the stack variables push
+                    //    after the label
+                    const label = try self.popLabels(relative_label);
+                    self.continuation = label.continuation;
+                }
             },
             .Return => {
                 // Pop labels and control frame
@@ -107,7 +130,7 @@ pub const Interpreter = struct {
                         _ = try self.popLabel();
 
                         if (label.op_stack_start == frame.locals_start) {
-                            self.continuation = label.code;
+                            self.continuation = label.continuation;
                         }
                     }
                 }
@@ -142,7 +165,7 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 try self.pushLabel(Interpreter.Label{
                     .op_stack_start = self.op_stack.len - params.len,
-                    .code = self.continuation,
+                    .continuation = self.continuation,
                 });
 
                 // Make space for locals (again, params already on stack)
@@ -160,6 +183,12 @@ pub const Interpreter = struct {
                 const local_value: u64 = frame.locals[local_index];
                 try self.pushOperand(u64, local_value);
             },
+            .LocalSet => {
+                const value = try self.popAnyOperand();
+                const frame = try self.peekNthControlFrame(0);
+                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                frame.locals[local_index] = value;
+            },
             .I32Const => {
                 const x = try instruction.readILEB128Mem(i32, &self.continuation);
                 try self.pushOperand(i32, x);
@@ -169,6 +198,12 @@ pub const Interpreter = struct {
                 const b = try self.popOperand(i32);
                 // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
                 try self.pushOperand(i32, @as(i32, if (b < a) 1 else 0));
+            },
+            .I32GeS => {
+                const a = try self.popOperand(i32);
+                const b = try self.popOperand(i32);
+                // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
+                try self.pushOperand(i32, @as(i32, if (b >= a) 1 else 0));
             },
             .I32Add => {
                 // TODO: does wasm wrap?
@@ -256,11 +291,8 @@ pub const Interpreter = struct {
 
         const current_frame = &self.ctrl_stack[self.ctrl_stack.len - 1];
         current_frame.* = frame;
+        // TODO: index out of bounds (error if we've run out of operand stack space):
         current_frame.locals = self.op_stack[frame.locals_start .. frame.locals_start + params_and_locals_count];
-        // for (current_frame.locals) |local, i| {
-        //     std.debug.warn("pushControlFrame.local[{}] = {}\n", .{ i, local });
-        // }
-        // current_frame.locals_start = self.op_stack_size;
     }
 
     pub fn popControlFrame(self: *Interpreter) !ControlFrame {
@@ -302,6 +334,24 @@ pub const Interpreter = struct {
         return &self.label_stack[self.label_stack.len - index - 1];
     }
 
+    // popLabels
+    //
+    // target: branch target (relative to current scope which is 0)
+    //
+    // popLabels pops labels up to and including `target`. Also pops
+    // operands pushed after the label was originally pushed
+    pub fn popLabels(self: *Interpreter, target: u32) !Label {
+        if (target >= self.label_stack.len) return error.LabelStackUnderflow;
+        const target_label = self.label_stack[self.label_stack.len - target - 1];
+
+        // Pop labels, pop operands
+        self.label_stack = self.label_stack[0 .. self.label_stack.len - target - 1];
+        self.op_stack = self.op_stack[0..target_label.op_stack_start];
+
+        // Return target_label so the caller can get the continuation
+        return target_label;
+    }
+
     pub const ControlFrame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
         locals_start: usize = 0,
@@ -312,7 +362,7 @@ pub const Interpreter = struct {
     //
     // - code: the code we should interpret after `end`
     pub const Label = struct {
-        code: []const u8 = undefined,
+        continuation: []const u8 = undefined,
         op_stack_start: usize, // u32?
     };
 };
