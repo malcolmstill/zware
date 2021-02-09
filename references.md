@@ -27,3 +27,4 @@
 - http://www.software-lab.org/publications/Wasabi_arXiv_1808.10652.pdf
 - https://blog.scottlogic.com/2018/04/26/webassembly-by-hand.html
 - https://github.com/rhmoller/wasm-by-hand
+- https://core.ac.uk/download/pdf/333888641.pdf
