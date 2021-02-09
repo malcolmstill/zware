@@ -43,11 +43,6 @@ pub const Interpreter = struct {
     }
 
     pub fn interpretFunction(i: *Interpreter, code: []const u8) !void {
-        errdefer {
-            for (i.op_stack) |op, j| {
-                // std.debug.warn("stack[{}]: {}\n", .{ j, op });
-            }
-        }
         i.function_code = code;
         i.window = code;
         while (i.window.len > 0) {
@@ -96,7 +91,6 @@ pub const Interpreter = struct {
                 }
             },
             .End => {
-                std.debug.warn("END\n", .{});
                 const label = try i.peekNthLabel(0);
                 i.window = label.code;
             },
