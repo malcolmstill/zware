@@ -25,3 +25,5 @@
 - https://news.ycombinator.com/item?id=22024758
 - http://www.complang.tuwien.ac.at/forth/threaded-code.html
 - http://www.software-lab.org/publications/Wasabi_arXiv_1808.10652.pdf
+- https://blog.scottlogic.com/2018/04/26/webassembly-by-hand.html
+- https://github.com/rhmoller/wasm-by-hand
