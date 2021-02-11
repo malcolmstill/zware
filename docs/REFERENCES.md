@@ -29,3 +29,4 @@
 - https://github.com/rhmoller/wasm-by-hand
 - https://core.ac.uk/download/pdf/333888641.pdf
 - http://lua-users.org/lists/lua-l/2011-02/msg00742.html
+- https://hacks.mozilla.org/2017/07/webassembly-table-imports-what-are-they/
