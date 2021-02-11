@@ -11,6 +11,7 @@ const Limit = @import("common.zig").Limit;
 const LimitType = @import("common.zig").LimitType;
 const Mutability = @import("common.zig").Mutability;
 const Global = @import("common.zig").Global;
+const Element = @import("common.zig").Element;
 const Code = @import("common.zig").Code;
 const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
@@ -32,7 +33,7 @@ pub const Module = struct {
     globals: ArrayList(Global),
     exports: ArrayList(Export),
     start: u32,
-    // elements: Elements,
+    elements: ArrayList(Element),
     codes: ArrayList(Code),
     datas: ArrayList(Data),
 
@@ -51,7 +52,7 @@ pub const Module = struct {
             .globals = ArrayList(Global).init(alloc),
             .exports = ArrayList(Export).init(alloc),
             .start = undefined,
-            // .elements = Elements.init(alloc),
+            .elements = ArrayList(Element).init(alloc),
             .codes = ArrayList(Code).init(alloc),
             .datas = ArrayList(Data).init(alloc),
         };
@@ -92,6 +93,7 @@ pub const Module = struct {
             .Global => try self.parseGlobalSection(),
             .Export => try self.parseExportSection(),
             .Start => try self.parseStartSection(),
+            .Element => try self.parseElementSection(size),
             .Code => try self.parseCodeSection(),
             .Data => try self.parseDataSection(size),
         };
@@ -308,6 +310,16 @@ pub const Module = struct {
         return 1;
     }
 
+    fn parseElementSection(self: *Module, size: u32) !usize {
+        // , size: u32
+        const rd = self.buf.reader();
+        // const index = try leb.readULEB128(u32, rd);
+
+        // self.start = index;
+        try rd.skipBytes(size, .{});
+        return 1;
+    }
+
     fn parseCodeSection(self: *Module) !usize {
         const rd = self.buf.reader();
         var x = rd.context.pos;
@@ -402,7 +414,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    // callFunction:
+    // invoke:
     //  1. Lookup our function by name with getExport
     //  2. Get the function type signature
     //  3. Check that the incoming arguments in `args` match the function signature
@@ -412,13 +424,15 @@ pub const Module = struct {
     //  7. Push a control frame and our parameters
     //  8. Execute our function
     //  9. Pop our result and return it
-    pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
+    pub fn invoke(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
         // 1.
         const index = try self.getExport(.Func, name);
-        if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
+        if (index >= self.functions.items.len) return error.FuncIndexExceedsTypesLength;
+
+        const function_type_index = self.functions.items[index];
 
         // 2.
-        const func_type = self.types.items[index];
+        const func_type = self.types.items[function_type_index];
         const params = self.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
         const results = self.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
@@ -431,7 +445,7 @@ pub const Module = struct {
 
         // 4. check the result type
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
-        if (results.len == 1) {
+        if (Result != void and results.len == 1) {
             if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
         }
 
@@ -440,9 +454,9 @@ pub const Module = struct {
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var ctrl_stack_mem: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
         var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack_mem[0..], ctrl_stack_mem[0..], label_stack_mem[0..], self);
+        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
 
         // I think everything below here should probably live in interpret
 
@@ -460,7 +474,7 @@ pub const Module = struct {
         }
 
         // 7a. push control frame
-        try interp.pushControlFrame(Interpreter.ControlFrame{
+        try interp.pushFrame(Interpreter.Frame{
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,
@@ -479,6 +493,7 @@ pub const Module = struct {
         try interp.invoke(func.code);
 
         // 9.
+        if (Result == void) return;
         return try interp.popOperand(Result);
     }
 
@@ -524,7 +539,7 @@ const SectionType = enum(u8) {
     Global = 0x06,
     Export = 0x07,
     Start = 0x08,
-    // Element = 0x09,
+    Element = 0x09,
     Code = 0x0a,
     Data = 0x0b,
 };
@@ -541,7 +556,7 @@ test "module loading (simple add function)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
+    const result = try module.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
 }
 
@@ -555,13 +570,13 @@ test "module loading (fib)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.invoke("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try module.invoke("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try module.invoke("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try module.invoke("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try module.invoke("fib", .{@as(i32, 6)}, i32, .{}));
 }
 
 test "module loading (fact)" {
@@ -574,9 +589,9 @@ test "module loading (fact)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.callFunction("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try module.callFunction("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try module.callFunction("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try module.callFunction("fact", .{@as(i32, 12)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.invoke("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try module.invoke("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try module.invoke("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try module.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }

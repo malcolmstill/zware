@@ -28,3 +28,4 @@
 - https://blog.scottlogic.com/2018/04/26/webassembly-by-hand.html
 - https://github.com/rhmoller/wasm-by-hand
 - https://core.ac.uk/download/pdf/333888641.pdf
+- http://lua-users.org/lists/lua-l/2011-02/msg00742.html
