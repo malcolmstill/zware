@@ -27,7 +27,7 @@ pub const Interpreter = struct {
     ctrl_stack: []ControlFrame = undefined,
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
-    function_code: []const u8 = undefined,
+
     continuation: []const u8 = undefined,
     module: ?*Module = undefined,
 
@@ -44,7 +44,6 @@ pub const Interpreter = struct {
     }
 
     pub fn interpretFunction(self: *Interpreter, code: []const u8) !void {
-        self.function_code = code;
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
