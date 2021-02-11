@@ -115,6 +115,12 @@ pub const Interpreter = struct {
                     .continuation = continuation,
                 });
             },
+            .Else => {
+                // If we hit else, it's because we've hit the end of if
+                // Therefore we want to skip to end of current label
+                const label = try self.popLabel();
+                self.continuation = label.continuation;
+            },
             .End => {
                 // https://webassembly.github.io/spec/core/exec/instructions.html#exiting-xref-syntax-instructions-syntax-instr-mathit-instr-ast-with-label-l
                 const label = try self.popLabel();
