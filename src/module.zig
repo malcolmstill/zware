@@ -427,10 +427,12 @@ pub const Module = struct {
     pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
         // 1.
         const index = try self.getExport(.Func, name);
-        if (index >= self.types.items.len) return error.FuncIndexExceedsTypesLength;
+        if (index >= self.functions.items.len) return error.FuncIndexExceedsTypesLength;
+
+        const function_type_index = self.functions.items[index];
 
         // 2.
-        const func_type = self.types.items[index];
+        const func_type = self.types.items[function_type_index];
         const params = self.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
         const results = self.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
@@ -536,7 +538,7 @@ const SectionType = enum(u8) {
     Global = 0x06,
     Export = 0x07,
     Start = 0x08,
-    // Element = 0x09,
+    Element = 0x09,
     Code = 0x0a,
     Data = 0x0b,
 };
