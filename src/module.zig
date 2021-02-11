@@ -11,6 +11,7 @@ const Limit = @import("common.zig").Limit;
 const LimitType = @import("common.zig").LimitType;
 const Mutability = @import("common.zig").Mutability;
 const Global = @import("common.zig").Global;
+const Element = @import("common.zig").Element;
 const Code = @import("common.zig").Code;
 const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
@@ -32,7 +33,7 @@ pub const Module = struct {
     globals: ArrayList(Global),
     exports: ArrayList(Export),
     start: u32,
-    // elements: Elements,
+    elements: ArrayList(Element),
     codes: ArrayList(Code),
     datas: ArrayList(Data),
 
@@ -51,7 +52,7 @@ pub const Module = struct {
             .globals = ArrayList(Global).init(alloc),
             .exports = ArrayList(Export).init(alloc),
             .start = undefined,
-            // .elements = Elements.init(alloc),
+            .elements = ArrayList(Element).init(alloc),
             .codes = ArrayList(Code).init(alloc),
             .datas = ArrayList(Data).init(alloc),
         };
@@ -92,6 +93,7 @@ pub const Module = struct {
             .Global => try self.parseGlobalSection(),
             .Export => try self.parseExportSection(),
             .Start => try self.parseStartSection(),
+            .Element => try self.parseElementSection(size),
             .Code => try self.parseCodeSection(),
             .Data => try self.parseDataSection(size),
         };
@@ -305,6 +307,16 @@ pub const Module = struct {
 
         self.start = index;
 
+        return 1;
+    }
+
+    fn parseElementSection(self: *Module, size: u32) !usize {
+        // , size: u32
+        const rd = self.buf.reader();
+        // const index = try leb.readULEB128(u32, rd);
+
+        // self.start = index;
+        try rd.skipBytes(size, .{});
         return 1;
     }
 
