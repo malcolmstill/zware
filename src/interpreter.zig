@@ -65,9 +65,17 @@ pub const Interpreter = struct {
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
-            // .Block => {
-            //     const meta = try instruction.findEnd(i.window);
-            // },
+            .Block => {
+                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
+                const end = try instruction.findEnd(code);
+                const continuation = code[end.offset..];
+
+                try self.pushLabel(Label{
+                    .return_arity = if (block_type == 0x40) 0 else 1,
+                    .op_stack_len = self.op_stack.len,
+                    .continuation = continuation,
+                });
+            },
             .Loop => {
                 const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
 
