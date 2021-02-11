@@ -445,7 +445,7 @@ pub const Module = struct {
 
         // 4. check the result type
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
-        if (results.len == 1) {
+        if (Result != void and results.len == 1) {
             if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
         }
 
@@ -493,6 +493,7 @@ pub const Module = struct {
         try interp.invoke(func.code);
 
         // 9.
+        if (Result == void) return;
         return try interp.popOperand(Result);
     }
 
