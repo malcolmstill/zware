@@ -115,6 +115,13 @@ pub const Interpreter = struct {
             .End => {
                 // https://webassembly.github.io/spec/core/exec/instructions.html#exiting-xref-syntax-instructions-syntax-instr-mathit-instr-ast-with-label-l
                 const label = try self.popLabel();
+
+                // It seems like we need to special case end for a function call. This
+                // doesn't seem quite right because the spec doesn't mention it. On
+                // call we push a label containing a continuation which is the code to
+                // resume after the call has returned. We want to use that if we've run
+                // out of code in the current function, i.e. self.continuation is empty
+                if (self.continuation.len == 0) self.continuation = label.continuation;
             },
             .BrIf => {
                 const target = try instruction.readULEB128Mem(u32, &self.continuation);
