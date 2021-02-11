@@ -261,9 +261,8 @@ pub const Interpreter = struct {
     }
 
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
-        // TODO: if we've validated the wasm, do we need to perform this check:
         if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
-        // Increase stack height by 1
+
         self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
 
         self.op_stack[self.op_stack.len - 1] = switch (T) {
@@ -277,6 +276,7 @@ pub const Interpreter = struct {
     }
 
     pub fn popOperand(self: *Interpreter, comptime T: type) !T {
+        // TODO: if we've validated the wasm, do we need to perform this check:
         if (self.op_stack.len == 0) return error.OperandStackUnderflow;
         defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
 
