@@ -162,7 +162,8 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.module orelse return error.NoModule;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
-                const func_type = module.types.items[function_index];
+                const func_type_index = module.functions.items[function_index];
+                const func_type = module.types.items[func_type_index];
                 const func = module.codes.items[function_index];
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
