@@ -192,10 +192,10 @@ pub const Interpreter = struct {
                 try self.pushOperand(i32, x);
             },
             .I32LtS => {
-                const a = try self.popOperand(i32);
-                const b = try self.popOperand(i32);
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
                 // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
-                try self.pushOperand(i32, @as(i32, if (b < a) 1 else 0));
+                try self.pushOperand(i32, @as(i32, if (c1 < c2) 1 else 0));
             },
             .I32GeS => {
                 const c2 = try self.popOperand(i32);
@@ -205,36 +205,36 @@ pub const Interpreter = struct {
             },
             .I32Add => {
                 // TODO: does wasm wrap?
-                const a = try self.popOperand(i32);
-                const b = try self.popOperand(i32);
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
                 // std.debug.warn("a + b = {} + {} = {}\n", .{ a, b, a + b });
-                try self.pushOperand(i32, a + b);
+                try self.pushOperand(i32, c1 + c2);
             },
             .I32Sub => {
-                const a = try self.popOperand(i32);
-                const b = try self.popOperand(i32);
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
                 // std.debug.warn("b - a = {} - {} = {}\n", .{ b, a, b - a });
-                try self.pushOperand(i32, b - a);
+                try self.pushOperand(i32, c1 - c2);
             },
             .I32Mul => {
-                const a = try self.popOperand(i32);
-                const b = try self.popOperand(i32);
-                try self.pushOperand(i32, a * b);
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, c1 * c2);
             },
             .I64Add => {
-                const a = try self.popOperand(i64);
-                const b = try self.popOperand(i64);
-                try self.pushOperand(i64, a + b);
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, c1 + c2);
             },
             .F32Add => {
-                const a = try self.popOperand(f32);
-                const b = try self.popOperand(f32);
-                try self.pushOperand(f32, a + b);
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, c1 + c2);
             },
             .F64Add => {
-                const a = try self.popOperand(f64);
-                const b = try self.popOperand(f64);
-                try self.pushOperand(f64, a + b);
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, c1 + c2);
             },
             else => {
                 std.debug.warn("unimplemented instruction: {}\n", .{opcode});
