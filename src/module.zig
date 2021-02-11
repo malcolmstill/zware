@@ -467,7 +467,7 @@ pub const Module = struct {
         }, func.locals_count + params.len);
 
         // 7a.2. push label for our implicit function block. We know we don't have
-        // any code to execute after calling interpretFunction, but we will need to
+        // any code to execute after calling invoke, but we will need to
         // pop a Label
         try interp.pushLabel(Interpreter.Label{
             .return_arity = results.len,
@@ -476,7 +476,7 @@ pub const Module = struct {
         });
 
         // 8. Execute our function
-        try interp.interpretFunction(func.code);
+        try interp.invoke(func.code);
 
         // 9.
         return try interp.popOperand(Result);
