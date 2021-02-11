@@ -54,14 +54,17 @@ pub const Interpreter = struct {
     }
 
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        // defer {
-        //     std.debug.warn("stack after: {}\n", .{opcode});
-        //     var i: usize = 0;
-        //     while (i < self.op_stack.len) : (i += 1) {
-        //         std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        //     }
-        //     std.debug.warn("\n", .{});
-        // }
+        if (std.builtin.mode == .Debug) {
+            errdefer {
+                std.debug.warn("stack after: {}\n", .{opcode});
+                var i: usize = 0;
+                while (i < self.op_stack.len) : (i += 1) {
+                    std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+                }
+                std.debug.warn("\n", .{});
+            }
+        }
+
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
