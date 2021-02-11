@@ -1,3 +1,164 @@
+const std = @import("std");
+const leb = std.debug.leb;
+
+pub const InstructionIterator = struct {
+    function: []const u8,
+    code: []const u8,
+
+    pub fn init(function: []const u8) InstructionIterator {
+        return InstructionIterator{
+            .code = function,
+            .function = function,
+        };
+    }
+
+    pub fn next(self: *InstructionIterator) !?InstructionMeta {
+        if (self.code.len == 0) return null;
+
+        // 1. Get the instruction we're going to return and increment code
+        const instr = @intToEnum(Instruction, self.code[0]);
+        const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
+        self.code = self.code[1..];
+
+        // 2. Find the start of the next instruction
+        // TODO: complete this for all opcodes
+        switch (instr) {
+            .I32Const,
+            .I64Const,
+            .LocalGet,
+            .LocalSet,
+            .If,
+            .Call,
+            .BrIf,
+            => _ = try readULEB128Mem(u32, &self.code),
+            .F32Const, .F64Const => self.code = self.code[4..],
+            else => {},
+        }
+
+        return InstructionMeta{
+            .instruction = instr,
+            .offset = offset,
+        };
+    }
+};
+
+// findEnd
+//
+// Finds the end instruction corresponding to the instruction at index 0
+// of `code`. The offset is relative to `code[0]` (not the start of the function)
+//
+// Errors:
+// - CouldntFindEnd if we run out of elements in `code`
+// - NotBranchTarget if the instruction at `code[0]` isn't branch target
+pub fn findEnd(code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
+        if (i == 0) return meta;
+        if (meta.offset == 0) {
+            switch (meta.instruction) {
+                .Block, .Loop, .If => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (meta.instruction) {
+            .Block, .Loop, .If => i += 1,
+            .End => i -= 1,
+            else => {},
+        }
+    }
+    return error.CouldntFindEnd;
+}
+
+// findElse
+//
+// Similar to findEnd but finds the match else branch, if
+// one exists
+pub fn findElse(code: []const u8) !?InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
+        if (i == 0) return meta;
+        if (meta.offset == 0) {
+            switch (meta.instruction) {
+                .If => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (meta.instruction) {
+            .If => i += 1,
+            .Else => i -= 1,
+            else => {},
+        }
+    }
+    return null;
+}
+
+const InstructionMeta = struct {
+    instruction: Instruction,
+    offset: usize, // offset from start of function
+};
+
+const testing = std.testing;
+
+test "instruction iterator" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    const Module = @import("module.zig").Module;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/fib.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
+
+    const func = module.codes.items[0];
+
+    var it = InstructionIterator.init(func.code);
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+
+    const if_end_meta = try findEnd(func.code[5..]);
+    testing.expectEqual(if_end_meta.offset, 6);
+
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
+    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
+
+    testing.expectEqual(try it.next(), null);
+}
+
+pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const value = try leb.readULEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
+pub fn readILEB128Mem(comptime T: type, ptr: *[]const u8) !T {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const value = try leb.readILEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
 pub const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,

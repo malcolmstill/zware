@@ -438,17 +438,15 @@ pub const Module = struct {
         // 5. get the function bytecode
         const func = self.codes.items[index];
 
+        // 6. set up our stacks
+        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var ctrl_stack_mem: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
+        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var interp = Interpreter.init(op_stack_mem[0..], ctrl_stack_mem[0..], label_stack_mem[0..], self);
+
         // I think everything below here should probably live in interpret
 
-        // 6. set up our stacks
-        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var ctrl_stack: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack[0..], ctrl_stack[0..]);
-
-        // 7a. push control frame
-        try interp.pushControlFrame(Interpreter.ControlFrame{
-            .return_arity = results.len,
-        }, func.locals_count + params.len);
+        const locals_start = interp.op_stack.len;
 
         // 7b. push params
         inline for (args) |arg, i| {
@@ -457,9 +455,25 @@ pub const Module = struct {
 
         // 7c. push (i.e. make space for) locals
         var i: usize = 0;
-        while (i < func.locals_count) {
+        while (i < func.locals_count) : (i += 1) {
             try interp.pushOperand(u64, 0);
         }
+
+        // 7a. push control frame
+        try interp.pushControlFrame(Interpreter.ControlFrame{
+            .op_stack_len = locals_start,
+            .label_stack_len = interp.label_stack.len,
+            .return_arity = results.len,
+        }, func.locals_count + params.len);
+
+        // 7a.2. push label for our implicit function block. We know we don't have
+        // any code to execute after calling interpretFunction, but we will need to
+        // pop a Label
+        try interp.pushLabel(Interpreter.Label{
+            .return_arity = results.len,
+            .op_stack_len = locals_start,
+            .continuation = func.code[0..0],
+        });
 
         // 8. Execute our function
         try interp.interpretFunction(func.code);
@@ -486,42 +500,8 @@ pub const Module = struct {
 const InterpreterOptions = struct {
     operand_stack_size: comptime_int = 64 * 1024,
     control_stack_size: comptime_int = 64 * 1024,
+    label_stack_size: comptime_int = 64 * 1024,
 };
-
-// TODO: this is cool, but I'm not sure we can use this because what I want to do
-//       is generate a function, but comptime won't let me do that
-fn WasmFunctionType(args: anytype, result: anytype) type {
-    var fn_args: [65536]std.builtin.TypeInfo.FnArg = undefined;
-    if (@typeInfo(@TypeOf(args)) != .Struct) {
-        @compileError("Expected tuple or struct argument, found " ++ @typeName(@TypeOf(args)));
-    }
-
-    if (!(result == i32 or result == i64 or result == f32 or result == f64)) {
-        @compileError("Return type must be in ValueType, found " ++ @typeName(result));
-    }
-
-    for (args) |arg, i| {
-        if (!(arg == i32 or arg == i64 or arg == f32 or arg == f64)) {
-            @compileError("Arg type must be in ValueType, found " ++ @typeName(arg));
-        }
-        fn_args[i] = std.builtin.TypeInfo.FnArg{
-            .is_generic = false,
-            .is_noalias = false,
-            .arg_type = arg,
-        };
-    }
-
-    return @Type(std.builtin.TypeInfo{
-        .Fn = std.builtin.TypeInfo.Fn{
-            .calling_convention = .Unspecified,
-            .alignment = 0,
-            .is_generic = false,
-            .is_var_args = false,
-            .return_type = result,
-            .args = fn_args[0..args.len],
-        },
-    });
-}
 
 const Section = struct {
     id: SectionType,
@@ -551,7 +531,7 @@ const SectionType = enum(u8) {
 
 const testing = std.testing;
 
-test "module loading" {
+test "module loading (simple add function)" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -563,4 +543,40 @@ test "module loading" {
 
     const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
+}
+
+test "module loading (fib)" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/fib.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
+
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
+}
+
+test "module loading (fact)" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/fact.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
+
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.callFunction("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try module.callFunction("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try module.callFunction("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try module.callFunction("fact", .{@as(i32, 12)}, i32, .{}));
 }
