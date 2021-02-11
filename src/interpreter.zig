@@ -153,14 +153,14 @@ pub const Interpreter = struct {
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
                 // Consume parameters from the stack
-                try self.pushFrame(Interpreter.Frame{
+                try self.pushFrame(Frame{
                     .op_stack_len = self.op_stack.len - params.len,
                     .label_stack_len = self.label_stack.len,
                     .return_arity = results.len,
                 }, func.locals_count + params.len);
 
                 // Our continuation is the code after call
-                try self.pushLabel(Interpreter.Label{
+                try self.pushLabel(Label{
                     .return_arity = results.len,
                     .op_stack_len = self.op_stack.len - params.len,
                     .continuation = self.continuation,
