@@ -23,20 +23,20 @@ const instruction = @import("instruction.zig");
 pub const Interpreter = struct {
     op_stack: []u64 = undefined,
     op_stack_mem: []u64 = undefined,
-    ctrl_stack_mem: []ControlFrame = undefined,
-    ctrl_stack: []ControlFrame = undefined,
+    frame_stack_mem: []ControlFrame = undefined,
+    frame_stack: []ControlFrame = undefined,
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
 
     continuation: []const u8 = undefined,
     module: ?*Module = undefined,
 
-    pub fn init(op_stack_mem: []u64, ctrl_stack_mem: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
+    pub fn init(op_stack_mem: []u64, frame_stack_mem: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
             .op_stack = op_stack_mem[0..0],
-            .ctrl_stack_mem = ctrl_stack_mem,
-            .ctrl_stack = ctrl_stack_mem[0..0],
+            .frame_stack_mem = frame_stack_mem,
+            .frame_stack = frame_stack_mem[0..0],
             .label_stack_mem = label_stack_mem,
             .label_stack = label_stack_mem[0..0],
             .module = module,
@@ -305,20 +305,20 @@ pub const Interpreter = struct {
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
     pub fn pushControlFrame(self: *Interpreter, frame: ControlFrame, params_and_locals_count: usize) !void {
-        if (self.ctrl_stack.len == self.ctrl_stack_mem.len) return error.ControlStackOverflow;
-        self.ctrl_stack = self.ctrl_stack_mem[0 .. self.ctrl_stack.len + 1];
+        if (self.frame_stack.len == self.frame_stack_mem.len) return error.ControlStackOverflow;
+        self.frame_stack = self.frame_stack_mem[0 .. self.frame_stack.len + 1];
 
-        const current_frame = &self.ctrl_stack[self.ctrl_stack.len - 1];
+        const current_frame = &self.frame_stack[self.frame_stack.len - 1];
         current_frame.* = frame;
         // TODO: index out of bounds (error if we've run out of operand stack space):
         current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
     pub fn popControlFrame(self: *Interpreter) !ControlFrame {
-        if (self.ctrl_stack.len == 0) return error.ControlStackUnderflow;
-        defer self.ctrl_stack = self.ctrl_stack[0 .. self.ctrl_stack.len - 1];
+        if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
+        defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
 
-        return self.ctrl_stack[self.ctrl_stack.len - 1];
+        return self.frame_stack[self.frame_stack.len - 1];
     }
 
     // peekNthControlFrame
@@ -326,8 +326,8 @@ pub const Interpreter = struct {
     // Returns nth label on the Label stack relative to the top of the stack
     //
     fn peekNthControlFrame(self: *Interpreter, index: u32) !*ControlFrame {
-        if (index + 1 > self.ctrl_stack.len) return error.ControlStackUnderflow;
-        return &self.ctrl_stack[self.ctrl_stack.len - index - 1];
+        if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
+        return &self.frame_stack[self.frame_stack.len - index - 1];
     }
 
     pub fn pushLabel(self: *Interpreter, label: Label) !void {
@@ -390,10 +390,10 @@ const testing = std.testing;
 
 test "operand push / pop test" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack_mem: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
+    var frame_stack_mem: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var i = Interpreter.init(op_stack[0..], ctrl_stack_mem[0..], label_stack_mem[0..], null);
+    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], null);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
@@ -426,9 +426,9 @@ test "operand push / pop test" {
 
 test "simple interpret tests" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var ctrl_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
+    var frame_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
-    var i = Interpreter.init(op_stack[0..], ctrl_stack[0..], label_stack_mem[0..], null);
+    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], null);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
