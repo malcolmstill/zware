@@ -440,7 +440,7 @@ pub const Module = struct {
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** options.control_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
         var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
         var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
 
@@ -460,7 +460,7 @@ pub const Module = struct {
         }
 
         // 7a. push control frame
-        try interp.pushControlFrame(Interpreter.ControlFrame{
+        try interp.pushFrame(Interpreter.Frame{
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,

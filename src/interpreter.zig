@@ -23,15 +23,15 @@ const instruction = @import("instruction.zig");
 pub const Interpreter = struct {
     op_stack: []u64 = undefined,
     op_stack_mem: []u64 = undefined,
-    frame_stack_mem: []ControlFrame = undefined,
-    frame_stack: []ControlFrame = undefined,
+    frame_stack_mem: []Frame = undefined,
+    frame_stack: []Frame = undefined,
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
 
     continuation: []const u8 = undefined,
     module: ?*Module = undefined,
 
-    pub fn init(op_stack_mem: []u64, frame_stack_mem: []ControlFrame, label_stack_mem: []Label, module: ?*Module) Interpreter {
+    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, module: ?*Module) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
             .op_stack = op_stack_mem[0..0],
@@ -117,7 +117,7 @@ pub const Interpreter = struct {
                 try self.branch(target);
             },
             .Return => {
-                const frame = try self.peekNthControlFrame(0);
+                const frame = try self.peekNthFrame(0);
                 const n = frame.return_arity;
 
                 if (std.builtin.mode == .Debug) {
@@ -128,7 +128,7 @@ pub const Interpreter = struct {
                 self.continuation = label.continuation;
 
                 // The mem copy is equivalent of popping n operands, doing everything
-                // up to and including popControlFrame and then repushing the n operands
+                // up to and including popFrame and then repushing the n operands
                 var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
                 const src = self.op_stack[self.op_stack.len - n ..];
                 mem.copy(u64, dst, src);
@@ -136,7 +136,7 @@ pub const Interpreter = struct {
                 self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
                 self.label_stack = self.label_stack[0..frame.label_stack_len];
 
-                _ = try self.popControlFrame();
+                _ = try self.popFrame();
             },
             .Call => {
                 // The spec says:
@@ -153,7 +153,7 @@ pub const Interpreter = struct {
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
                 // Consume parameters from the stack
-                try self.pushControlFrame(Interpreter.ControlFrame{
+                try self.pushFrame(Interpreter.Frame{
                     .op_stack_len = self.op_stack.len - params.len,
                     .label_stack_len = self.label_stack.len,
                     .return_arity = results.len,
@@ -176,14 +176,14 @@ pub const Interpreter = struct {
             },
             .Drop => _ = try self.popAnyOperand(),
             .LocalGet => {
-                const frame = try self.peekNthControlFrame(0);
+                const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const local_value: u64 = frame.locals[local_index];
                 try self.pushOperand(u64, local_value);
             },
             .LocalSet => {
                 const value = try self.popAnyOperand();
-                const frame = try self.peekNthControlFrame(0);
+                const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 frame.locals[local_index] = value;
             },
@@ -304,7 +304,7 @@ pub const Interpreter = struct {
     // TODO: if the code is validated, do we need to know the params count
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
-    pub fn pushControlFrame(self: *Interpreter, frame: ControlFrame, params_and_locals_count: usize) !void {
+    pub fn pushFrame(self: *Interpreter, frame: Frame, params_and_locals_count: usize) !void {
         if (self.frame_stack.len == self.frame_stack_mem.len) return error.ControlStackOverflow;
         self.frame_stack = self.frame_stack_mem[0 .. self.frame_stack.len + 1];
 
@@ -314,18 +314,18 @@ pub const Interpreter = struct {
         current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
-    pub fn popControlFrame(self: *Interpreter) !ControlFrame {
+    pub fn popFrame(self: *Interpreter) !Frame {
         if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
         defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
 
         return self.frame_stack[self.frame_stack.len - 1];
     }
 
-    // peekNthControlFrame
+    // peekNthFrame
     //
     // Returns nth label on the Label stack relative to the top of the stack
     //
-    fn peekNthControlFrame(self: *Interpreter, index: u32) !*ControlFrame {
+    fn peekNthFrame(self: *Interpreter, index: u32) !*Frame {
         if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
         return &self.frame_stack[self.frame_stack.len - index - 1];
     }
@@ -369,7 +369,7 @@ pub const Interpreter = struct {
         return target_label;
     }
 
-    pub const ControlFrame = struct {
+    pub const Frame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
         return_arity: usize = 0,
         op_stack_len: usize,
@@ -390,7 +390,7 @@ const testing = std.testing;
 
 test "operand push / pop test" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack_mem: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
+    var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
     var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], null);
@@ -426,7 +426,7 @@ test "operand push / pop test" {
 
 test "simple interpret tests" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack: [1024]Interpreter.ControlFrame = [_]Interpreter.ControlFrame{undefined} ** 1024;
+    var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
     var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], null);
 
