@@ -461,7 +461,8 @@ pub const Module = struct {
 
         // 7a. push control frame
         try interp.pushControlFrame(Interpreter.ControlFrame{
-            .locals_start = locals_start,
+            .op_stack_len = locals_start,
+            .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,
         }, func.locals_count + params.len);
 
@@ -469,7 +470,8 @@ pub const Module = struct {
         // any code to execute after calling interpretFunction, but we will need to
         // pop a Label
         try interp.pushLabel(Interpreter.Label{
-            .op_stack_start = locals_start,
+            .return_arity = results.len,
+            .op_stack_len = locals_start,
             .continuation = func.code[0..0],
         });
 
@@ -543,38 +545,38 @@ test "module loading (simple add function)" {
     testing.expectEqual(@as(i32, 45), result);
 }
 
-// test "module loading (fib)" {
-//     const ArenaAllocator = std.heap.ArenaAllocator;
-//     var arena = ArenaAllocator.init(testing.allocator);
-//     defer _ = arena.deinit();
+test "module loading (fib)" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
 
-//     const bytes = @embedFile("../test/fib.wasm");
+    const bytes = @embedFile("../test/fib.wasm");
 
-//     var module = Module.init(&arena.allocator, bytes);
-//     try module.parse();
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
 
-//     testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
-// }
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
+}
 
-// test "module loading (fact)" {
-//     const ArenaAllocator = std.heap.ArenaAllocator;
-//     var arena = ArenaAllocator.init(testing.allocator);
-//     defer _ = arena.deinit();
+test "module loading (fact)" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
 
-//     const bytes = @embedFile("../test/fact.wasm");
+    const bytes = @embedFile("../test/fact.wasm");
 
-//     var module = Module.init(&arena.allocator, bytes);
-//     try module.parse();
+    var module = Module.init(&arena.allocator, bytes);
+    try module.parse();
 
-//     testing.expectEqual(@as(i32, 1), try module.callFunction("fact", .{@as(i32, 1)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try module.callFunction("fact", .{@as(i32, 2)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 6), try module.callFunction("fact", .{@as(i32, 3)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 24), try module.callFunction("fact", .{@as(i32, 4)}, i32, .{}));
-//     testing.expectEqual(@as(i32, 479001600), try module.callFunction("fact", .{@as(i32, 12)}, i32, .{}));
-// }
+    testing.expectEqual(@as(i32, 1), try module.callFunction("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.callFunction("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try module.callFunction("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try module.callFunction("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try module.callFunction("fact", .{@as(i32, 12)}, i32, .{}));
+}

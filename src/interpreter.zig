@@ -55,15 +55,14 @@ pub const Interpreter = struct {
     }
 
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        defer {
-            std.debug.warn("stack after: {}\n", .{opcode});
-            var i: usize = 0;
-            while (i < self.op_stack.len) : (i += 1) {
-                std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-            }
-            std.debug.warn("\n", .{});
-        }
-
+        // defer {
+        //     std.debug.warn("stack after: {}\n", .{opcode});
+        //     var i: usize = 0;
+        //     while (i < self.op_stack.len) : (i += 1) {
+        //         std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+        //     }
+        //     std.debug.warn("\n", .{});
+        // }
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
@@ -71,19 +70,20 @@ pub const Interpreter = struct {
             //     const meta = try instruction.findEnd(i.window);
             // },
             .Loop => {
-                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
 
-                // For loop control flow, the continuation for the label
-                // we push is the start of the loop
+                // For loop control flow, the continuation is the loop body (including
+                // the initiating loop instruction, as branch consumes the existing label)
                 const continuation = code[0..];
                 try self.pushLabel(Label{
-                    .op_stack_start = self.op_stack.len,
+                    .return_arity = if (block_type == 0x40) 0 else 1,
+                    .op_stack_len = self.op_stack.len,
                     .continuation = continuation,
                 });
             },
             .If => {
                 // TODO: perform findEnd during parsing
-                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
                 const end = try instruction.findEnd(code);
                 const else_branch = try instruction.findElse(code);
 
@@ -97,56 +97,53 @@ pub const Interpreter = struct {
                     self.continuation = continuation;
                     // unless we have an else branch
                     if (else_branch) |eb| self.continuation = code[eb.offset..];
-                } else {
-                    try self.pushLabel(Label{
-                        .op_stack_start = self.op_stack.len,
-                        .continuation = continuation,
-                    });
                 }
+
+                try self.pushLabel(Label{
+                    .return_arity = if (block_type == 0x40) 0 else 1,
+                    .op_stack_len = self.op_stack.len,
+                    .continuation = continuation,
+                });
             },
             .End => {
-                const label = try self.popLabels(0);
+                // https://webassembly.github.io/spec/core/exec/instructions.html#exiting-xref-syntax-instructions-syntax-instr-mathit-instr-ast-with-label-l
+                const label = try self.popLabel();
             },
             .BrIf => {
-                const relative_label = try instruction.readULEB128Mem(u32, &self.continuation);
+                const target = try instruction.readULEB128Mem(u32, &self.continuation);
+
                 const condition = try self.popOperand(i32);
-                if (condition != 0) {
-                    // Our condition is true, we want to jump back up to loop
-                    // 1. Pop the existing label including the stack variables push
-                    //    after the label
-                    const label = try self.popLabels(relative_label);
-                    self.continuation = label.continuation;
-                }
+                if (condition == 0) return;
+
+                try self.branch(target);
             },
             .Return => {
-                // Pop labels and control frame
-                // Pop all labels that have their stack position after control
-                // frames stack position
                 const frame = try self.peekNthControlFrame(0);
-                var l: usize = self.label_stack.len;
-                while (l > 0) : (l -= 1) {
-                    const label = self.label_stack[l - 1];
-                    if (label.op_stack_start >= frame.locals_start) {
-                        _ = try self.popLabel();
+                const n = frame.return_arity;
 
-                        if (label.op_stack_start == frame.locals_start) {
-                            self.continuation = label.continuation;
-                        }
-                    }
+                if (std.builtin.mode == .Debug) {
+                    if (self.op_stack.len < n) return error.OperandStackUnderflow;
                 }
 
-                if (frame.return_arity == 1) {
-                    const value = try self.popAnyOperand();
-                    self.op_stack = self.op_stack[0..frame.locals_start];
+                const label = self.label_stack[frame.label_stack_len];
+                self.continuation = label.continuation;
 
-                    _ = try self.popControlFrame();
-                    try self.pushOperand(u64, value);
-                } else {
-                    self.op_stack = self.op_stack[0..frame.locals_start];
-                    _ = try self.popControlFrame();
-                }
+                // The mem copy is equivalent of popping n operands, doing everything
+                // up to and including popControlFrame and then repushing the n operands
+                var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+                const src = self.op_stack[self.op_stack.len - n ..];
+                mem.copy(u64, dst, src);
+
+                self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+                self.label_stack = self.label_stack[0..frame.label_stack_len];
+
+                _ = try self.popControlFrame();
             },
             .Call => {
+                // The spec says:
+                //      The call instruction invokes another function, consuming the necessary
+                //      arguments from the stack and returning the result values of the call.
+
                 // TODO: we need to verify that we're okay to lookup this function.
                 //       we can (and probably should) do that at validation time.
                 const module = self.module orelse return error.NoModule;
@@ -156,15 +153,17 @@ pub const Interpreter = struct {
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
-                // We assume params are already on stack
+                // Consume parameters from the stack
                 try self.pushControlFrame(Interpreter.ControlFrame{
-                    .locals_start = self.op_stack.len - params.len,
+                    .op_stack_len = self.op_stack.len - params.len,
+                    .label_stack_len = self.label_stack.len,
                     .return_arity = results.len,
                 }, func.locals_count + params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Interpreter.Label{
-                    .op_stack_start = self.op_stack.len - params.len,
+                    .return_arity = results.len,
+                    .op_stack_len = self.op_stack.len - params.len,
                     .continuation = self.continuation,
                 });
 
@@ -200,10 +199,10 @@ pub const Interpreter = struct {
                 try self.pushOperand(i32, @as(i32, if (b < a) 1 else 0));
             },
             .I32GeS => {
-                const a = try self.popOperand(i32);
-                const b = try self.popOperand(i32);
-                // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
-                try self.pushOperand(i32, @as(i32, if (b >= a) 1 else 0));
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                // std.debug.warn("c1 >= c2 = {} >= {} = {}\n", .{ c1, c2, c1 >= c2 });
+                try self.pushOperand(i32, @as(i32, if (c1 >= c2) 1 else 0));
             },
             .I32Add => {
                 // TODO: does wasm wrap?
@@ -245,6 +244,22 @@ pub const Interpreter = struct {
         }
     }
 
+    // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
+    pub fn branch(self: *Interpreter, target: u32) !void {
+        const label = try self.peekNthLabel(target);
+        const n = label.return_arity;
+
+        var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+        const src = self.op_stack[self.op_stack.len - n ..];
+
+        mem.copy(u64, dest, src);
+
+        self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+        _ = try self.popLabels(target);
+
+        self.continuation = label.continuation;
+    }
+
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
         // TODO: if we've validated the wasm, do we need to perform this check:
         if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
@@ -282,6 +297,11 @@ pub const Interpreter = struct {
         return self.op_stack[self.op_stack.len - 1];
     }
 
+    fn peekNthOperand(self: *Interpreter, index: u32) !u64 {
+        if (index + 1 > self.op_stack.len) return error.OperandStackUnderflow;
+        return self.op_stack[self.op_stack.len - index - 1];
+    }
+
     // TODO: if the code is validated, do we need to know the params count
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
@@ -292,7 +312,7 @@ pub const Interpreter = struct {
         const current_frame = &self.ctrl_stack[self.ctrl_stack.len - 1];
         current_frame.* = frame;
         // TODO: index out of bounds (error if we've run out of operand stack space):
-        current_frame.locals = self.op_stack[frame.locals_start .. frame.locals_start + params_and_locals_count];
+        current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
     pub fn popControlFrame(self: *Interpreter) !ControlFrame {
@@ -338,15 +358,13 @@ pub const Interpreter = struct {
     //
     // target: branch target (relative to current scope which is 0)
     //
-    // popLabels pops labels up to and including `target`. Also pops
-    // operands pushed after the label was originally pushed
+    // popLabels pops labels up to and including `target`. Returns the
+    // the label at `target`.
     pub fn popLabels(self: *Interpreter, target: u32) !Label {
         if (target >= self.label_stack.len) return error.LabelStackUnderflow;
         const target_label = self.label_stack[self.label_stack.len - target - 1];
 
-        // Pop labels, pop operands
         self.label_stack = self.label_stack[0 .. self.label_stack.len - target - 1];
-        self.op_stack = self.op_stack[0..target_label.op_stack_start];
 
         // Return target_label so the caller can get the continuation
         return target_label;
@@ -354,16 +372,18 @@ pub const Interpreter = struct {
 
     pub const ControlFrame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
-        locals_start: usize = 0,
         return_arity: usize = 0,
+        op_stack_len: usize,
+        label_stack_len: usize,
     };
 
     // Label
     //
     // - code: the code we should interpret after `end`
     pub const Label = struct {
+        return_arity: usize = 0,
         continuation: []const u8 = undefined,
-        op_stack_start: usize, // u32?
+        op_stack_len: usize, // u32?
     };
 };
 
