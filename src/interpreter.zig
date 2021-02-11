@@ -43,7 +43,7 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn interpretFunction(self: *Interpreter, code: []const u8) !void {
+    pub fn invoke(self: *Interpreter, code: []const u8) !void {
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
