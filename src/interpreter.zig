@@ -200,6 +200,18 @@ pub const Interpreter = struct {
                 self.continuation = func.code;
             },
             .Drop => _ = try self.popAnyOperand(),
+            .Select => {
+                const condition = try self.popOperand(i32);
+
+                const c2 = try self.popAnyOperand();
+                const c1 = try self.popAnyOperand();
+
+                if (condition != 0) {
+                    try self.pushAnyOperand(c1);
+                } else {
+                    try self.pushAnyOperand(c2);
+                }
+            },
             .LocalGet => {
                 const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -316,6 +328,14 @@ pub const Interpreter = struct {
             f64 => @bitCast(f64, value),
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
+    }
+
+    pub fn pushAnyOperand(self: *Interpreter, value: u64) !void {
+        if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
+
+        self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
+
+        self.op_stack[self.op_stack.len - 1] = value;
     }
 
     pub fn popAnyOperand(self: *Interpreter) !u64 {
