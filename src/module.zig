@@ -414,7 +414,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    // callFunction:
+    // invoke:
     //  1. Lookup our function by name with getExport
     //  2. Get the function type signature
     //  3. Check that the incoming arguments in `args` match the function signature
@@ -424,7 +424,7 @@ pub const Module = struct {
     //  7. Push a control frame and our parameters
     //  8. Execute our function
     //  9. Pop our result and return it
-    pub fn callFunction(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
+    pub fn invoke(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
         // 1.
         const index = try self.getExport(.Func, name);
         if (index >= self.functions.items.len) return error.FuncIndexExceedsTypesLength;
@@ -555,7 +555,7 @@ test "module loading (simple add function)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    const result = try module.callFunction("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
+    const result = try module.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
 }
 
@@ -569,13 +569,13 @@ test "module loading (fib)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.callFunction("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try module.callFunction("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try module.callFunction("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try module.callFunction("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try module.callFunction("fib", .{@as(i32, 6)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.invoke("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try module.invoke("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try module.invoke("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try module.invoke("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try module.invoke("fib", .{@as(i32, 6)}, i32, .{}));
 }
 
 test "module loading (fact)" {
@@ -588,9 +588,9 @@ test "module loading (fact)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.parse();
 
-    testing.expectEqual(@as(i32, 1), try module.callFunction("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.callFunction("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try module.callFunction("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try module.callFunction("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try module.callFunction("fact", .{@as(i32, 12)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try module.invoke("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try module.invoke("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try module.invoke("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try module.invoke("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try module.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }
