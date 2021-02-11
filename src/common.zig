@@ -58,6 +58,8 @@ pub const Export = struct {
     index: u32,
 };
 
+pub const Element = struct {};
+
 // Code
 //
 // - locals: slice of locals definition [count type]*
