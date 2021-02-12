@@ -250,6 +250,20 @@ pub const Interpreter = struct {
 
                 try memory.write(i32, offset + address, value);
             },
+            .MemoryGrow => {
+                const frame = try self.peekNthFrame(0);
+                // TODO: we need to check this / handle multiple memories
+
+                const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                var memory = self.mod_inst.store.memories.items[memory_index];
+
+                const num_pages = try self.popOperand(u32);
+                if (memory.grow(num_pages)) |old_size| {
+                    try self.pushOperand(u32, @intCast(u32, old_size));
+                } else |err| {
+                    try self.pushOperand(i32, -1);
+                }
+            },
             .I32Const => {
                 const x = try instruction.readILEB128Mem(i32, &self.continuation);
                 try self.pushOperand(i32, x);
@@ -337,6 +351,7 @@ pub const Interpreter = struct {
             f32 => @bitCast(u64, @floatCast(f64, value)),
             f64 => @bitCast(u64, value),
             u64 => value,
+            u32 => @intCast(u32, value), // TODO: figure out types
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
     }
