@@ -140,6 +140,19 @@ pub const Interpreter = struct {
 
                 try self.branch(target);
             },
+            .BrTable => {
+                const label_count = try instruction.readULEB128Mem(u32, &self.continuation);
+                const i = try self.popOperand(i32);
+
+                var label: u32 = 0;
+                var j: usize = 0;
+                while (j < label_count + 1) : (j += 1) {
+                    const tmp_label = try instruction.readULEB128Mem(u32, &self.continuation);
+                    if (i == j) label = tmp_label;
+                }
+
+                try self.branch(label);
+            },
             .Return => {
                 const frame = try self.peekNthFrame(0);
                 const n = frame.return_arity;

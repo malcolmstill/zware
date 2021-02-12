@@ -20,7 +20,7 @@ pub fn main() anyerror!void {
 
     // Load and parse a module
     var module = Module.init(&arena.allocator, program);
-    try module.parse();
+    try module.decode();
     module.print();
 
     const result = try module.invoke("fib", .{@as(i32, 30)}, i32, .{});

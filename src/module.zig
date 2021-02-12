@@ -58,7 +58,7 @@ pub const Module = struct {
         };
     }
 
-    pub fn parse(self: *Module) !void {
+    pub fn decode(self: *Module) !void {
         const rd = self.buf.reader();
 
         const magic = try rd.readBytesNoEof(4);
@@ -68,7 +68,7 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            var section = self.parseSection() catch |err| {
+            var section = self.decodeSection() catch |err| {
                 switch (err) {
                     error.EndOfStream => break,
                     else => return err,
@@ -77,31 +77,31 @@ pub const Module = struct {
         }
     }
 
-    pub fn parseSection(self: *Module) !SectionType {
+    pub fn decodeSection(self: *Module) !SectionType {
         const rd = self.buf.reader();
         const id: SectionType = @intToEnum(SectionType, try rd.readByte());
 
         const size = try leb.readULEB128(u32, rd);
 
         _ = switch (id) {
-            .Custom => try self.parseCustomSection(size),
-            .Type => try self.parseTypeSection(),
-            .Import => try self.parseImportSection(),
-            .Function => try self.parseFunctionSection(),
-            .Table => try self.parseTableSection(),
-            .Memory => try self.parseMemorySection(),
-            .Global => try self.parseGlobalSection(),
-            .Export => try self.parseExportSection(),
-            .Start => try self.parseStartSection(),
-            .Element => try self.parseElementSection(size),
-            .Code => try self.parseCodeSection(),
-            .Data => try self.parseDataSection(size),
+            .Custom => try self.decodeCustomSection(size),
+            .Type => try self.decodeTypeSection(),
+            .Import => try self.decodeImportSection(),
+            .Function => try self.decodeFunctionSection(),
+            .Table => try self.decodeTableSection(),
+            .Memory => try self.decodeMemorySection(),
+            .Global => try self.decodeGlobalSection(),
+            .Export => try self.decodeExportSection(),
+            .Start => try self.decodeStartSection(),
+            .Element => try self.decodeElementSection(size),
+            .Code => try self.decodeCodeSection(),
+            .Data => try self.decodeDataSection(size),
         };
 
         return id;
     }
 
-    fn parseTypeSection(self: *Module) !usize {
+    fn decodeTypeSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const functype_count = try leb.readULEB128(u32, rd);
 
@@ -145,7 +145,7 @@ pub const Module = struct {
         return functype_count;
     }
 
-    fn parseImportSection(self: *Module) !usize {
+    fn decodeImportSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -173,7 +173,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseFunctionSection(self: *Module) !usize {
+    fn decodeFunctionSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -186,7 +186,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseTableSection(self: *Module) !usize {
+    fn decodeTableSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -220,7 +220,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseMemorySection(self: *Module) !usize {
+    fn decodeMemorySection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -251,7 +251,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseGlobalSection(self: *Module) !usize {
+    fn decodeGlobalSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -278,7 +278,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseExportSection(self: *Module) !usize {
+    fn decodeExportSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
 
@@ -301,7 +301,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseStartSection(self: *Module) !usize {
+    fn decodeStartSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const index = try leb.readULEB128(u32, rd);
 
@@ -310,7 +310,7 @@ pub const Module = struct {
         return 1;
     }
 
-    fn parseElementSection(self: *Module, size: u32) !usize {
+    fn decodeElementSection(self: *Module, size: u32) !usize {
         // , size: u32
         const rd = self.buf.reader();
         // const index = try leb.readULEB128(u32, rd);
@@ -320,7 +320,7 @@ pub const Module = struct {
         return 1;
     }
 
-    fn parseCodeSection(self: *Module) !usize {
+    fn decodeCodeSection(self: *Module) !usize {
         const rd = self.buf.reader();
         var x = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
@@ -355,7 +355,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseDataSection(self: *Module, size: u32) !usize {
+    fn decodeDataSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
@@ -385,7 +385,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn parseCustomSection(self: *Module, size: u32) !usize {
+    fn decodeCustomSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         const offset = rd.context.pos;
 
@@ -554,7 +554,7 @@ test "module loading (simple add function)" {
     const bytes = @embedFile("../test/test.wasm");
 
     var module = Module.init(&arena.allocator, bytes);
-    try module.parse();
+    try module.decode();
 
     const result = try module.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
@@ -568,7 +568,7 @@ test "module loading (fib)" {
     const bytes = @embedFile("../test/fib.wasm");
 
     var module = Module.init(&arena.allocator, bytes);
-    try module.parse();
+    try module.decode();
 
     testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 0)}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 1)}, i32, .{}));
@@ -587,7 +587,7 @@ test "module loading (fact)" {
     const bytes = @embedFile("../test/fact.wasm");
 
     var module = Module.init(&arena.allocator, bytes);
-    try module.parse();
+    try module.decode();
 
     testing.expectEqual(@as(i32, 1), try module.invoke("fact", .{@as(i32, 1)}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try module.invoke("fact", .{@as(i32, 2)}, i32, .{}));
