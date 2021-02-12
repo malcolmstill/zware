@@ -112,7 +112,7 @@ test "instruction iterator" {
     const bytes = @embedFile("../test/fib.wasm");
 
     var module = Module.init(&arena.allocator, bytes);
-    try module.parse();
+    try module.decode();
 
     const func = module.codes.items[0];
 
