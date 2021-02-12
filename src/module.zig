@@ -626,3 +626,58 @@ test "module loading (fact)" {
     testing.expectEqual(@as(i32, 24), try modinst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
     testing.expectEqual(@as(i32, 479001600), try modinst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }
+
+test "block test" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/testsuite/block.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.decode();
+
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var modinst = module.instantiate(&store);
+
+    try modinst.invoke("empty", .{}, void, .{});
+    testing.expectEqual(@as(i32, 7), try modinst.invoke("singular", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try modinst.invoke("multi", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 9), try modinst.invoke("nested", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 150), try modinst.invoke("deep", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-select-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-mid", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-mid", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-if-then", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-if-else", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_if-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_if-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_table-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_table-last", .{}, i32, .{}));
+
+    // testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-first", .{}, i32, .{}));
+    // testing.expectEqual(@as(i32, 2), try modinst.invoke("as-call_indirect-mid", .{}, i32, .{}));
+    // testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-last", .{}, i32, .{}));
+
+    try modinst.invoke("as-store-first", .{}, void, .{});
+    try modinst.invoke("as-store-last", .{}, void, .{});
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-memory.grow-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-return-value", .{}, i32, .{}));
+    try modinst.invoke("as-drop-operand", .{}, void, .{});
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.set-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.tee-value", .{}, i32, .{}));
+}
