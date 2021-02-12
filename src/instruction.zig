@@ -159,6 +159,16 @@ pub fn readILEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     return value;
 }
 
+pub fn readU32(ptr: *[]const u8) !u32 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readIntLittle(u32);
+
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
 pub const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,
