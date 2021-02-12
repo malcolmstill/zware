@@ -708,4 +708,7 @@ test "block test" {
     testing.expectEqual(@as(i32, 3), try modinst.invoke("param-break", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 3), try modinst.invoke("params-break", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id-break", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("effects", .{}, i32, .{}));
+    try modinst.invoke("type-use", .{}, void, .{});
 }
