@@ -83,4 +83,6 @@ test "Memory test" {
 
     _ = try mem0.grow(1);
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0x1FFFF));
+    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
 }
