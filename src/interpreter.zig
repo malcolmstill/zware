@@ -327,6 +327,10 @@ pub const Interpreter = struct {
                 const x = try instruction.readU32(&self.continuation);
                 try self.pushOperand(f32, @intToFloat(f32, x));
             },
+            .F64Const => {
+                const x = try instruction.readU64(&self.continuation);
+                try self.pushOperand(f64, @intToFloat(f64, x));
+            },
             .I32Eq => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
