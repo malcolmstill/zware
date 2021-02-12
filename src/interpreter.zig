@@ -326,6 +326,10 @@ pub const Interpreter = struct {
                 // std.debug.warn("c1 >= c2 = {} >= {} = {}\n", .{ c1, c2, c1 >= c2 });
                 try self.pushOperand(i32, @as(i32, if (c1 >= c2) 1 else 0));
             },
+            .I32Ctz => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, @ctz(i32, c1));
+            },
             .I32Add => {
                 // TODO: does wasm wrap?
                 const c2 = try self.popOperand(i32);

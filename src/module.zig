@@ -687,4 +687,6 @@ test "block test" {
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.tee-value", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-global.set-value", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-load-operand", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 0), try modinst.invoke("as-unary-operand", .{}, i32, .{}));
 }
