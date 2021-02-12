@@ -241,6 +241,13 @@ pub const Interpreter = struct {
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 frame.locals[local_index] = value;
             },
+            .LocalTee => {
+                const value = try self.popAnyOperand();
+                const frame = try self.peekNthFrame(0);
+                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                frame.locals[local_index] = value;
+                try self.pushAnyOperand(value);
+            },
             .I32Store => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
