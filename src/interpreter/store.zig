@@ -22,20 +22,6 @@ pub const Store = struct {
         mem_ptr.* = Memory.init(self.alloc);
         return mem_ptr;
     }
-
-    pub fn readMemory(self: *Store, mem_index: u32, address: u32) !u8 {
-        if (mem_index >= self.memories.items.len) return error.NoSuchMemoryAddress;
-        var memory = self.memories.items[mem_index];
-
-        return try memory.read(address);
-    }
-
-    pub fn writeMemory(self: *Store, mem_index: u32, address: u32, value: u8) !void {
-        if (mem_index >= self.memories.items.len) return error.NoSuchMemoryAddress;
-        var memory = self.memories.items[mem_index];
-
-        try memory.write(address, value);
-    }
 };
 
 pub const Memory = struct {
@@ -54,22 +40,22 @@ pub const Memory = struct {
         _ = try self.data.resize(self.data.items.len + num_pages);
     }
 
-    pub fn read(self: *Memory, address: u32) !u8 {
-        if (address >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+    pub fn read(self: *Memory, comptime T: type, address: u32) !T {
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
 
-        return self.data.items[page][offset];
+        return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
     }
 
-    pub fn write(self: *Memory, address: u32, value: u8) !void {
-        if (address >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+    pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
 
-        self.data.items[page][offset] = value;
+        std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little);
     }
 };
 
@@ -84,17 +70,18 @@ test "Memory test" {
 
     _ = try mem0.grow(1);
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(0));
-    try mem0.write(0, 22);
-    testing.expectEqual(@as(u8, 22), try mem0.read(0));
+    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0));
+    testing.expectEqual(@as(u32, 0xAAAAAAAA), try mem0.read(u32, 0));
+    try mem0.write(u8, 0, 15);
+    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0));
+    testing.expectEqual(@as(u32, 0xAAAAAA0F), try mem0.read(u32, 0));
 
-    try mem0.write(0xFFFF, 42);
-    testing.expectEqual(@as(u8, 42), try mem0.read(0xFFFF));
+    try mem0.write(u8, 0xFFFF, 42);
+    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
 
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(0xFFFF + 1));
+    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
+    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u16, 0xFFFF));
 
     _ = try mem0.grow(1);
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(0xFFFF + 1));
-
-    testing.expectEqual(@as(u8, 42), try store.readMemory(0, 0xFFFF));
+    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
 }
