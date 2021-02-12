@@ -2,7 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
-const Module = @import("module.zig").Module;
+const ModuleInstance = @import("module.zig").ModuleInstance;
 const Instruction = @import("instruction.zig").Instruction;
 const instruction = @import("instruction.zig");
 
@@ -29,9 +29,9 @@ pub const Interpreter = struct {
     label_stack: []Label = undefined,
 
     continuation: []const u8 = undefined,
-    module: ?*Module = undefined,
+    mod_inst: *ModuleInstance = undefined,
 
-    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, module: ?*Module) Interpreter {
+    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, mod_inst: *ModuleInstance) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
             .op_stack = op_stack_mem[0..0],
@@ -39,7 +39,7 @@ pub const Interpreter = struct {
             .frame_stack = frame_stack_mem[0..0],
             .label_stack_mem = label_stack_mem,
             .label_stack = label_stack_mem[0..0],
-            .module = module,
+            .mod_inst = mod_inst,
         };
     }
 
@@ -182,7 +182,7 @@ pub const Interpreter = struct {
 
                 // TODO: we need to verify that we're okay to lookup this function.
                 //       we can (and probably should) do that at validation time.
-                const module = self.module orelse return error.NoModule;
+                const module = self.mod_inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
                 const func_type_index = module.functions.items[function_index];
                 const func_type = module.types.items[func_type_index];
@@ -236,6 +236,19 @@ pub const Interpreter = struct {
                 const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 frame.locals[local_index] = value;
+            },
+            .I32Store => {
+                const frame = try self.peekNthFrame(0);
+                // TODO: we need to check this / handle multiple memories
+                var memory = self.mod_inst.store.memories.items[0];
+
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                const value = try self.popOperand(i32);
+                const address = try self.popOperand(u32);
+
+                try memory.write(i32, offset + address, value);
             },
             .I32Const => {
                 const x = try instruction.readILEB128Mem(i32, &self.continuation);
@@ -339,6 +352,7 @@ pub const Interpreter = struct {
             i64 => @bitCast(i64, value),
             f32 => @floatCast(f32, @bitCast(f64, value)),
             f64 => @bitCast(f64, value),
+            u32 => @intCast(u32, value), // TODO: figure out types
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
     }
@@ -455,7 +469,9 @@ test "operand push / pop test" {
     var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], null);
+    var mod_inst: ModuleInstance = undefined;
+
+    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &mod_inst);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
@@ -490,7 +506,9 @@ test "simple interpret tests" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
     var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
-    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], null);
+
+    var mod_inst: ModuleInstance = undefined;
+    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &mod_inst);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);

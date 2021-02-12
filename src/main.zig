@@ -3,6 +3,7 @@ const mem = std.mem;
 const process = std.process;
 const fs = std.fs;
 const Module = @import("module.zig").Module;
+const Store = @import("interpreter/store.zig").Store;
 const ValueType = @import("common.zig").ValueType;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -23,7 +24,13 @@ pub fn main() anyerror!void {
     try module.decode();
     module.print();
 
-    const result = try module.invoke("fib", .{@as(i32, 30)}, i32, .{});
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var module_instance = module.instantiate(&store);
+
+    const result = try module_instance.invoke("fib", .{@as(i32, 30)}, i32, .{});
     std.debug.warn("result: {}\n", .{result});
 }
 
