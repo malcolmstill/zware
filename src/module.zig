@@ -671,9 +671,9 @@ test "block test" {
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_table-first", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_table-last", .{}, i32, .{}));
 
-    // testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-first", .{}, i32, .{}));
-    // testing.expectEqual(@as(i32, 2), try modinst.invoke("as-call_indirect-mid", .{}, i32, .{}));
-    // testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-last", .{}, i32, .{}));
+    // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-first", .{}, i32, .{}));
+    // TODO: callindirect testing.expectEqual(@as(i32, 2), try modinst.invoke("as-call_indirect-mid", .{}, i32, .{}));
+    // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-last", .{}, i32, .{}));
 
     try modinst.invoke("as-store-first", .{}, void, .{});
     try modinst.invoke("as-store-last", .{}, void, .{});
@@ -697,4 +697,15 @@ test "block test" {
     testing.expectEqual(@as(i32, 27), try modinst.invoke("as-mixed-operands", .{}, i32, .{}));
 
     testing.expectEqual(@as(i32, 19), try modinst.invoke("break-bare", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 18), try modinst.invoke("break-value", .{}, i32, .{}));
+    // TODO: multi-value testing.expectEqual(@as(i32, 18), try modinst.invoke("break-multie-value", .{}, .{ i32, i32, i64 }, .{}));
+    testing.expectEqual(@as(i32, 18), try modinst.invoke("break-repeated", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 0xf), try modinst.invoke("break-inner", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("param", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("param-break", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-break", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id-break", .{}, i32, .{}));
 }
