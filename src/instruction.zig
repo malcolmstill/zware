@@ -30,6 +30,7 @@ pub const InstructionIterator = struct {
             .If,
             .Call,
             .BrIf,
+            .Block,
             => _ = try readULEB128Mem(u32, &self.code),
             .F32Const, .F64Const => self.code = self.code[4..],
             else => {},
