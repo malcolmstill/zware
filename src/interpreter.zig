@@ -314,6 +314,10 @@ pub const Interpreter = struct {
                 const x = try instruction.readILEB128Mem(i64, &self.continuation);
                 try self.pushOperand(i64, x);
             },
+            .F32Const => {
+                const x = try instruction.readU32(&self.continuation);
+                try self.pushOperand(f32, @intToFloat(f32, x));
+            },
             .I32Eqz => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(i32, @as(i32, if (c1 == 0) 1 else 0));
@@ -333,6 +337,11 @@ pub const Interpreter = struct {
             .I32Ctz => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(i32, @ctz(i32, c1));
+            },
+            .F32Gt => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(i32, @as(i32, if (c1 > c2) 1 else 0));
             },
             .I32Add => {
                 // TODO: does wasm wrap?
