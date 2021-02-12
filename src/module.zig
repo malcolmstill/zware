@@ -695,4 +695,6 @@ test "block test" {
     testing.expectEqual(@as(i32, 12), try modinst.invoke("as-binary-operands", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 0), try modinst.invoke("as-compare-operands", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 27), try modinst.invoke("as-mixed-operands", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 19), try modinst.invoke("break-bare", .{}, i32, .{}));
 }
