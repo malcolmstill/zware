@@ -36,7 +36,15 @@ pub const Memory = struct {
         };
     }
 
+    // TODO: is usize correct here?
+    pub fn size(self: *Memory) usize {
+        return self.data.items.len;
+    }
+
     pub fn grow(self: *Memory, num_pages: u32) !void {
+        if (self.max_size) |max_size| {
+            if (self.data.items.len + num_pages >= max_size) return error.MemoryGrowExceedsMaxSize;
+        }
         _ = try self.data.resize(self.data.items.len + num_pages);
     }
 
@@ -69,6 +77,7 @@ test "Memory test" {
     var mem0 = try store.addMemory();
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 1), mem0.size());
 
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0));
     testing.expectEqual(@as(u32, 0xAAAAAAAA), try mem0.read(u32, 0));
@@ -82,7 +91,16 @@ test "Memory test" {
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 2), mem0.size());
+
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0x1FFFF));
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
+
+    mem0.max_size = 2;
+    testing.expectError(error.MemoryGrowExceedsMaxSize, mem0.grow(1));
+
+    mem0.max_size = null;
+    _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 3), mem0.size());
 }
