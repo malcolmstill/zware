@@ -132,6 +132,10 @@ pub const Interpreter = struct {
                 // out of code in the current function, i.e. self.continuation is empty
                 if (self.continuation.len == 0) self.continuation = label.continuation;
             },
+            .Br => {
+                const target = try instruction.readULEB128Mem(u32, &self.continuation);
+                try self.branch(target);
+            },
             .BrIf => {
                 const target = try instruction.readULEB128Mem(u32, &self.continuation);
 
