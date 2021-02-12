@@ -314,6 +314,10 @@ pub const Interpreter = struct {
                 const x = try instruction.readILEB128Mem(i64, &self.continuation);
                 try self.pushOperand(i64, x);
             },
+            .I32Eqz => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, @as(i32, if (c1 == 0) 1 else 0));
+            },
             .I32LtS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
