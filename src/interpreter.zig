@@ -69,13 +69,22 @@ pub const Interpreter = struct {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
             .Block => {
-                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
+                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    block_params = func_type.params_count;
+                    block_returns = func_type.results_count;
+                }
+
                 const end = try instruction.findEnd(code);
                 const continuation = code[end.offset..];
 
                 try self.pushLabel(Label{
-                    .return_arity = if (block_type == 0x40) 0 else 1,
-                    .op_stack_len = self.op_stack.len,
+                    .return_arity = block_returns,
+                    .op_stack_len = self.op_stack.len - block_params, // equivalent to pop and push
                     .continuation = continuation,
                 });
             },
