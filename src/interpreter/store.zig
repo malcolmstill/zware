@@ -41,11 +41,13 @@ pub const Memory = struct {
         return self.data.items.len;
     }
 
-    pub fn grow(self: *Memory, num_pages: u32) !void {
+    pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
             if (self.data.items.len + num_pages >= max_size) return error.MemoryGrowExceedsMaxSize;
         }
+        const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
+        return old_size;
     }
 
     pub fn read(self: *Memory, comptime T: type, address: u32) !T {
