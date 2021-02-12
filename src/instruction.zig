@@ -172,6 +172,16 @@ pub fn readU32(ptr: *[]const u8) !u32 {
     return value;
 }
 
+pub fn readU64(ptr: *[]const u8) !u64 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readIntLittle(u64);
+
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
 pub const Instruction = enum(u8) {
     Unreachable = 0x0,
     Nop = 0x01,
