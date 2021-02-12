@@ -266,6 +266,19 @@ pub const Interpreter = struct {
                 const value = try self.popAnyOperand();
                 self.mod_inst.store.globals.items[global_index] = value;
             },
+            .I32Load => {
+                const frame = try self.peekNthFrame(0);
+                // TODO: we need to check this / handle multiple memories
+                var memory = self.mod_inst.store.memories.items[0];
+
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                const address = try self.popOperand(u32);
+
+                const value = try memory.read(i32, offset + address);
+                try self.pushOperand(i32, value);
+            },
             .I32Store => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
