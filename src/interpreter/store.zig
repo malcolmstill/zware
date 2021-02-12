@@ -7,11 +7,13 @@ pub const PAGE_SIZE = 64 * 1024;
 pub const Store = struct {
     alloc: *mem.Allocator,
     memories: ArrayList(Memory),
+    globals: ArrayList(u64),
 
     pub fn init(alloc: *mem.Allocator) Store {
         var store = Store{
             .alloc = alloc,
             .memories = ArrayList(Memory).init(alloc),
+            .globals = ArrayList(u64).init(alloc),
         };
 
         return store;
@@ -21,6 +23,10 @@ pub const Store = struct {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
         return mem_ptr;
+    }
+
+    pub fn allocGlobals(self: *Store, count: usize) !void {
+        _ = try self.globals.resize(count);
     }
 };
 

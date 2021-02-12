@@ -248,6 +248,24 @@ pub const Interpreter = struct {
                 frame.locals[local_index] = value;
                 try self.pushAnyOperand(value);
             },
+            .GlobalGet => {
+                // 1. Get index of global from immediate
+                const global_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                // 2. Look up address of global using index. (we don't need to do this because the
+                //    the global_index is also the address of the actual global in our store)
+                // 3. Get value
+                const value = self.mod_inst.store.globals.items[global_index];
+                try self.pushAnyOperand(value);
+            },
+            .GlobalSet => {
+                // 1. Get index of global from immediate
+                const global_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                // 2. Look up address of global using index. (we don't need to do this because the
+                //    the global_index is also the address of the actual global in our store)
+                // 3. Get value
+                const value = try self.popAnyOperand();
+                self.mod_inst.store.globals.items[global_index] = value;
+            },
             .I32Store => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories

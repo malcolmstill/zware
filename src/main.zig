@@ -28,7 +28,7 @@ pub fn main() anyerror!void {
     var mem0 = try store.addMemory();
     _ = try mem0.grow(1);
 
-    var module_instance = module.instantiate(&store);
+    var module_instance = try module.instantiate(&store);
 
     const result = try module_instance.invoke("fib", .{@as(i32, 30)}, i32, .{});
     std.debug.warn("result: {}\n", .{result});

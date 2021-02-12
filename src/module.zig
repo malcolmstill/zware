@@ -415,11 +415,16 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn instantiate(self: *Module, store: *Store) ModuleInstance {
-        return ModuleInstance{
+    pub fn instantiate(self: *Module, store: *Store) !ModuleInstance {
+        var inst = ModuleInstance{
             .module = self,
             .store = store,
         };
+
+        const globals_count = self.globals.items.len;
+        try inst.store.allocGlobals(globals_count);
+
+        return inst;
     }
 
     pub fn print(module: *Module) void {
@@ -573,7 +578,7 @@ test "module loading (simple add function)" {
     var mem0 = try store.addMemory();
     _ = try mem0.grow(1);
 
-    var modinst = module.instantiate(&store);
+    var modinst = try module.instantiate(&store);
 
     const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
@@ -593,7 +598,7 @@ test "module loading (fib)" {
     var mem0 = try store.addMemory();
     _ = try mem0.grow(1);
 
-    var modinst = module.instantiate(&store);
+    var modinst = try module.instantiate(&store);
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
@@ -618,7 +623,7 @@ test "module loading (fact)" {
     var mem0 = try store.addMemory();
     _ = try mem0.grow(1);
 
-    var modinst = module.instantiate(&store);
+    var modinst = try module.instantiate(&store);
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
@@ -641,7 +646,7 @@ test "block test" {
     var mem0 = try store.addMemory();
     _ = try mem0.grow(1);
 
-    var modinst = module.instantiate(&store);
+    var modinst = try module.instantiate(&store);
 
     try modinst.invoke("empty", .{}, void, .{});
     testing.expectEqual(@as(i32, 7), try modinst.invoke("singular", .{}, i32, .{}));
@@ -680,4 +685,5 @@ test "block test" {
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br-value", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.set-value", .{}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.tee-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-global.set-value", .{}, i32, .{}));
 }
