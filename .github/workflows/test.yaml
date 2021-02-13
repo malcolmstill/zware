@@ -18,7 +18,7 @@ jobs:
       - run: zig build test
       - run: zig build --build-file test/build.zig --prefix ./
   lint:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
