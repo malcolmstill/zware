@@ -35,9 +35,12 @@ pub fn main() anyerror!void {
 
     // 2. Parse json and find .wasm file
     const json_string = try fs.cwd().readFileAlloc(&arena.allocator, filename, 0xFFFFFFF);
-    std.debug.warn("json_string = {}\n", .{json_string});
+
     const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = &arena.allocator });
-    std.debug.warn("r = {}\n", .{r});
+
+    for (r.commands) |command| {
+        std.log.info("{}\n", .{command});
+    }
     const wasm = "test.wasm";
 
     // 3. Load .wasm from file
@@ -64,25 +67,25 @@ const Wast = struct {
 const Command = union(enum) {
     module: struct {
         comptime @"type": []const u8 = "module",
-        line: []const u8,
+        line: usize,
         filename: []const u8,
     },
     assert_return: struct {
         comptime @"type": []const u8 = "assert_return",
-        line: []const u8,
+        line: usize,
         action: Action,
         expected: []const Value,
     },
     assert_malformed: struct {
         comptime @"type": []const u8 = "assert_malformed",
-        line: []const u8,
+        line: usize,
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
     },
     assert_invalid: struct {
         comptime @"type": []const u8 = "assert_invalid",
-        line: []const u8,
+        line: usize,
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
