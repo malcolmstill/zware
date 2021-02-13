@@ -1,6 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
-const leb = std.debug.leb;
+const leb = std.leb;
 const ArrayList = std.ArrayList;
 const Instruction = @import("instruction.zig").Instruction;
 const FuncType = @import("common.zig").FuncType;
