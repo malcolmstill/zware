@@ -28,6 +28,7 @@ pub fn toValueType(comptime t: type) ValueType {
         i64 => .I64,
         f32 => .F32,
         f64 => .F64,
+        u32 => .I32,
         else => @compileError("toValueType: unsupported type: " ++ @typeName(t)),
     };
 }
