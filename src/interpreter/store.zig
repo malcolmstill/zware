@@ -7,11 +7,13 @@ pub const PAGE_SIZE = 64 * 1024;
 pub const Store = struct {
     alloc: *mem.Allocator,
     memories: ArrayList(Memory),
+    globals: ArrayList(u64),
 
     pub fn init(alloc: *mem.Allocator) Store {
         var store = Store{
             .alloc = alloc,
             .memories = ArrayList(Memory).init(alloc),
+            .globals = ArrayList(u64).init(alloc),
         };
 
         return store;
@@ -21,6 +23,10 @@ pub const Store = struct {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
         return mem_ptr;
+    }
+
+    pub fn allocGlobals(self: *Store, count: usize) !void {
+        _ = try self.globals.resize(count);
     }
 };
 
@@ -41,11 +47,13 @@ pub const Memory = struct {
         return self.data.items.len;
     }
 
-    pub fn grow(self: *Memory, num_pages: u32) !void {
+    pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
             if (self.data.items.len + num_pages >= max_size) return error.MemoryGrowExceedsMaxSize;
         }
+        const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
+        return old_size;
     }
 
     pub fn read(self: *Memory, comptime T: type, address: u32) !T {

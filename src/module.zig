@@ -17,6 +17,7 @@ const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
+const Store = @import("interpreter/store.zig").Store;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
@@ -414,6 +415,43 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
+    pub fn instantiate(self: *Module, store: *Store) !ModuleInstance {
+        var inst = ModuleInstance{
+            .module = self,
+            .store = store,
+        };
+
+        const globals_count = self.globals.items.len;
+        try inst.store.allocGlobals(globals_count);
+
+        return inst;
+    }
+
+    pub fn print(module: *Module) void {
+        std.debug.warn("    Types: {}\n", .{module.types.items.len});
+        std.debug.warn("Functions: {}\n", .{module.functions.items.len});
+        std.debug.warn("   Tables: {}\n", .{module.tables.items.len});
+        std.debug.warn(" Memories: {}\n", .{module.memories.items.len});
+        std.debug.warn("  Globals: {}\n", .{module.globals.items.len});
+        std.debug.warn("  Exports: {}\n", .{module.exports.items.len});
+        std.debug.warn("  Imports: {}\n", .{module.imports.items.len});
+        std.debug.warn("    Codes: {}\n", .{module.codes.items.len});
+        std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
+        std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
+    }
+};
+
+// Default stack sizes
+const InterpreterOptions = struct {
+    operand_stack_size: comptime_int = 64 * 1024,
+    control_stack_size: comptime_int = 64 * 1024,
+    label_stack_size: comptime_int = 64 * 1024,
+};
+
+pub const ModuleInstance = struct {
+    module: *Module,
+    store: *Store,
+
     // invoke:
     //  1. Lookup our function by name with getExport
     //  2. Get the function type signature
@@ -424,17 +462,17 @@ pub const Module = struct {
     //  7. Push a control frame and our parameters
     //  8. Execute our function
     //  9. Pop our result and return it
-    pub fn invoke(self: *Module, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
+    pub fn invoke(self: *ModuleInstance, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
         // 1.
-        const index = try self.getExport(.Func, name);
-        if (index >= self.functions.items.len) return error.FuncIndexExceedsTypesLength;
+        const index = try self.module.getExport(.Func, name);
+        if (index >= self.module.functions.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function_type_index = self.functions.items[index];
+        const function_type_index = self.module.functions.items[index];
 
         // 2.
-        const func_type = self.types.items[function_type_index];
-        const params = self.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-        const results = self.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+        const func_type = self.module.types.items[function_type_index];
+        const params = self.module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+        const results = self.module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
         if (params.len != args.len) return error.ParamCountMismatch;
 
@@ -450,7 +488,7 @@ pub const Module = struct {
         }
 
         // 5. get the function bytecode
-        const func = self.codes.items[index];
+        const func = self.module.codes.items[index];
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
@@ -496,26 +534,6 @@ pub const Module = struct {
         if (Result == void) return;
         return try interp.popOperand(Result);
     }
-
-    pub fn print(module: *Module) void {
-        std.debug.warn("    Types: {}\n", .{module.types.items.len});
-        std.debug.warn("Functions: {}\n", .{module.functions.items.len});
-        std.debug.warn("   Tables: {}\n", .{module.tables.items.len});
-        std.debug.warn(" Memories: {}\n", .{module.memories.items.len});
-        std.debug.warn("  Globals: {}\n", .{module.globals.items.len});
-        std.debug.warn("  Exports: {}\n", .{module.exports.items.len});
-        std.debug.warn("  Imports: {}\n", .{module.imports.items.len});
-        std.debug.warn("    Codes: {}\n", .{module.codes.items.len});
-        std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
-        std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
-    }
-};
-
-// Default stack sizes
-const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 64 * 1024,
-    control_stack_size: comptime_int = 64 * 1024,
-    label_stack_size: comptime_int = 64 * 1024,
 };
 
 const Section = struct {
@@ -556,7 +574,13 @@ test "module loading (simple add function)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    const result = try module.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var modinst = try module.instantiate(&store);
+
+    const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
 }
 
@@ -570,13 +594,19 @@ test "module loading (fib)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try module.invoke("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.invoke("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try module.invoke("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try module.invoke("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try module.invoke("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try module.invoke("fib", .{@as(i32, 6)}, i32, .{}));
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var modinst = try module.instantiate(&store);
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try modinst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try modinst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try modinst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
 }
 
 test "module loading (fact)" {
@@ -589,9 +619,96 @@ test "module loading (fact)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    testing.expectEqual(@as(i32, 1), try module.invoke("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try module.invoke("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try module.invoke("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try module.invoke("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try module.invoke("fact", .{@as(i32, 12)}, i32, .{}));
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var modinst = try module.instantiate(&store);
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try modinst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try modinst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try modinst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
+}
+
+test "block test" {
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer _ = arena.deinit();
+
+    const bytes = @embedFile("../test/testsuite/block.wasm");
+
+    var module = Module.init(&arena.allocator, bytes);
+    try module.decode();
+
+    var store = Store.init(&arena.allocator);
+    var mem0 = try store.addMemory();
+    _ = try mem0.grow(1);
+
+    var modinst = try module.instantiate(&store);
+
+    try modinst.invoke("empty", .{}, void, .{});
+    testing.expectEqual(@as(i32, 7), try modinst.invoke("singular", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try modinst.invoke("multi", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 9), try modinst.invoke("nested", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 150), try modinst.invoke("deep", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-select-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-mid", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-mid", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-if-then", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-if-else", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_if-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_if-last", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_table-first", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_table-last", .{}, i32, .{}));
+
+    // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-first", .{}, i32, .{}));
+    // TODO: callindirect testing.expectEqual(@as(i32, 2), try modinst.invoke("as-call_indirect-mid", .{}, i32, .{}));
+    // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-last", .{}, i32, .{}));
+
+    try modinst.invoke("as-store-first", .{}, void, .{});
+    try modinst.invoke("as-store-last", .{}, void, .{});
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-memory.grow-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-return-value", .{}, i32, .{}));
+    try modinst.invoke("as-drop-operand", .{}, void, .{});
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.set-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.tee-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-global.set-value", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("as-load-operand", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 0), try modinst.invoke("as-unary-operand", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 12), try modinst.invoke("as-binary-operand", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 0), try modinst.invoke("as-test-operand", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 0), try modinst.invoke("as-compare-operand", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 12), try modinst.invoke("as-binary-operands", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 0), try modinst.invoke("as-compare-operands", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 27), try modinst.invoke("as-mixed-operands", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 19), try modinst.invoke("break-bare", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 18), try modinst.invoke("break-value", .{}, i32, .{}));
+    // TODO: multi-value testing.expectEqual(@as(i32, 18), try modinst.invoke("break-multie-value", .{}, .{ i32, i32, i64 }, .{}));
+    testing.expectEqual(@as(i32, 18), try modinst.invoke("break-repeated", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 0xf), try modinst.invoke("break-inner", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("param", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("param-break", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-break", .{}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id-break", .{}, i32, .{}));
+
+    testing.expectEqual(@as(i32, 1), try modinst.invoke("effects", .{}, i32, .{}));
+    try modinst.invoke("type-use", .{}, void, .{});
 }

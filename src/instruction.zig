@@ -29,7 +29,10 @@ pub const InstructionIterator = struct {
             .LocalSet,
             .If,
             .Call,
+            .Br,
             .BrIf,
+            .BrTable,
+            .Block,
             => _ = try readULEB128Mem(u32, &self.code),
             .F32Const, .F64Const => self.code = self.code[4..],
             else => {},
@@ -154,6 +157,26 @@ pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
 pub fn readILEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     var buf = std.io.fixedBufferStream(ptr.*);
     const value = try leb.readILEB128(T, buf.reader());
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
+pub fn readU32(ptr: *[]const u8) !u32 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readIntLittle(u32);
+
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
+pub fn readU64(ptr: *[]const u8) !u64 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readIntLittle(u64);
+
     ptr.*.ptr += buf.pos;
     ptr.*.len -= buf.pos;
     return value;
