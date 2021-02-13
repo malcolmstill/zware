@@ -16,6 +16,8 @@ jobs:
     runs-on: ubuntu-latest
     container: alpine:latest
     steps:
+      - name: Update apk
+        run: apk update
       - name: Install wabt
         run: apk add wabt
       - uses: actions/checkout@v2
