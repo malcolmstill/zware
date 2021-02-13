@@ -17,9 +17,9 @@ jobs:
     container: ubuntu:20.10
     steps:
       - name: Update apt
-        run: sudo apt update
+        run: apt update
       - name: Install wabt
-        run: sudo apt-get install wabt
+        run: apt-get install wabt
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
