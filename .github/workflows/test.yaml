@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.7.0
+          version: 0.8.0-dev.1140+9270aae07
       - run: zig build test
   lint:
     runs-on: ubuntu-latest
