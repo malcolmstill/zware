@@ -86,13 +86,16 @@ pub fn main() anyerror!void {
                 }
 
                 // Invoke the function
-                try modinst.invokeDynamic(field, in, out, .{});
+                modinst.invokeDynamic(field, in, out, .{}) catch |err| {
+                    std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                    return err;
+                };
 
                 // Test the result
                 for (expected) |result, i| {
                     const result_value = try fmt.parseInt(u64, result.value, 10);
                     if (result_value != out[i]) {
-                        std.debug.warn("Testsuite failure: {s} at test/testsuite/{s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                        std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                         std.debug.warn("result[{}], expected: {}, result: {}\n", .{ i, result_value, out[i] });
                         return error.TestsuiteTestFailureTrapResult;
                     }
