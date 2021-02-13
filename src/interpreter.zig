@@ -386,6 +386,11 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(i32, try math.divTrunc(i32, c1, c2));
             },
+            .I32DivU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, try math.divTrunc(u32, c1, c2));
+            },
             .I64Add => {
                 const c2 = try self.popOperand(u64);
                 const c1 = try self.popOperand(u64);
