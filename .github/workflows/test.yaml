@@ -14,7 +14,7 @@ jobs:
       - run: zig build test
   testsuite:
     runs-on: ubuntu-latest
-    container: apline:latest
+    container: alpine:latest
     steps:
       - name: Install wabt
         run: sudo apk add wabt
