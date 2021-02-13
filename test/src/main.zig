@@ -38,13 +38,20 @@ pub fn main() anyerror!void {
 
     const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = &arena.allocator });
 
+    // 2.a. Find the wasm file
+    var wasm_filename: []const u8 = undefined;
     for (r.commands) |command| {
-        std.log.info("{}\n", .{command});
+        switch (command) {
+            .module => {
+                wasm_filename = command.module.filename;
+                break;
+            },
+            else => continue,
+        }
     }
-    const wasm = "test.wasm";
 
     // 3. Load .wasm from file
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, wasm, 0xFFFFFFF);
+    const program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
     // 4. Initialise our module
     var module = Module.init(&arena.allocator, program);
