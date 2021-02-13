@@ -16,6 +16,7 @@ jobs:
         with:
           version: 0.8.0-dev.1140+9270aae07
       - run: zig build test
+      - run: zig build --build-file test/build.zig --prefix ./
   lint:
     runs-on: ubuntu-latest
     steps:
