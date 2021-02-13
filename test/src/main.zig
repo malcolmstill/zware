@@ -1,5 +1,6 @@
 const std = @import("std");
 const fs = std.fs;
+const fmt = std.fmt;
 const process = std.process;
 const json = std.json;
 const foxwren = @import("foxwren");
@@ -64,6 +65,37 @@ pub fn main() anyerror!void {
     var modinst = try module.instantiate(&store);
 
     // 5. Loop over assert_return's and assert_trap's
+    for (r.commands) |command| {
+        switch (command) {
+            .assert_return => {
+                const action = command.assert_return.action;
+                const expected = command.assert_return.expected;
+                const field = action.field;
+
+                std.debug.warn("invoke = {s}\n", .{field});
+
+                // Allocate input parameters and output results
+                var in = try arena.allocator.alloc(u64, action.args.len);
+                var out = try arena.allocator.alloc(u64, expected.len);
+
+                // Initialise input parameters
+                for (action.args) |value, i| {
+                    const arg = try fmt.parseInt(u64, value.value, 10);
+                    in[i] = arg;
+                }
+
+                // Invoke the function
+                try modinst.invokeDynamic(field, in, out, .{});
+
+                // Test the result
+                for (expected) |result, i| {
+                    const result_value = try fmt.parseInt(u64, result.value, 10);
+                    if (result_value != out[i]) return error.TestsuiteTestFailure;
+                }
+            },
+            else => continue,
+        }
+    }
 }
 
 const Wast = struct {

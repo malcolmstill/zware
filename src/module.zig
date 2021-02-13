@@ -534,6 +534,83 @@ pub const ModuleInstance = struct {
         if (Result == void) return;
         return try interp.popOperand(Result);
     }
+
+    // invokeDynamic
+    //
+    // Similar to invoke, but without some type checking
+    pub fn invokeDynamic(self: *ModuleInstance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
+        // 1.
+        const index = try self.module.getExport(.Func, name);
+        if (index >= self.module.functions.items.len) return error.FuncIndexExceedsTypesLength;
+
+        const function_type_index = self.module.functions.items[index];
+
+        // 2.
+        const func_type = self.module.types.items[function_type_index];
+        const params = self.module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+        const results = self.module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+
+        if (params.len != in.len) return error.ParamCountMismatch;
+
+        // 3. check the types of params
+        // for (args) |arg, i| {
+        // if (params[i] != common.toValueType(@TypeOf(arg))) return error.ParamTypeMismatch;
+        // }
+
+        // 4. check the result type
+        if (results.len > 1) return error.OnlySingleReturnValueSupported;
+        // if (Result != void and results.len == 1) {
+        // if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
+        // }
+
+        // 5. get the function bytecode
+        const func = self.module.codes.items[index];
+
+        // 6. set up our stacks
+        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+
+        // I think everything below here should probably live in interpret
+
+        const locals_start = interp.op_stack.len;
+
+        // 7b. push params
+        for (in) |arg, i| {
+            try interp.pushOperand(u64, arg);
+        }
+
+        // 7c. push (i.e. make space for) locals
+        var i: usize = 0;
+        while (i < func.locals_count) : (i += 1) {
+            try interp.pushOperand(u64, 0);
+        }
+
+        // 7a. push control frame
+        try interp.pushFrame(Interpreter.Frame{
+            .op_stack_len = locals_start,
+            .label_stack_len = interp.label_stack.len,
+            .return_arity = results.len,
+        }, func.locals_count + params.len);
+
+        // 7a.2. push label for our implicit function block. We know we don't have
+        // any code to execute after calling invoke, but we will need to
+        // pop a Label
+        try interp.pushLabel(Interpreter.Label{
+            .return_arity = results.len,
+            .op_stack_len = locals_start,
+            .continuation = func.code[0..0],
+        });
+
+        // 8. Execute our function
+        try interp.invoke(func.code);
+
+        // 9.
+        for (out) |o, out_index| {
+            out[out_index] = try interp.popOperand(u64);
+        }
+    }
 };
 
 const Section = struct {
