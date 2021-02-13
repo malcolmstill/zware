@@ -1,6 +1,7 @@
 const std = @import("std");
 const fs = std.fs;
 const fmt = std.fmt;
+const mem = std.mem;
 const process = std.process;
 const json = std.json;
 const foxwren = @import("foxwren");
@@ -72,7 +73,7 @@ pub fn main() anyerror!void {
                 const expected = command.assert_return.expected;
                 const field = action.field;
 
-                std.debug.warn("invoke = {s}\n", .{field});
+                std.debug.warn("(result) invoke = {s}\n", .{field});
 
                 // Allocate input parameters and output results
                 var in = try arena.allocator.alloc(u64, action.args.len);
@@ -93,7 +94,44 @@ pub fn main() anyerror!void {
                     if (result_value != out[i]) {
                         std.debug.warn("Testsuite failure: {s} at test/testsuite/{s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                         std.debug.warn("result[{}], expected: {}, result: {}\n", .{ i, result_value, out[i] });
-                        return error.TestsuiteTestFailure;
+                        return error.TestsuiteTestFailureTrapResult;
+                    }
+                }
+            },
+            .assert_trap => {
+                const action = command.assert_trap.action;
+                const expected = command.assert_trap.expected;
+                const field = action.field;
+                const trap = command.assert_trap.text;
+
+                std.debug.warn("(trap) invoke = {s}\n", .{field});
+
+                // Allocate input parameters and output results
+                var in = try arena.allocator.alloc(u64, action.args.len);
+                var out = try arena.allocator.alloc(u64, expected.len);
+
+                // Initialise input parameters
+                for (action.args) |value, i| {
+                    const arg = try fmt.parseInt(u64, value.value, 10);
+                    in[i] = arg;
+                }
+
+                // Test the result
+                if (mem.eql(u8, trap, "integer divide by zero")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.DivisionByZero => continue,
+                        else => return error.TestsuiteExpectedDivideByZero,
+                    }
+                }
+
+                if (mem.eql(u8, trap, "integer overflow")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.Overflow => continue,
+                        else => return error.TestsuiteExpectedOverflow,
                     }
                 }
             },
