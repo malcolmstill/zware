@@ -119,6 +119,13 @@ const Command = union(enum) {
         action: Action,
         expected: []const Value,
     },
+    assert_trap: struct {
+        comptime @"type": []const u8 = "assert_trap",
+        line: usize,
+        action: Action,
+        text: []const u8,
+        expected: []const ValueTrap,
+    },
     assert_malformed: struct {
         comptime @"type": []const u8 = "assert_malformed",
         line: usize,
@@ -144,4 +151,8 @@ const Action = struct {
 const Value = struct {
     @"type": []const u8,
     value: []const u8,
+};
+
+const ValueTrap = struct {
+    @"type": []const u8,
 };
