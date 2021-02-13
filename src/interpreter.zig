@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const ModuleInstance = @import("module.zig").ModuleInstance;
@@ -110,7 +111,7 @@ pub const Interpreter = struct {
                 // is the continuation of code after end
                 const continuation = code[end.offset..];
 
-                const condition = try self.popOperand(i32);
+                const condition = try self.popOperand(u32);
                 if (condition == 0) {
                     // We'll skip to end
                     self.continuation = continuation;
@@ -148,14 +149,14 @@ pub const Interpreter = struct {
             .BrIf => {
                 const target = try instruction.readULEB128Mem(u32, &self.continuation);
 
-                const condition = try self.popOperand(i32);
+                const condition = try self.popOperand(u32);
                 if (condition == 0) return;
 
                 try self.branch(target);
             },
             .BrTable => {
                 const label_count = try instruction.readULEB128Mem(u32, &self.continuation);
-                const i = try self.popOperand(i32);
+                const i = try self.popOperand(u32);
 
                 var label: u32 = 0;
                 var j: usize = 0;
@@ -227,7 +228,7 @@ pub const Interpreter = struct {
             },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
-                const condition = try self.popOperand(i32);
+                const condition = try self.popOperand(u32);
 
                 const c2 = try self.popAnyOperand();
                 const c1 = try self.popAnyOperand();
@@ -285,8 +286,8 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i32, offset + address);
-                try self.pushOperand(i32, value);
+                const value = try memory.read(u32, offset + address);
+                try self.pushOperand(u32, value);
             },
             .I32Store => {
                 const frame = try self.peekNthFrame(0);
@@ -296,10 +297,10 @@ pub const Interpreter = struct {
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
 
-                const value = try self.popOperand(i32);
+                const value = try self.popOperand(u32);
                 const address = try self.popOperand(u32);
 
-                try memory.write(i32, offset + address, value);
+                try memory.write(u32, offset + address, value);
             },
             .MemoryGrow => {
                 const frame = try self.peekNthFrame(0);
@@ -312,7 +313,7 @@ pub const Interpreter = struct {
                 if (memory.grow(num_pages)) |old_size| {
                     try self.pushOperand(u32, @intCast(u32, old_size));
                 } else |err| {
-                    try self.pushOperand(i32, -1);
+                    try self.pushOperand(i32, @as(i32, -1));
                 }
             },
             .I32Const => {
@@ -320,8 +321,8 @@ pub const Interpreter = struct {
                 try self.pushOperand(i32, x);
             },
             .I64Const => {
-                const x = try instruction.readILEB128Mem(i64, &self.continuation);
-                try self.pushOperand(i64, x);
+                const x = try instruction.readULEB128Mem(u64, &self.continuation);
+                try self.pushOperand(u64, x);
             },
             .F32Const => {
                 const x = try instruction.readU32(&self.continuation);
@@ -332,57 +333,68 @@ pub const Interpreter = struct {
                 try self.pushOperand(f64, @intToFloat(f64, x));
             },
             .I32Eq => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, @as(i32, if (c1 == c2) 1 else 0));
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                std.debug.warn("c1 = {}, c2 = {}\n", .{ c1, c2 });
+                try self.pushOperand(u32, @as(u32, if (c1 == c2) 1 else 0));
             },
             .I32Eqz => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, @as(i32, if (c1 == 0) 1 else 0));
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @as(u32, if (c1 == 0) 1 else 0));
             },
             .I32LtS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
                 // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
-                try self.pushOperand(i32, @as(i32, if (c1 < c2) 1 else 0));
+                try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
             },
             .I32GeS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
                 // std.debug.warn("c1 >= c2 = {} >= {} = {}\n", .{ c1, c2, c1 >= c2 });
-                try self.pushOperand(i32, @as(i32, if (c1 >= c2) 1 else 0));
+                try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
             },
             .I32Ctz => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, @ctz(i32, c1));
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @ctz(u32, c1));
             },
             .F32Gt => {
                 const c2 = try self.popOperand(f32);
                 const c1 = try self.popOperand(f32);
-                try self.pushOperand(i32, @as(i32, if (c1 > c2) 1 else 0));
+                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
             },
             .I32Add => {
                 // TODO: does wasm wrap?
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
                 // std.debug.warn("a + b = {} + {} = {}\n", .{ a, b, a + b });
-                try self.pushOperand(i32, c1 + c2);
+                try self.pushOperand(u32, c1 +% c2);
             },
             .I32Sub => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
                 // std.debug.warn("b - a = {} - {} = {}\n", .{ b, a, b - a });
-                try self.pushOperand(i32, c1 - c2);
+                try self.pushOperand(u32, c1 -% c2);
             },
             .I32Mul => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, c1 *% c2);
+            },
+            .I32DivS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, c1 * c2);
+                try self.pushOperand(i32, try math.divTrunc(i32, c1, c2));
+            },
+            .I32DivU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, try math.divTrunc(u32, c1, c2));
             },
             .I64Add => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, c1 + c2);
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 +% c2);
             },
             .F32Add => {
                 const c2 = try self.popOperand(f32);
@@ -423,12 +435,12 @@ pub const Interpreter = struct {
         self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
 
         self.op_stack[self.op_stack.len - 1] = switch (T) {
-            i32 => @bitCast(u64, @intCast(i64, value)),
+            i32 => @as(u64, @bitCast(u32, value)),
             i64 => @bitCast(u64, value),
-            f32 => @bitCast(u64, @floatCast(f64, value)),
+            f32 => @bitCast(u64, @as(f64, value)),
             f64 => @bitCast(u64, value),
+            u32 => @as(u64, value), // TODO: figure out types
             u64 => value,
-            u32 => @intCast(u32, value), // TODO: figure out types
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
     }
@@ -440,11 +452,12 @@ pub const Interpreter = struct {
 
         const value = self.op_stack[self.op_stack.len - 1];
         return switch (T) {
-            i32 => @intCast(i32, @bitCast(i64, value)),
+            i32 => @bitCast(i32, @truncate(u32, value)),
             i64 => @bitCast(i64, value),
             f32 => @floatCast(f32, @bitCast(f64, value)),
             f64 => @bitCast(f64, value),
-            u32 => @intCast(u32, value), // TODO: figure out types
+            u32 => @truncate(u32, value), // TODO: figure out types
+            u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
     }
