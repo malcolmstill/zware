@@ -19,7 +19,7 @@ jobs:
       - name: Update apk
         run: apk update
       - name: Install wabt
-        run: apk add wabt
+        run: apk add --upgrade wabt
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
