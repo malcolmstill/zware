@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const ModuleInstance = @import("module.zig").ModuleInstance;
@@ -379,6 +380,11 @@ pub const Interpreter = struct {
                 const c2 = try self.popOperand(u32);
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, c1 *% c2);
+            },
+            .I32DivS => {
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, try math.divTrunc(i32, c1, c2));
             },
             .I64Add => {
                 const c2 = try self.popOperand(u64);
