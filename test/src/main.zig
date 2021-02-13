@@ -30,13 +30,18 @@ pub fn main() anyerror!void {
     // 1. Get .json file from command line
     var args = process.args();
     _ = args.skip();
+    const directory = args.nextPosix() orelse return error.NoFilename;
     const filename = args.nextPosix() orelse return error.NoFilename;
 
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
 
     // 2. Parse json and find .wasm file
-    const json_string = try fs.cwd().readFileAlloc(&arena.allocator, filename, 0xFFFFFFF);
+    var slices: [2][]const u8 = undefined;
+    slices[0] = directory;
+    slices[1] = filename;
+    const json_path = try mem.concat(&arena.allocator, u8, slices[0..]);
+    const json_string = try fs.cwd().readFileAlloc(&arena.allocator, json_path, 0xFFFFFFF);
 
     const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = &arena.allocator });
 
@@ -53,7 +58,9 @@ pub fn main() anyerror!void {
     }
 
     // 3. Load .wasm from file
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+    slices[1] = wasm_filename;
+    const wasm_path = try mem.concat(&arena.allocator, u8, slices[0..]);
+    const program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_path, 0xFFFFFFF);
 
     // 4. Initialise our module
     var module = Module.init(&arena.allocator, program);
