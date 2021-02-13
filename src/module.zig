@@ -775,4 +775,21 @@ test "i32 test" {
     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, -7), @as(i32, -3) }, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, 11), @as(i32, 5) }, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, 17), @as(i32, 7) }, i32, .{}));
+
+    testing.expectError(error.DivisionByZero, modinst.invoke("div_u", .{ @as(u32, 1), @as(i32, 0) }, u32, .{}));
+    testing.expectError(error.DivisionByZero, modinst.invoke("div_u", .{ @as(u32, 0), @as(i32, 0) }, u32, .{}));
+    testing.expectEqual(@as(u32, 1), try modinst.invoke("div_u", .{ @as(u32, 1), @as(i32, 1) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(u32, 0), @as(i32, 1) }, u32, .{}));
+    testing.expectEqual(@as(u32, 1), try modinst.invoke("div_u", .{ @as(i32, -1), @as(i32, -1) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(u32, 0x80000000), @as(i32, -1) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0x40000000), try modinst.invoke("div_u", .{ @as(u32, 0x80000000), @as(i32, 2) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0x8fef), try modinst.invoke("div_u", .{ @as(u32, 0x8ff00ff0), @as(i32, 0x10001) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0x20c49b), try modinst.invoke("div_u", .{ @as(u32, 0x80000001), @as(i32, 1000) }, u32, .{}));
+    testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(u32, 5), @as(i32, 2) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0x7ffffffd), try modinst.invoke("div_u", .{ @as(i32, -5), @as(i32, 2) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(i32, 5), @as(i32, -2) }, u32, .{}));
+    testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(i32, -5), @as(i32, -2) }, u32, .{}));
+    testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 7), @as(i32, 3) }, u32, .{}));
+    testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 11), @as(i32, 5) }, u32, .{}));
+    testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 17), @as(i32, 7) }, u32, .{}));
 }
