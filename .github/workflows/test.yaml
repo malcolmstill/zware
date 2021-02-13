@@ -7,6 +7,8 @@ jobs:
         os: [ubuntu-20.04]
     runs-on: ${{matrix.os}}
     steps:
+      - name: Use apt universe
+        run: sudo add-apt-repository universe
       - name: Update apt
         run: sudo apt update
       - name: Install wabt
