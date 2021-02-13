@@ -8,7 +8,7 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - name: Update apt
-        run: sudo apt-get update
+        run: sudo apt update
       - name: Install wabt
         run: sudo apt-get install wabt
       - uses: actions/checkout@v2
