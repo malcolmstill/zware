@@ -4,15 +4,11 @@ jobs:
   test:
     strategy:
       matrix:
-        os: [ubuntu-20.04]
+        os: [alpine-latest]
     runs-on: ${{matrix.os}}
     steps:
-      - name: Use apt universe
-        run: sudo add-apt-repository universe
-      - name: Update apt
-        run: sudo apt update
       - name: Install wabt
-        run: sudo apt-get install wabt
+        run: sudo apk add wabt
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
@@ -21,7 +17,7 @@ jobs:
       - run: zig build --build-file test/build.zig --prefix ./
       - run: sh test/run.sh
   lint:
-    runs-on: ubuntu-20.04
+    runs-on: alpine-latest
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
