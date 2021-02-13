@@ -17,7 +17,7 @@ jobs:
     container: alpine:latest
     steps:
       - name: Install wabt
-        run: sudo apk add wabt
+        run: apk add wabt
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
