@@ -14,12 +14,12 @@ jobs:
       - run: zig build test
   testsuite:
     runs-on: ubuntu-latest
-    container: alpine:latest
+    container: ubuntu:20.10
     steps:
-      - name: Update apk
-        run: apk update
+      - name: Update apt
+        run: sudo apt update
       - name: Install wabt
-        run: apk add --upgrade wabt
+        run: sudo apt-get install wabt
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
