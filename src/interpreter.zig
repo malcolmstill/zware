@@ -116,14 +116,24 @@ pub const Interpreter = struct {
                     // We'll skip to end
                     self.continuation = continuation;
                     // unless we have an else branch
-                    if (else_branch) |eb| self.continuation = code[eb.offset..];
-                }
+                    if (else_branch) |eb| {
+                        self.continuation = code[eb.offset..];
 
-                try self.pushLabel(Label{
-                    .return_arity = if (block_type == 0x40) 0 else 1,
-                    .op_stack_len = self.op_stack.len,
-                    .continuation = continuation,
-                });
+                        // We are inside the if branch
+                        try self.pushLabel(Label{
+                            .return_arity = if (block_type == 0x40) 0 else 1,
+                            .op_stack_len = self.op_stack.len,
+                            .continuation = continuation,
+                        });
+                    }
+                } else {
+                    // We are inside the if branch
+                    try self.pushLabel(Label{
+                        .return_arity = if (block_type == 0x40) 0 else 1,
+                        .op_stack_len = self.op_stack.len,
+                        .continuation = continuation,
+                    });
+                }
             },
             .Else => {
                 // If we hit else, it's because we've hit the end of if
@@ -140,7 +150,10 @@ pub const Interpreter = struct {
                 // call we push a label containing a continuation which is the code to
                 // resume after the call has returned. We want to use that if we've run
                 // out of code in the current function, i.e. self.continuation is empty
-                if (self.continuation.len == 0) self.continuation = label.continuation;
+                if (self.continuation.len == 0) {
+                    self.continuation = label.continuation;
+                    _ = try self.popFrame();
+                }
             },
             .Br => {
                 const target = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -255,7 +268,10 @@ pub const Interpreter = struct {
                 const value = try self.popAnyOperand();
                 const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                // TODO: debug build only for return error:
+                if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
                 frame.locals[local_index] = value;
+                try self.pushAnyOperand(value);
                 try self.pushAnyOperand(value);
             },
             .GlobalGet => {
