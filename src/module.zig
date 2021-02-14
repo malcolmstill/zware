@@ -16,6 +16,7 @@ const Code = @import("common.zig").Code;
 const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
+const instruction = @import("instruction.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("interpreter/store.zig").Store;
 
@@ -364,19 +365,22 @@ pub const Module = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const mem_idx = try leb.readULEB128(u32, rd);
-            const instr = try rd.readEnum(Instruction, .Little);
-            const mem_offset = try leb.readULEB128(u32, rd);
+
+            const expr_start = rd.context.pos;
+            const expr = self.module[expr_start..];
+            const meta = try instruction.findExprEnd(expr);
+
+            try rd.skipBytes(meta.offset, .{});
             const data_length = try leb.readULEB128(u32, rd);
 
             const offset = rd.context.pos;
+
             try rd.skipBytes(data_length, .{});
-            const data = self.module[offset..rd.context.pos];
 
             try self.datas.append(Data{
                 .mem_idx = mem_idx,
-                .instr = instr,
-                .mem_offset = mem_offset,
-                .data = data,
+                .offset = self.module[expr_start .. expr_start + meta.offset],
+                .data = self.module[offset..rd.context.pos],
             });
         }
 
@@ -415,14 +419,36 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn instantiate(self: *Module, store: *Store) !ModuleInstance {
+    pub fn instantiate(self: *Module) !ModuleInstance {
+        var store = Store.init(self.alloc);
         var inst = ModuleInstance{
             .module = self,
             .store = store,
         };
 
+        // 2. Initialise globals
         const globals_count = self.globals.items.len;
         try inst.store.allocGlobals(globals_count);
+
+        // 3. Initialise memories
+        const memories_count = self.memories.items.len;
+        try inst.store.addMemories(memories_count);
+
+        for (self.memories.items) |memory_definition, i| {
+            _ = try inst.store.memories.items[i].grow(memory_definition.min);
+            inst.store.memories.items[i].max_size = memory_definition.max;
+        }
+
+        // 4. Initialise memories with data
+        for (self.datas.items) |data, i| {
+            // TODO: validate mem_idx
+            const memory = inst.store.memories.items[data.mem_idx].asSlice();
+            const data_len = data.data.len;
+
+            // TODO: execute rather than take middle byte
+            const offset = data.offset[1];
+            mem.copy(u8, memory[offset .. offset + data_len], data.data);
+        }
 
         return inst;
     }
@@ -450,7 +476,7 @@ const InterpreterOptions = struct {
 
 pub const ModuleInstance = struct {
     module: *Module,
-    store: *Store,
+    store: Store,
 
     // invoke:
     //  1. Lookup our function by name with getExport
@@ -650,12 +676,7 @@ test "module loading (simple add function)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
@@ -670,12 +691,7 @@ test "module loading (fib)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
@@ -695,12 +711,7 @@ test "module loading (fact)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
@@ -708,165 +719,3 @@ test "module loading (fact)" {
     testing.expectEqual(@as(i32, 24), try modinst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
     testing.expectEqual(@as(i32, 479001600), try modinst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }
-
-// test "block test" {
-//     const ArenaAllocator = std.heap.ArenaAllocator;
-//     var arena = ArenaAllocator.init(testing.allocator);
-//     defer _ = arena.deinit();
-
-//     const bytes = @embedFile("../test/testsuite/block.wasm");
-
-//     var module = Module.init(&arena.allocator, bytes);
-//     try module.decode();
-
-//     var store = Store.init(&arena.allocator);
-//     var mem0 = try store.addMemory();
-//     _ = try mem0.grow(1);
-
-//     var modinst = try module.instantiate(&store);
-
-//     try modinst.invoke("empty", .{}, void, .{});
-//     testing.expectEqual(@as(i32, 7), try modinst.invoke("singular", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 8), try modinst.invoke("multi", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 9), try modinst.invoke("nested", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 150), try modinst.invoke("deep", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-select-first", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-mid", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-select-last", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-first", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-mid", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-loop-last", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-if-then", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-if-else", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_if-first", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_if-last", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br_table-first", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("as-br_table-last", .{}, i32, .{}));
-
-//     // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-first", .{}, i32, .{}));
-//     // TODO: callindirect testing.expectEqual(@as(i32, 2), try modinst.invoke("as-call_indirect-mid", .{}, i32, .{}));
-//     // TODO: callindirect testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call_indirect-last", .{}, i32, .{}));
-
-//     try modinst.invoke("as-store-first", .{}, void, .{});
-//     try modinst.invoke("as-store-last", .{}, void, .{});
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-memory.grow-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-call-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-return-value", .{}, i32, .{}));
-//     try modinst.invoke("as-drop-operand", .{}, void, .{});
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-br-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.set-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-local.tee-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-global.set-value", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("as-load-operand", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("as-unary-operand", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 12), try modinst.invoke("as-binary-operand", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("as-test-operand", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("as-compare-operand", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 12), try modinst.invoke("as-binary-operands", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("as-compare-operands", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 27), try modinst.invoke("as-mixed-operands", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 19), try modinst.invoke("break-bare", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 18), try modinst.invoke("break-value", .{}, i32, .{}));
-//     // TODO: multi-value testing.expectEqual(@as(i32, 18), try modinst.invoke("break-multie-value", .{}, .{ i32, i32, i64 }, .{}));
-//     testing.expectEqual(@as(i32, 18), try modinst.invoke("break-repeated", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 0xf), try modinst.invoke("break-inner", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("param", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("params", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("param-break", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("params-break", .{}, i32, .{}));
-//     testing.expectEqual(@as(i32, 3), try modinst.invoke("params-id-break", .{}, i32, .{}));
-
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("effects", .{}, u32, .{}));
-//     try modinst.invoke("type-use", .{}, void, .{});
-// }
-
-// test "i32 test" {
-//     const ArenaAllocator = std.heap.ArenaAllocator;
-//     var arena = ArenaAllocator.init(testing.allocator);
-//     defer _ = arena.deinit();
-
-//     const bytes = @embedFile("../test/testsuite/i32.wasm");
-
-//     var module = Module.init(&arena.allocator, bytes);
-//     try module.decode();
-
-//     var store = Store.init(&arena.allocator);
-//     var mem0 = try store.addMemory();
-//     _ = try mem0.grow(1);
-
-//     var modinst = try module.instantiate(&store);
-
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("add", .{ @as(i32, 1), @as(i32, 1) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("add", .{ @as(i32, 1), @as(i32, 0) }, i32, .{}));
-//     testing.expectEqual(@as(i32, -2), try modinst.invoke("add", .{ @as(i32, -1), @as(i32, -1) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("add", .{ @as(i32, -1), @as(i32, 1) }, i32, .{}));
-//     testing.expectEqual(@as(u32, 0x80000000), try modinst.invoke("add", .{ @as(i32, 0x7fffffff), @as(u32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("add", .{ @as(u32, 0x80000000), @as(u32, 0x80000000) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 0x40000000), try modinst.invoke("add", .{ @as(u32, 0x3fffffff), @as(u32, 1) }, i32, .{}));
-
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("sub", .{ @as(u32, 1), @as(u32, 1) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("sub", .{ @as(u32, 1), @as(u32, 0) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("sub", .{ @as(i32, -1), @as(i32, -1) }, i32, .{}));
-//     testing.expectEqual(@as(u32, 0x80000000), try modinst.invoke("sub", .{ @as(i32, 0x7fffffff), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x7fffffff), try modinst.invoke("sub", .{ @as(u32, 0x80000000), @as(i32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("sub", .{ @as(u32, 0x80000000), @as(u32, 0x80000000) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x40000000), try modinst.invoke("sub", .{ @as(u32, 0x3fffffff), @as(i32, -1) }, u32, .{}));
-
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("mul", .{ @as(u32, 1), @as(u32, 1) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 0), try modinst.invoke("mul", .{ @as(u32, 1), @as(u32, 0) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 1), try modinst.invoke("mul", .{ @as(i32, -1), @as(i32, -1) }, i32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("mul", .{ @as(i32, 0x10000000), @as(i32, 4096) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("mul", .{ @as(u32, 0x80000000), @as(i32, 0) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x80000000), try modinst.invoke("mul", .{ @as(u32, 0x80000000), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x80000001), try modinst.invoke("mul", .{ @as(u32, 0x7fffffff), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x358e7470), try modinst.invoke("mul", .{ @as(u32, 0x01234567), @as(i32, 0x76543210) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("mul", .{ @as(u32, 0x7fffffff), @as(i32, 0x7fffffff) }, u32, .{}));
-
-//     testing.expectError(error.DivisionByZero, modinst.invoke("div_s", .{ @as(u32, 1), @as(i32, 0) }, u32, .{}));
-//     testing.expectError(error.DivisionByZero, modinst.invoke("div_s", .{ @as(u32, 0), @as(i32, 0) }, u32, .{}));
-//     testing.expectError(error.Overflow, modinst.invoke("div_s", .{ @as(u32, 0x80000000), @as(i32, -1) }, u32, .{}));
-//     testing.expectError(error.DivisionByZero, modinst.invoke("div_s", .{ @as(u32, 0x80000000), @as(i32, 0) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("div_s", .{ @as(u32, 1), @as(i32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_s", .{ @as(u32, 0), @as(i32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_s", .{ @as(u32, 0), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("div_s", .{ @as(i32, -1), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0xc0000000), try modinst.invoke("div_s", .{ @as(u32, 0x80000000), @as(i32, 2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0xffdf3b65), try modinst.invoke("div_s", .{ @as(u32, 0x80000001), @as(i32, 1000) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 2), try modinst.invoke("div_s", .{ @as(u32, 5), @as(i32, 2) }, u32, .{}));
-//     testing.expectEqual(@as(i32, -2), try modinst.invoke("div_s", .{ @as(i32, -5), @as(i32, 2) }, i32, .{}));
-//     testing.expectEqual(@as(i32, -2), try modinst.invoke("div_s", .{ @as(i32, 5), @as(i32, -2) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, -5), @as(i32, -2) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, 7), @as(i32, 3) }, i32, .{}));
-//     testing.expectEqual(@as(i32, -2), try modinst.invoke("div_s", .{ @as(i32, -7), @as(i32, 3) }, i32, .{}));
-//     testing.expectEqual(@as(i32, -2), try modinst.invoke("div_s", .{ @as(i32, 7), @as(i32, -3) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, -7), @as(i32, -3) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, 11), @as(i32, 5) }, i32, .{}));
-//     testing.expectEqual(@as(i32, 2), try modinst.invoke("div_s", .{ @as(i32, 17), @as(i32, 7) }, i32, .{}));
-
-//     testing.expectError(error.DivisionByZero, modinst.invoke("div_u", .{ @as(u32, 1), @as(i32, 0) }, u32, .{}));
-//     testing.expectError(error.DivisionByZero, modinst.invoke("div_u", .{ @as(u32, 0), @as(i32, 0) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("div_u", .{ @as(u32, 1), @as(i32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(u32, 0), @as(i32, 1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 1), try modinst.invoke("div_u", .{ @as(i32, -1), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(u32, 0x80000000), @as(i32, -1) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x40000000), try modinst.invoke("div_u", .{ @as(u32, 0x80000000), @as(i32, 2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x8fef), try modinst.invoke("div_u", .{ @as(u32, 0x8ff00ff0), @as(i32, 0x10001) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x20c49b), try modinst.invoke("div_u", .{ @as(u32, 0x80000001), @as(i32, 1000) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(u32, 5), @as(i32, 2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0x7ffffffd), try modinst.invoke("div_u", .{ @as(i32, -5), @as(i32, 2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(i32, 5), @as(i32, -2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 0), try modinst.invoke("div_u", .{ @as(i32, -5), @as(i32, -2) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 7), @as(i32, 3) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 11), @as(i32, 5) }, u32, .{}));
-//     testing.expectEqual(@as(u32, 2), try modinst.invoke("div_u", .{ @as(i32, 17), @as(i32, 7) }, u32, .{}));
-// }

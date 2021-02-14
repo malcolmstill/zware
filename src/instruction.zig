@@ -74,6 +74,20 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     return error.CouldntFindEnd;
 }
 
+pub fn findExprEnd(code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
+        if (i == 0) return meta;
+
+        switch (meta.instruction) {
+            .End => i -= 1,
+            else => {},
+        }
+    }
+    return error.CouldntFindEnd;
+}
+
 // findElse
 //
 // Similar to findEnd but finds the match else branch, if

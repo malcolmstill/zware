@@ -19,6 +19,10 @@ pub const Store = struct {
         return store;
     }
 
+    pub fn addMemories(self: *Store, count: usize) !void {
+        try self.memories.appendNTimes(Memory.init(self.alloc), count);
+    }
+
     pub fn addMemory(self: *Store) !*Memory {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
@@ -53,6 +57,7 @@ pub const Memory = struct {
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
+        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * old_size + num_pages * PAGE_SIZE], 0);
         return old_size;
     }
 
@@ -62,7 +67,26 @@ pub const Memory = struct {
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
 
-        return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+        switch (T) {
+            u8,
+            u16,
+            u32,
+            u64,
+            i8,
+            i16,
+            i32,
+            i64,
+            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little),
+            f32 => {
+                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                return @bitCast(f32, x);
+            },
+            f64 => {
+                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                return @bitCast(f64, x);
+            },
+            else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
+        }
     }
 
     pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
@@ -72,6 +96,13 @@ pub const Memory = struct {
         const offset: u32 = address % PAGE_SIZE;
 
         std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little);
+    }
+
+    pub fn asSlice(self: *Memory) []u8 {
+        var slice: []u8 = undefined;
+        slice.ptr = if (self.data.items.len > 0) @ptrCast([*]u8, &self.data.items[0][0]) else undefined;
+        slice.len = PAGE_SIZE * self.data.items.len;
+        return slice;
     }
 };
 
@@ -83,15 +114,17 @@ test "Memory test" {
 
     var store = Store.init(&arena.allocator);
     var mem0 = try store.addMemory();
+    testing.expectEqual(@as(usize, 0), mem0.asSlice().len);
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 1), mem0.size());
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0xAAAAAAAA), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0));
+    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0));
     try mem0.write(u8, 0, 15);
     testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0xAAAAAA0F), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0));
 
     try mem0.write(u8, 0xFFFF, 42);
     testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
@@ -99,10 +132,20 @@ test "Memory test" {
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 2), mem0.size());
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0x1FFFF));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0xFFFF + 1));
+    // Write across page boundary
+    try mem0.write(u16, 0xFFFF, 0xDEAD);
+    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0xFFFF));
+    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0xFFFF));
+    const slice = mem0.asSlice();
+    testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
+    testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
+
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
 
     mem0.max_size = 2;
@@ -111,4 +154,6 @@ test "Memory test" {
     mem0.max_size = null;
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 3), mem0.size());
+
+    testing.expectEqual(@as(usize, 3 * PAGE_SIZE), mem0.asSlice().len);
 }

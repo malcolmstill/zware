@@ -6,7 +6,9 @@ const process = std.process;
 const json = std.json;
 const foxwren = @import("foxwren");
 const Module = foxwren.Module;
+const ModuleInstance = foxwren.ModuleInstance;
 const Store = foxwren.Store;
+const Memory = foxwren.Memory;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 
@@ -23,14 +25,13 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
 
 pub fn main() anyerror!void {
-    std.log.info("Beginning roll program...", .{});
-
     defer _ = gpa.deinit();
 
     // 1. Get .json file from command line
     var args = process.args();
     _ = args.skip();
     const filename = args.nextPosix() orelse return error.NoFilename;
+    std.log.info("testing: {s}", .{filename});
 
     var arena = ArenaAllocator.init(&gpa.allocator);
     defer _ = arena.deinit();
@@ -42,38 +43,30 @@ pub fn main() anyerror!void {
 
     // 2.a. Find the wasm file
     var wasm_filename: []const u8 = undefined;
+    var program: []const u8 = undefined;
+    var module: Module = undefined;
+    var store: Store = undefined;
+    var mem0: *Memory = undefined;
+    var modinst: ModuleInstance = undefined;
+
     for (r.commands) |command| {
         switch (command) {
             .module => {
                 wasm_filename = command.module.filename;
-                break;
+
+                // 3. Load .wasm from file
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+
+                // 4. Initialise our module
+                module = Module.init(&arena.allocator, program);
+                try module.decode();
+
+                modinst = try module.instantiate();
             },
-            else => continue,
-        }
-    }
-
-    // 3. Load .wasm from file
-    const program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
-
-    // 4. Initialise our module
-    var module = Module.init(&arena.allocator, program);
-    try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
-
-    // 5. Loop over assert_return's and assert_trap's
-    for (r.commands) |command| {
-        switch (command) {
             .assert_return => {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
-
-                std.debug.warn("(result) invoke = {s}\n", .{field});
 
                 // Allocate input parameters and output results
                 var in = try arena.allocator.alloc(u64, action.args.len);
@@ -87,6 +80,7 @@ pub fn main() anyerror!void {
 
                 // Invoke the function
                 modinst.invokeDynamic(field, in, out, .{}) catch |err| {
+                    std.debug.warn("(result) invoke = {s}\n", .{field});
                     std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                     return err;
                 };
@@ -95,6 +89,7 @@ pub fn main() anyerror!void {
                 for (expected) |result, i| {
                     const result_value = try fmt.parseInt(u64, result.value, 10);
                     if (result_value != out[i]) {
+                        std.debug.warn("(result) invoke = {s}\n", .{field});
                         std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                         std.debug.warn("result[{}], expected: {}, result: {}\n", .{ i, result_value, out[i] });
                         return error.TestsuiteTestFailureTrapResult;
@@ -107,7 +102,9 @@ pub fn main() anyerror!void {
                 const field = action.field;
                 const trap = command.assert_trap.text;
 
-                std.debug.warn("(trap) invoke = {s}\n", .{field});
+                errdefer {
+                    std.debug.warn("(trap) invoke = {s}\n", .{field});
+                }
 
                 // Allocate input parameters and output results
                 var in = try arena.allocator.alloc(u64, action.args.len);
