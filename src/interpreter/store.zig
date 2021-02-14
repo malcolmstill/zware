@@ -77,6 +77,13 @@ pub const Memory = struct {
 
         std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little);
     }
+
+    pub fn asSlice(self: *Memory) []u8 {
+        var slice: []u8 = undefined;
+        slice.ptr = if (self.data.items.len > 0) @ptrCast([*]u8, &self.data.items[0][0]) else undefined;
+        slice.len = PAGE_SIZE * self.data.items.len;
+        return slice;
+    }
 };
 
 const testing = std.testing;
@@ -87,8 +94,10 @@ test "Memory test" {
 
     var store = Store.init(&arena.allocator);
     var mem0 = try store.addMemory();
+    testing.expectEqual(@as(usize, 0), mem0.asSlice().len);
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 1), mem0.size());
 
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0));
@@ -103,9 +112,19 @@ test "Memory test" {
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
+    testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 2), mem0.size());
 
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
+    // Write across page boundary
+    try mem0.write(u16, 0xFFFF, 0xDEAD);
+    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0xFFFF));
+    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0xFFFF));
+    const slice = mem0.asSlice();
+    testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
+    testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
+
     testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0x1FFFF));
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
 
@@ -115,4 +134,6 @@ test "Memory test" {
     mem0.max_size = null;
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 3), mem0.size());
+
+    testing.expectEqual(@as(usize, 3 * PAGE_SIZE), mem0.asSlice().len);
 }
