@@ -67,7 +67,26 @@ pub const Memory = struct {
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
 
-        return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+        switch (T) {
+            u8,
+            u16,
+            u32,
+            u64,
+            i8,
+            i16,
+            i32,
+            i64,
+            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little),
+            f32 => {
+                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                return @bitCast(f32, x);
+            },
+            f64 => {
+                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                return @bitCast(f64, x);
+            },
+            else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
+        }
     }
 
     pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
