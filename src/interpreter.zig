@@ -386,6 +386,65 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
             },
+            .I64Eq => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
+            },
+            .I64Ne => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
+            },
+            .I64Eqz => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 == 0) 1 else 0));
+            },
+            .I64LtS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+            },
+            .I64LtU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+            },
+            .I64GtS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+            },
+            .I64GtU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+            },
+            .I64LeS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+            },
+            .I64LeU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+            },
+            .I64GeS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+            },
+            .I64GeU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+            },
+            .F32Gt => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+            },
             .I32Clz => {
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, @clz(u32, c1));
@@ -398,22 +457,14 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, @popCount(u32, c1));
             },
-            .F32Gt => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
-            },
             .I32Add => {
-                // TODO: does wasm wrap?
                 const c2 = try self.popOperand(u32);
                 const c1 = try self.popOperand(u32);
-                // std.debug.warn("a + b = {} + {} = {}\n", .{ a, b, a + b });
                 try self.pushOperand(u32, c1 +% c2);
             },
             .I32Sub => {
                 const c2 = try self.popOperand(u32);
                 const c1 = try self.popOperand(u32);
-                // std.debug.warn("b - a = {} - {} = {}\n", .{ b, a, b - a });
                 try self.pushOperand(u32, c1 -% c2);
             },
             .I32Mul => {
@@ -481,10 +532,92 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, math.rotr(u32, c1, c2 % 32));
             },
+            .I64Clz => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @clz(u64, c1));
+            },
+            .I64Ctz => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @ctz(u64, c1));
+            },
+            .I64Popcnt => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @popCount(u64, c1));
+            },
             .I64Add => {
                 const c2 = try self.popOperand(u64);
                 const c1 = try self.popOperand(u64);
                 try self.pushOperand(u64, c1 +% c2);
+            },
+            .I64Sub => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 -% c2);
+            },
+            .I64Mul => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 *% c2);
+            },
+            .I64DivS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, try math.divTrunc(i64, c1, c2));
+            },
+            .I64DivU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, try math.divTrunc(u64, c1, c2));
+            },
+            .I64RemS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, try math.rem(i64, c1, try math.absInt(c2)));
+            },
+            .I64RemU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, try math.rem(u64, c1, c2));
+            },
+            .I64And => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 & c2);
+            },
+            .I64Or => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 | c2);
+            },
+            .I64Xor => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, c1 ^ c2);
+            },
+            .I64Shl => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, math.shl(u64, c1, c2 % 64));
+            },
+            .I64ShrS => {
+                const c2 = try self.popOperand(i64);
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, math.shr(i64, c1, try math.mod(i64, c2, 64)));
+            },
+            .I64ShrU => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, math.shr(u64, c1, c2 % 64));
+            },
+            .I64Rotl => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, math.rotl(u64, c1, c2 % 64));
+            },
+            .I64Rotr => {
+                const c2 = try self.popOperand(u64);
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, math.rotr(u64, c1, c2 % 64));
             },
             .F32Add => {
                 const c2 = try self.popOperand(f32);
@@ -503,6 +636,18 @@ pub const Interpreter = struct {
             .I32Extend16S => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(i32, @truncate(i16, c1));
+            },
+            .I64Extend8S => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, @truncate(i8, c1));
+            },
+            .I64Extend16S => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, @truncate(i16, c1));
+            },
+            .I64Extend32S => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, @truncate(i32, c1));
             },
             else => {
                 std.debug.warn("unimplemented instruction: {}\n", .{opcode});
