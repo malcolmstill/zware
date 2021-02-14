@@ -1070,6 +1070,10 @@ pub const Interpreter = struct {
                     try self.pushOperand(f64, math.max(c1, c2));
                 }
             },
+            .I64TruncF64S => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(i64, @floatToInt(i64, c1));
+            },
             .F64ConvertI32S => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(f64, @intToFloat(f64, c1));
