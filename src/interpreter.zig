@@ -862,10 +862,101 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u64);
                 try self.pushOperand(u64, math.rotr(u64, c1, c2 % 64));
             },
+            .F32Ceil => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, @ceil(c1));
+            },
+            .F32Floor => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, @floor(c1));
+            },
+            .F32Trunc => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, @trunc(c1));
+            },
+            .F32Nearest => {
+                const c1 = try self.popOperand(f32);
+                if (c1 < 0.0 and c1 >= -0.5) {
+                    try self.pushOperand(u32, 0x80000000);
+                    return;
+                }
+                if (c1 > 0.0 and c1 <= 0.5) {
+                    try self.pushOperand(f32, 0.0);
+                    return;
+                }
+                try self.pushOperand(f32, @round(c1));
+            },
+            .F32Sqrt => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, math.sqrt(c1));
+            },
             .F32Add => {
                 const c2 = try self.popOperand(f32);
                 const c1 = try self.popOperand(f32);
                 try self.pushOperand(f32, c1 + c2);
+            },
+            .F32Sub => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, c1 - c2);
+            },
+            .F32Mul => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, c1 * c2);
+            },
+            .F32Div => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, c1 / c2);
+            },
+            .F32Min => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+
+                if (math.isNan(c1)) {
+                    try self.pushOperand(f32, math.nan_f32);
+                    return;
+                }
+                if (math.isNan(c2)) {
+                    try self.pushOperand(f32, math.nan_f32);
+                    return;
+                }
+
+                // There's surely a better way of doing this
+                if (c1 == 0.0 and c2 == 0.0) {
+                    if (@bitCast(u32, c1) == 0x80000000) {
+                        try self.pushOperand(f32, c1);
+                    } else {
+                        try self.pushOperand(f32, c2);
+                    }
+                } else {
+                    try self.pushOperand(f32, math.min(c1, c2));
+                }
+            },
+            .F32Max => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+
+                if (math.isNan(c1)) {
+                    try self.pushOperand(f32, math.nan_f32);
+                    return;
+                }
+                if (math.isNan(c2)) {
+                    try self.pushOperand(f32, math.nan_f32);
+                    return;
+                }
+
+                // There's surely a better way of doing this
+                if (c1 == 0.0 and c2 == 0.0) {
+                    if (@bitCast(u32, c1) == 0x80000000) {
+                        try self.pushOperand(f32, c2);
+                    } else {
+                        try self.pushOperand(f32, c1);
+                    }
+                } else {
+                    try self.pushOperand(f32, math.max(c1, c2));
+                }
             },
             .F64Add => {
                 const c2 = try self.popOperand(f64);
