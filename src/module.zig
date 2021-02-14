@@ -661,12 +661,7 @@ test "module loading (simple add function)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
@@ -681,12 +676,7 @@ test "module loading (fib)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
@@ -706,12 +696,7 @@ test "module loading (fact)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    _ = try mem0.grow(1);
-
-    var modinst = try module.instantiate(&store);
+    var modinst = try module.instantiate();
 
     testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
