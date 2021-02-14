@@ -958,10 +958,101 @@ pub const Interpreter = struct {
                     try self.pushOperand(f32, math.max(c1, c2));
                 }
             },
+            .F64Ceil => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, @ceil(c1));
+            },
+            .F64Floor => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, @floor(c1));
+            },
+            .F64Trunc => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, @trunc(c1));
+            },
+            .F64Nearest => {
+                const c1 = try self.popOperand(f64);
+                if (c1 < 0.0 and c1 >= -0.5) {
+                    try self.pushOperand(u64, 0x8000000000000000);
+                    return;
+                }
+                if (c1 > 0.0 and c1 <= 0.5) {
+                    try self.pushOperand(f64, 0.0);
+                    return;
+                }
+                try self.pushOperand(f64, @round(c1));
+            },
+            .F64Sqrt => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, math.sqrt(c1));
+            },
             .F64Add => {
                 const c2 = try self.popOperand(f64);
                 const c1 = try self.popOperand(f64);
                 try self.pushOperand(f64, c1 + c2);
+            },
+            .F64Sub => {
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, c1 - c2);
+            },
+            .F64Mul => {
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, c1 * c2);
+            },
+            .F64Div => {
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, c1 / c2);
+            },
+            .F64Min => {
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+
+                if (math.isNan(c1)) {
+                    try self.pushOperand(f64, math.nan_f64);
+                    return;
+                }
+                if (math.isNan(c2)) {
+                    try self.pushOperand(f64, math.nan_f64);
+                    return;
+                }
+
+                // There's surely a better way of doing this
+                if (c1 == 0.0 and c2 == 0.0) {
+                    if (@bitCast(u64, c1) == 0x8000000000000000) {
+                        try self.pushOperand(f64, c1);
+                    } else {
+                        try self.pushOperand(f64, c2);
+                    }
+                } else {
+                    try self.pushOperand(f64, math.min(c1, c2));
+                }
+            },
+            .F64Max => {
+                const c2 = try self.popOperand(f64);
+                const c1 = try self.popOperand(f64);
+
+                if (math.isNan(c1)) {
+                    try self.pushOperand(f64, math.nan_f64);
+                    return;
+                }
+                if (math.isNan(c2)) {
+                    try self.pushOperand(f64, math.nan_f64);
+                    return;
+                }
+
+                // There's surely a better way of doing this
+                if (c1 == 0.0 and c2 == 0.0) {
+                    if (@bitCast(u64, c1) == 0x8000000000000000) {
+                        try self.pushOperand(f64, c2);
+                    } else {
+                        try self.pushOperand(f64, c1);
+                    }
+                } else {
+                    try self.pushOperand(f64, math.max(c1, c2));
+                }
             },
             .F64ReinterpretI64 => {
                 const c1 = try self.popOperand(f64);
