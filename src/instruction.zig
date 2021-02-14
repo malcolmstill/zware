@@ -31,9 +31,15 @@ pub const InstructionIterator = struct {
             .Call,
             .Br,
             .BrIf,
-            .BrTable,
             .Block,
             => _ = try readULEB128Mem(u32, &self.code),
+            .BrTable => {
+                const label_count = try readULEB128Mem(u32, &self.code);
+                var j: usize = 0;
+                while (j < label_count + 1) : (j += 1) {
+                    const tmp_label = try readULEB128Mem(u32, &self.code);
+                }
+            },
             .F32Const, .F64Const => self.code = self.code[4..],
             else => {},
         }
@@ -85,7 +91,7 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
             else => {},
         }
     }
-    return error.CouldntFindEnd;
+    return error.CouldntFindExprEnd;
 }
 
 // findElse
