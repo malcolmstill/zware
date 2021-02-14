@@ -286,7 +286,6 @@ pub const Interpreter = struct {
                 if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
                 frame.locals[local_index] = value;
                 try self.pushAnyOperand(value);
-                try self.pushAnyOperand(value);
             },
             .GlobalGet => {
                 // 1. Get index of global from immediate
