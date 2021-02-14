@@ -1144,6 +1144,10 @@ pub const Interpreter = struct {
                     try self.pushOperand(f64, math.max(c1, c2));
                 }
             },
+            .I32WrapI64 => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i32, @truncate(i32, c1));
+            },
             .I64TruncF64S => {
                 const c1 = try self.popOperand(f64);
                 try self.pushOperand(i64, @floatToInt(i64, c1));
