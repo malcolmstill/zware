@@ -944,7 +944,7 @@ pub const Interpreter = struct {
         return switch (T) {
             i32 => @bitCast(i32, @truncate(u32, value)),
             i64 => @bitCast(i64, value),
-            f32 => @floatCast(f32, @bitCast(f64, value)),
+            f32 => @bitCast(f32, @truncate(u32, value)),
             f64 => @bitCast(f64, value),
             u32 => @truncate(u32, value), // TODO: figure out types
             u64 => value,
