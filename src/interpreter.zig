@@ -539,11 +539,11 @@ pub const Interpreter = struct {
             },
             .F32Const => {
                 const x = try instruction.readU32(&self.continuation);
-                try self.pushOperand(f32, @intToFloat(f32, x));
+                try self.pushOperand(f32, @bitCast(f32, x));
             },
             .F64Const => {
                 const x = try instruction.readU64(&self.continuation);
-                try self.pushOperand(f64, @intToFloat(f64, x));
+                try self.pushOperand(f64, @bitCast(f64, x));
             },
             .I32Eq => {
                 const c2 = try self.popOperand(u32);
@@ -927,7 +927,7 @@ pub const Interpreter = struct {
         self.op_stack[self.op_stack.len - 1] = switch (T) {
             i32 => @as(u64, @bitCast(u32, value)),
             i64 => @bitCast(u64, value),
-            f32 => @bitCast(u64, @as(f64, value)),
+            f32 => @as(u64, @bitCast(u32, value)),
             f64 => @bitCast(u64, value),
             u32 => @as(u64, value), // TODO: figure out types
             u64 => value,
@@ -944,7 +944,7 @@ pub const Interpreter = struct {
         return switch (T) {
             i32 => @bitCast(i32, @truncate(u32, value)),
             i64 => @bitCast(i64, value),
-            f32 => @floatCast(f32, @bitCast(f64, value)),
+            f32 => @bitCast(f32, @truncate(u32, value)),
             f64 => @bitCast(f64, value),
             u32 => @truncate(u32, value), // TODO: figure out types
             u64 => value,

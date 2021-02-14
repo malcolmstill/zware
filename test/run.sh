@@ -16,3 +16,6 @@ bin/testrunner i64.json || exit 1
 
 wast2json test/testsuite/memory.wast || exit 1
 bin/testrunner memory.json || exit 1
+
+wast2json test/testsuite/const.wast || exit 1
+bin/testrunner const.json || exit 1
