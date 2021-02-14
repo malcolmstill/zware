@@ -57,6 +57,7 @@ pub const Memory = struct {
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
+        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * old_size + num_pages * PAGE_SIZE], 0);
         return old_size;
     }
 
@@ -100,11 +101,11 @@ test "Memory test" {
     testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 1), mem0.size());
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0xAAAAAAAA), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0));
+    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0));
     try mem0.write(u8, 0, 15);
     testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0xAAAAAA0F), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0));
 
     try mem0.write(u8, 0xFFFF, 42);
     testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
@@ -115,7 +116,7 @@ test "Memory test" {
     testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 2), mem0.size());
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0xFFFF + 1));
     // Write across page boundary
     try mem0.write(u16, 0xFFFF, 0xDEAD);
     testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0xFFFF));
@@ -125,7 +126,7 @@ test "Memory test" {
     testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
     testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 
-    testing.expectEqual(@as(u8, 0xAA), try mem0.read(u8, 0x1FFFF));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
     testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
 
     mem0.max_size = 2;
