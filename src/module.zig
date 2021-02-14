@@ -18,7 +18,7 @@ const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
-const Store = @import("interpreter/store.zig").Store;
+const Store = @import("store.zig").Store;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
