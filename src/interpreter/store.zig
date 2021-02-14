@@ -19,6 +19,10 @@ pub const Store = struct {
         return store;
     }
 
+    pub fn addMemories(self: *Store, count: usize) !void {
+        try self.memories.appendNTimes(Memory.init(self.alloc), count);
+    }
+
     pub fn addMemory(self: *Store) !*Memory {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);

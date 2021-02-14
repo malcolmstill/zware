@@ -415,14 +415,25 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn instantiate(self: *Module, store: *Store) !ModuleInstance {
+    pub fn instantiate(self: *Module) !ModuleInstance {
+        var store = Store.init(self.alloc);
         var inst = ModuleInstance{
             .module = self,
             .store = store,
         };
 
+        // 2. Initialise globals
         const globals_count = self.globals.items.len;
         try inst.store.allocGlobals(globals_count);
+
+        // 3. Initialise memories
+        const memories_count = self.memories.items.len;
+        try inst.store.addMemories(memories_count);
+
+        for (self.memories.items) |memory_definition, i| {
+            _ = try inst.store.memories.items[i].grow(memory_definition.min);
+            inst.store.memories.items[i].max_size = memory_definition.max;
+        }
 
         return inst;
     }
@@ -450,7 +461,7 @@ const InterpreterOptions = struct {
 
 pub const ModuleInstance = struct {
     module: *Module,
-    store: *Store,
+    store: Store,
 
     // invoke:
     //  1. Lookup our function by name with getExport

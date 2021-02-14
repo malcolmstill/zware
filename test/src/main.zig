@@ -61,11 +61,7 @@ pub fn main() anyerror!void {
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                store = Store.init(&arena.allocator);
-                mem0 = try store.addMemory();
-                _ = try mem0.grow(1);
-
-                modinst = try module.instantiate(&store);
+                modinst = try module.instantiate();
             },
             .assert_return => {
                 const action = command.assert_return.action;
