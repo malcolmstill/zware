@@ -354,9 +354,17 @@ pub const Interpreter = struct {
                 // std.debug.warn("c1 >= c2 = {} >= {} = {}\n", .{ c1, c2, c1 >= c2 });
                 try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
             },
+            .I32Clz => {
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @clz(u32, c1));
+            },
             .I32Ctz => {
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, @ctz(u32, c1));
+            },
+            .I32Popcnt => {
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @popCount(u32, c1));
             },
             .F32Gt => {
                 const c2 = try self.popOperand(f32);
@@ -400,6 +408,46 @@ pub const Interpreter = struct {
                 const c2 = try self.popOperand(u32);
                 const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, try math.rem(u32, c1, c2));
+            },
+            .I32And => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, c1 & c2);
+            },
+            .I32Or => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, c1 | c2);
+            },
+            .I32Xor => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, c1 ^ c2);
+            },
+            .I32Shl => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, math.shl(u32, c1, c2 % 32));
+            },
+            .I32ShrS => {
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, math.shr(i32, c1, try math.mod(i32, c2, 32)));
+            },
+            .I32ShrU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, math.shr(u32, c1, c2 % 32));
+            },
+            .I32Rotl => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, math.rotl(u32, c1, c2 % 32));
+            },
+            .I32Rotr => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, math.rotr(u32, c1, c2 % 32));
             },
             .I64Add => {
                 const c2 = try self.popOperand(u64);
