@@ -28,3 +28,6 @@ bin/testrunner f64.json || exit 1
 
 wast2json test/testsuite/local_get.wast || exit 1
 bin/testrunner local_get.json || exit 1
+
+wast2json test/testsuite/local_set.wast || exit 1
+bin/testrunner local_set.json || exit 1
