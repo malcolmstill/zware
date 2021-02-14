@@ -448,7 +448,6 @@ pub const Module = struct {
             // TODO: execute rather than take middle byte
             const offset = data.offset[1];
             mem.copy(u8, memory[offset .. offset + data_len], data.data);
-            std.debug.warn("memory = {x}\n", .{memory});
         }
 
         return inst;
