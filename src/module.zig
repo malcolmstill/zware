@@ -16,6 +16,7 @@ const Code = @import("common.zig").Code;
 const Data = @import("common.zig").Data;
 const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
+const instruction = @import("instruction.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("interpreter/store.zig").Store;
 
@@ -364,19 +365,22 @@ pub const Module = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const mem_idx = try leb.readULEB128(u32, rd);
-            const instr = try rd.readEnum(Instruction, .Little);
-            const mem_offset = try leb.readULEB128(u32, rd);
+
+            const expr_start = rd.context.pos;
+            const expr = self.module[expr_start..];
+            const meta = try instruction.findExprEnd(expr);
+
+            try rd.skipBytes(meta.offset, .{});
             const data_length = try leb.readULEB128(u32, rd);
 
             const offset = rd.context.pos;
+
             try rd.skipBytes(data_length, .{});
-            const data = self.module[offset..rd.context.pos];
 
             try self.datas.append(Data{
                 .mem_idx = mem_idx,
-                .instr = instr,
-                .mem_offset = mem_offset,
-                .data = data,
+                .offset = self.module[expr_start .. expr_start + meta.offset],
+                .data = self.module[offset..rd.context.pos],
             });
         }
 
@@ -433,6 +437,18 @@ pub const Module = struct {
         for (self.memories.items) |memory_definition, i| {
             _ = try inst.store.memories.items[i].grow(memory_definition.min);
             inst.store.memories.items[i].max_size = memory_definition.max;
+        }
+
+        // 4. Initialise memories with data
+        for (self.datas.items) |data, i| {
+            // TODO: validate mem_idx
+            const memory = inst.store.memories.items[data.mem_idx].asSlice();
+            const data_len = data.data.len;
+
+            // TODO: execute rather than take middle byte
+            const offset = data.offset[1];
+            mem.copy(u8, memory[offset .. offset + data_len], data.data);
+            std.debug.warn("memory = {x}\n", .{memory});
         }
 
         return inst;
