@@ -2,9 +2,11 @@ const std = @import("std");
 const fs = std.fs;
 const fmt = std.fmt;
 const mem = std.mem;
+const math = std.math;
 const process = std.process;
 const json = std.json;
 const foxwren = @import("foxwren");
+const ValueType = foxwren.ValueType;
 const Module = foxwren.Module;
 const ModuleInstance = foxwren.ModuleInstance;
 const Store = foxwren.Store;
@@ -87,11 +89,25 @@ pub fn main() anyerror!void {
 
                 // Test the result
                 for (expected) |result, i| {
-                    const result_value = try fmt.parseInt(u64, result.value, 10);
-                    if (result_value != out[i]) {
+                    const value_type = try valueTypeFromString(result.@"type");
+                    if (mem.startsWith(u8, result.value, "nan:")) {
+                        if (value_type == .F32 and !math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                            std.debug.warn("(result) invoke = {s}\n", .{field});
+                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                            std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                            return error.TestsuiteTestFailureTrapResult;
+                        }
+                        continue;
+                    }
+
+                    // Otherwise
+                    errdefer {
                         std.debug.warn("(result) invoke = {s}\n", .{field});
                         std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                        std.debug.warn("result[{}], expected: {}, result: {}\n", .{ i, result_value, out[i] });
+                        std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, result.value, out[i], out[i] });
+                    }
+                    const result_value = try fmt.parseInt(u64, result.value, 10);
+                    if (result_value != out[i]) {
                         return error.TestsuiteTestFailureTrapResult;
                     }
                 }
@@ -138,6 +154,14 @@ pub fn main() anyerror!void {
             else => continue,
         }
     }
+}
+
+fn valueTypeFromString(s: []const u8) !ValueType {
+    if (mem.eql(u8, s, "i32")) return ValueType.I32;
+    if (mem.eql(u8, s, "i64")) return ValueType.I64;
+    if (mem.eql(u8, s, "f32")) return ValueType.F32;
+    if (mem.eql(u8, s, "f64")) return ValueType.F64;
+    return error.UnknownType;
 }
 
 const Wast = struct {
