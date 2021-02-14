@@ -862,6 +862,14 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u64);
                 try self.pushOperand(u64, math.rotr(u64, c1, c2 % 64));
             },
+            .F32Abs => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, math.fabs(c1));
+            },
+            .F32Neg => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f32, -c1);
+            },
             .F32Ceil => {
                 const c1 = try self.popOperand(f32);
                 try self.pushOperand(f32, @ceil(c1));
@@ -958,6 +966,14 @@ pub const Interpreter = struct {
                     try self.pushOperand(f32, math.max(c1, c2));
                 }
             },
+            .F64Abs => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, math.fabs(c1));
+            },
+            .F64Neg => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f64, -c1);
+            },
             .F64Ceil => {
                 const c1 = try self.popOperand(f64);
                 try self.pushOperand(f64, @ceil(c1));
@@ -1053,6 +1069,22 @@ pub const Interpreter = struct {
                 } else {
                     try self.pushOperand(f64, math.max(c1, c2));
                 }
+            },
+            .F64ConvertI32S => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(f64, @intToFloat(f64, c1));
+            },
+            .F64ConvertI32U => {
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(f64, @intToFloat(f64, c1));
+            },
+            .F64ConvertI64U => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(f64, @intToFloat(f64, c1));
+            },
+            .F64PromoteF32 => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(f64, @floatCast(f64, c1));
             },
             .F64ReinterpretI64 => {
                 const c1 = try self.popOperand(f64);

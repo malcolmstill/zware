@@ -25,3 +25,6 @@ bin/testrunner f32.json || exit 1
 
 wast2json test/testsuite/f64.wast || exit 1
 bin/testrunner f64.json || exit 1
+
+wast2json test/testsuite/local_get.wast || exit 1
+bin/testrunner local_get.json || exit 1
