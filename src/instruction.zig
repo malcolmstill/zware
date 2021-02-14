@@ -1,5 +1,5 @@
 const std = @import("std");
-const leb = std.debug.leb;
+const leb = std.leb;
 
 pub const InstructionIterator = struct {
     function: []const u8,
