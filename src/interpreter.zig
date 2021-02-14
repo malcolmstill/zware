@@ -335,8 +335,12 @@ pub const Interpreter = struct {
             .I32Eq => {
                 const c2 = try self.popOperand(u32);
                 const c1 = try self.popOperand(u32);
-                std.debug.warn("c1 = {}, c2 = {}\n", .{ c1, c2 });
                 try self.pushOperand(u32, @as(u32, if (c1 == c2) 1 else 0));
+            },
+            .I32Ne => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @as(u32, if (c1 != c2) 1 else 0));
             },
             .I32Eqz => {
                 const c1 = try self.popOperand(u32);
@@ -345,13 +349,41 @@ pub const Interpreter = struct {
             .I32LtS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
-                // std.debug.warn("b < a = {} < {} = {}\n", .{ b, a, b < a });
                 try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
+            },
+            .I32LtU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
+            },
+            .I32GtS => {
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+            },
+            .I32GtU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+            },
+            .I32LeS => {
+                const c2 = try self.popOperand(i32);
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
+            },
+            .I32LeU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
             },
             .I32GeS => {
                 const c2 = try self.popOperand(i32);
                 const c1 = try self.popOperand(i32);
-                // std.debug.warn("c1 >= c2 = {} >= {} = {}\n", .{ c1, c2, c1 >= c2 });
+                try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
+            },
+            .I32GeU => {
+                const c2 = try self.popOperand(u32);
+                const c1 = try self.popOperand(u32);
                 try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
             },
             .I32Clz => {
@@ -464,9 +496,17 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(f64);
                 try self.pushOperand(f64, c1 + c2);
             },
+            .I32Extend8S => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, @truncate(i8, c1));
+            },
+            .I32Extend16S => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(i32, @truncate(i16, c1));
+            },
             else => {
                 std.debug.warn("unimplemented instruction: {}\n", .{opcode});
-                unreachable;
+                return error.UnimplementedOpcode;
             },
         }
     }
