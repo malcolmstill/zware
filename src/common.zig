@@ -75,8 +75,7 @@ pub const Code = struct {
 
 pub const Data = struct {
     mem_idx: u32,
-    instr: Instruction,
-    mem_offset: u32,
+    offset: []const u8,
     data: []const u8,
 };
 
