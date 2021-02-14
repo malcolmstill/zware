@@ -57,15 +57,29 @@ pub const Interpreter = struct {
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
         if (std.builtin.mode == .Debug) {
             errdefer {
+                std.debug.warn("\n=====================================================\n", .{});
                 std.debug.warn("stack after: {}\n", .{opcode});
                 var i: usize = 0;
                 while (i < self.op_stack.len) : (i += 1) {
                     std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
                 }
                 std.debug.warn("\n", .{});
+
+                std.debug.warn("label after: {}\n", .{opcode});
+                i = 0;
+                while (i < self.label_stack.len) : (i += 1) {
+                    std.debug.warn("label_stack[{}] = {}\n", .{ i, self.label_stack[i] });
+                }
+                std.debug.warn("\n", .{});
+
+                std.debug.warn("frame_stack after: {}\n", .{opcode});
+                i = 0;
+                while (i < self.frame_stack.len) : (i += 1) {
+                    std.debug.warn("frame_stack[{}] = {}\n", .{ i, self.frame_stack[i] });
+                }
+                std.debug.warn("=====================================================\n", .{});
             }
         }
-
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
@@ -116,14 +130,24 @@ pub const Interpreter = struct {
                     // We'll skip to end
                     self.continuation = continuation;
                     // unless we have an else branch
-                    if (else_branch) |eb| self.continuation = code[eb.offset..];
-                }
+                    if (else_branch) |eb| {
+                        self.continuation = code[eb.offset..];
 
-                try self.pushLabel(Label{
-                    .return_arity = if (block_type == 0x40) 0 else 1,
-                    .op_stack_len = self.op_stack.len,
-                    .continuation = continuation,
-                });
+                        // We are inside the if branch
+                        try self.pushLabel(Label{
+                            .return_arity = if (block_type == 0x40) 0 else 1,
+                            .op_stack_len = self.op_stack.len,
+                            .continuation = continuation,
+                        });
+                    }
+                } else {
+                    // We are inside the if branch
+                    try self.pushLabel(Label{
+                        .return_arity = if (block_type == 0x40) 0 else 1,
+                        .op_stack_len = self.op_stack.len,
+                        .continuation = continuation,
+                    });
+                }
             },
             .Else => {
                 // If we hit else, it's because we've hit the end of if
@@ -140,7 +164,10 @@ pub const Interpreter = struct {
                 // call we push a label containing a continuation which is the code to
                 // resume after the call has returned. We want to use that if we've run
                 // out of code in the current function, i.e. self.continuation is empty
-                if (self.continuation.len == 0) self.continuation = label.continuation;
+                if (self.continuation.len == 0) {
+                    self.continuation = label.continuation;
+                    _ = try self.popFrame();
+                }
             },
             .Br => {
                 const target = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -226,6 +253,51 @@ pub const Interpreter = struct {
 
                 self.continuation = func.code;
             },
+            .CallIndirect => {
+                const module = self.mod_inst.module;
+
+                const op_func_type_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                const table_index = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                // Read lookup index from stack
+                const lookup_index = try self.popOperand(u32);
+                // TODO: debug build check that `table` exists
+
+                // Lookup function index from table
+                const table = self.mod_inst.store.tables.items[table_index];
+                const function_index = table.data[lookup_index];
+
+                const func_type_index = module.functions.items[function_index];
+                if (func_type_index != op_func_type_index) return error.WrongFunctionType;
+
+                // Func type
+                const func_type = module.types.items[func_type_index];
+                const func = module.codes.items[function_index];
+                const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+
+                // Consume parameters from the stack
+                try self.pushFrame(Frame{
+                    .op_stack_len = self.op_stack.len - params.len,
+                    .label_stack_len = self.label_stack.len,
+                    .return_arity = results.len,
+                }, func.locals_count + params.len);
+
+                // Our continuation is the code after call
+                try self.pushLabel(Label{
+                    .return_arity = results.len,
+                    .op_stack_len = self.op_stack.len - params.len,
+                    .continuation = self.continuation,
+                });
+
+                // Make space for locals (again, params already on stack)
+                var j: usize = 0;
+                while (j < func.locals_count) {
+                    try self.pushOperand(u64, 0);
+                }
+
+                self.continuation = func.code;
+            },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
                 const condition = try self.popOperand(u32);
@@ -255,6 +327,8 @@ pub const Interpreter = struct {
                 const value = try self.popAnyOperand();
                 const frame = try self.peekNthFrame(0);
                 const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                // TODO: debug build only for return error:
+                if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
                 frame.locals[local_index] = value;
                 try self.pushAnyOperand(value);
             },
@@ -1069,6 +1143,10 @@ pub const Interpreter = struct {
                 } else {
                     try self.pushOperand(f64, math.max(c1, c2));
                 }
+            },
+            .I32WrapI64 => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i32, @truncate(i32, c1));
             },
             .I64TruncF64S => {
                 const c1 = try self.popOperand(f64);

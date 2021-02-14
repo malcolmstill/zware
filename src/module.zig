@@ -13,12 +13,12 @@ const Mutability = @import("common.zig").Mutability;
 const Global = @import("common.zig").Global;
 const Element = @import("common.zig").Element;
 const Code = @import("common.zig").Code;
-const Data = @import("common.zig").Data;
+const Segment = @import("common.zig").Segment;
 const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
 const Interpreter = @import("interpreter.zig").Interpreter;
-const Store = @import("interpreter/store.zig").Store;
+const Store = @import("store.zig").Store;
 
 pub const Module = struct {
     alloc: *mem.Allocator,
@@ -35,9 +35,9 @@ pub const Module = struct {
     globals: ArrayList(Global),
     exports: ArrayList(Export),
     start: u32,
-    elements: ArrayList(Element),
+    elements: ArrayList(Segment),
     codes: ArrayList(Code),
-    datas: ArrayList(Data),
+    datas: ArrayList(Segment),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
@@ -54,9 +54,9 @@ pub const Module = struct {
             .globals = ArrayList(Global).init(alloc),
             .exports = ArrayList(Export).init(alloc),
             .start = undefined,
-            .elements = ArrayList(Element).init(alloc),
+            .elements = ArrayList(Segment).init(alloc),
             .codes = ArrayList(Code).init(alloc),
-            .datas = ArrayList(Data).init(alloc),
+            .datas = ArrayList(Segment).init(alloc),
         };
     }
 
@@ -313,12 +313,38 @@ pub const Module = struct {
     }
 
     fn decodeElementSection(self: *Module, size: u32) !usize {
-        // , size: u32
         const rd = self.buf.reader();
-        // const index = try leb.readULEB128(u32, rd);
+        const count = try leb.readULEB128(u32, rd);
 
-        // self.start = index;
-        try rd.skipBytes(size, .{});
+        var i: usize = 0;
+        while (i < count) : (i += 1) {
+            const table_index = try leb.readULEB128(u32, rd);
+
+            const expr_start = rd.context.pos;
+            const expr = self.module[expr_start..];
+            const meta = try instruction.findExprEnd(expr);
+
+            try rd.skipBytes(meta.offset, .{});
+
+            // Number of u32's in our data (not the length in bytes!)
+            const data_length = try leb.readULEB128(u32, rd);
+            const data_start = rd.context.pos;
+
+            var j: usize = 0;
+            while (j < data_length) : (j += 1) {
+                // When we pre-process all this data we can just store this
+                // but for the moment we're just using it to skip over
+                _ = try leb.readULEB128(u32, rd);
+            }
+
+            try self.elements.append(Segment{
+                .index = table_index,
+                .offset = self.module[expr_start .. expr_start + meta.offset],
+                .count = data_length,
+                .data = self.module[data_start..rd.context.pos],
+            });
+        }
+
         return 1;
     }
 
@@ -377,9 +403,10 @@ pub const Module = struct {
 
             try rd.skipBytes(data_length, .{});
 
-            try self.datas.append(Data{
-                .mem_idx = mem_idx,
+            try self.datas.append(Segment{
+                .index = mem_idx,
                 .offset = self.module[expr_start .. expr_start + meta.offset],
+                .count = data_length,
                 .data = self.module[offset..rd.context.pos],
             });
         }
@@ -442,12 +469,33 @@ pub const Module = struct {
         // 4. Initialise memories with data
         for (self.datas.items) |data, i| {
             // TODO: validate mem_idx
-            const memory = inst.store.memories.items[data.mem_idx].asSlice();
+            const memory = inst.store.memories.items[data.index].asSlice();
             const data_len = data.data.len;
 
             // TODO: execute rather than take middle byte
             const offset = data.offset[1];
             mem.copy(u8, memory[offset .. offset + data_len], data.data);
+        }
+
+        // 5. Initialise tables
+        const tables_count = self.tables.items.len;
+        for (self.tables.items) |table_def, i| {
+            const table = try inst.store.addTable(table_def.max);
+        }
+
+        // 6. Initialise from elements
+        for (self.elements.items) |element_def, i| {
+            const table_index = element_def.index;
+            const table = inst.store.tables.items[table_index];
+
+            // TODO: execute rather than take middle byte
+            const offset = element_def.offset[1];
+            var data = element_def.data;
+            var j: usize = 0;
+            while (j < element_def.count) : (j += 1) {
+                const value = try instruction.readULEB128Mem(u32, &data);
+                table.data[offset + j] = value;
+            }
         }
 
         return inst;
