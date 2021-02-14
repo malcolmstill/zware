@@ -253,6 +253,51 @@ pub const Interpreter = struct {
 
                 self.continuation = func.code;
             },
+            .CallIndirect => {
+                const module = self.mod_inst.module;
+
+                const op_func_type_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                const table_index = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                // Read lookup index from stack
+                const lookup_index = try self.popOperand(u32);
+                // TODO: debug build check that `table` exists
+
+                // Lookup function index from table
+                const table = self.mod_inst.store.tables.items[table_index];
+                const function_index = table.data[lookup_index];
+
+                const func_type_index = module.functions.items[function_index];
+                if (func_type_index != op_func_type_index) return error.WrongFunctionType;
+
+                // Func type
+                const func_type = module.types.items[func_type_index];
+                const func = module.codes.items[function_index];
+                const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+
+                // Consume parameters from the stack
+                try self.pushFrame(Frame{
+                    .op_stack_len = self.op_stack.len - params.len,
+                    .label_stack_len = self.label_stack.len,
+                    .return_arity = results.len,
+                }, func.locals_count + params.len);
+
+                // Our continuation is the code after call
+                try self.pushLabel(Label{
+                    .return_arity = results.len,
+                    .op_stack_len = self.op_stack.len - params.len,
+                    .continuation = self.continuation,
+                });
+
+                // Make space for locals (again, params already on stack)
+                var j: usize = 0;
+                while (j < func.locals_count) {
+                    try self.pushOperand(u64, 0);
+                }
+
+                self.continuation = func.code;
+            },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
                 const condition = try self.popOperand(u32);

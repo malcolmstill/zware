@@ -7,12 +7,14 @@ pub const PAGE_SIZE = 64 * 1024;
 pub const Store = struct {
     alloc: *mem.Allocator,
     memories: ArrayList(Memory),
+    tables: ArrayList(Table),
     globals: ArrayList(u64),
 
     pub fn init(alloc: *mem.Allocator) Store {
         var store = Store{
             .alloc = alloc,
             .memories = ArrayList(Memory).init(alloc),
+            .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(u64).init(alloc),
         };
 
@@ -27,6 +29,12 @@ pub const Store = struct {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
         return mem_ptr;
+    }
+
+    pub fn addTable(self: *Store, entries: usize) !*Table {
+        const tbl_ptr = try self.tables.addOne();
+        tbl_ptr.* = try Table.init(self.alloc, entries);
+        return tbl_ptr;
     }
 
     pub fn allocGlobals(self: *Store, count: usize) !void {
@@ -157,3 +165,19 @@ test "Memory test" {
 
     testing.expectEqual(@as(usize, 3 * PAGE_SIZE), mem0.asSlice().len);
 }
+
+pub const Table = struct {
+    // Let's assume indices are u32
+    data: []u32,
+
+    pub fn init(alloc: *mem.Allocator, max: usize) !Table {
+        return Table{
+            .data = try alloc.alloc(u32, max),
+        };
+    }
+
+    pub fn lookup(self: *Table, index: usize) !u32 {
+        if (self.data.len < index + 1) return error.TableLookupOutOfBounds;
+        return self.data[index];
+    }
+};

@@ -73,9 +73,10 @@ pub const Code = struct {
     code: []const u8,
 };
 
-pub const Data = struct {
-    mem_idx: u32,
+pub const Segment = struct {
+    index: u32,
     offset: []const u8,
+    count: u32, // Number of elements in data (useful when data is not []u8)
     data: []const u8,
 };
 
