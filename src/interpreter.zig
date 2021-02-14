@@ -302,6 +302,14 @@ pub const Interpreter = struct {
 
                 try memory.write(u32, offset + address, value);
             },
+            .MemorySize => {
+                const frame = try self.peekNthFrame(0);
+
+                const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                var memory = self.mod_inst.store.memories.items[memory_index];
+
+                try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
+            },
             .MemoryGrow => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
