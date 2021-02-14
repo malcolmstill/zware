@@ -91,13 +91,17 @@ pub fn main() anyerror!void {
                 for (expected) |result, i| {
                     const value_type = try valueTypeFromString(result.@"type");
                     if (mem.startsWith(u8, result.value, "nan:")) {
-                        if (value_type == .F32 and !math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
-                            std.debug.warn("(result) invoke = {s}\n", .{field});
-                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                            std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
-                            return error.TestsuiteTestFailureTrapResult;
+                        if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                            continue;
                         }
-                        continue;
+                        if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                            continue;
+                        }
+
+                        std.debug.warn("(result) invoke = {s}\n", .{field});
+                        std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                        std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                        return error.TestsuiteTestFailureTrapResult;
                     }
 
                     // Otherwise
