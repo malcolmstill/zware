@@ -391,5 +391,5 @@ pub const Instruction = enum(u8) {
     I64Extend16S = 0xc3,
     I64Extend32S = 0xc4,
     // reserved
-    // I32TruncSatF32S = 0xfc,
+    TruncSat = 0xfc,
 };
