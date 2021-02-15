@@ -1332,6 +1332,10 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u64);
                 try self.pushOperand(f32, @intToFloat(f32, c1));
             },
+            .F32DemoteF64 => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(f32, @floatCast(f32, c1));
+            },
             .F64ConvertI32S => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(f64, @intToFloat(f64, c1));
@@ -1351,6 +1355,18 @@ pub const Interpreter = struct {
             .F64PromoteF32 => {
                 const c1 = try self.popOperand(f32);
                 try self.pushOperand(f64, @floatCast(f64, c1));
+            },
+            .I32ReinterpretF32 => {
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(i32, @bitCast(i32, c1));
+            },
+            .I64ReinterpretF64 => {
+                const c1 = try self.popOperand(f64);
+                try self.pushOperand(i64, @bitCast(i64, c1));
+            },
+            .F32ReinterpretI32 => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(f32, @bitCast(f32, c1));
             },
             .F64ReinterpretI64 => {
                 const c1 = try self.popOperand(f64);
@@ -1403,8 +1419,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f32);
                         const trunc = @trunc(c1);
 
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
-                        if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(u32, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
+                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
+                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
+                            return;
+                        }
 
                         try self.pushOperand(u32, @floatToInt(u32, trunc));
                     },
@@ -1412,8 +1439,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f64);
                         const trunc = @trunc(c1);
 
-                        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
-                        if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(i32, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
+                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
+                            return;
+                        }
 
                         try self.pushOperand(i32, @floatToInt(i32, trunc));
                     },
@@ -1421,8 +1459,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f64);
                         const trunc = @trunc(c1);
 
-                        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
-                        if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(u32, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
+                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
+                            return;
+                        }
 
                         try self.pushOperand(u32, @floatToInt(u32, trunc));
                     },
@@ -1430,8 +1479,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f32);
                         const trunc = @trunc(c1);
 
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
-                        if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(i64, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
+                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
+                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                            return;
+                        }
 
                         try self.pushOperand(i64, @floatToInt(i64, trunc));
                     },
@@ -1439,8 +1499,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f32);
                         const trunc = @trunc(c1);
 
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
-                        if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(u64, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
+                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
+                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                            return;
+                        }
 
                         try self.pushOperand(u64, @floatToInt(u64, trunc));
                     },
@@ -1448,8 +1519,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f64);
                         const trunc = @trunc(c1);
 
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
-                        if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(i64, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
+                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
+                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                            return;
+                        }
 
                         try self.pushOperand(i64, @floatToInt(i64, trunc));
                     },
@@ -1457,8 +1539,19 @@ pub const Interpreter = struct {
                         const c1 = try self.popOperand(f64);
                         const trunc = @trunc(c1);
 
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
-                        if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(u64, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
+                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
+                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                            return;
+                        }
 
                         try self.pushOperand(u64, @floatToInt(u64, trunc));
                     },
