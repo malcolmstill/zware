@@ -69,7 +69,7 @@ pub fn main() anyerror!void {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
-                std.debug.warn("test: {s}:{}\n", .{ r.source_filename, command.assert_return.line });
+                std.debug.warn("(return) test: {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
@@ -127,6 +127,7 @@ pub fn main() anyerror!void {
                 const expected = command.assert_trap.expected;
                 const field = action.field;
                 const trap = command.assert_trap.text;
+                std.debug.warn("(trap) test: {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
                 errdefer {
                     std.debug.warn("(trap) invoke = {s}\n", .{field});
