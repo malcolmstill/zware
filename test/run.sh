@@ -62,11 +62,14 @@ bin/testrunner local_tee.json || exit 1
 wast2json test/testsuite/loop.wast || exit 1
 bin/testrunner loop.json || exit 1
 
-wast2json test/testsuite/memory.wast || exit 1
-bin/testrunner memory.json || exit 1
+wast2json test/testsuite/memory_grow.wast || exit 1
+bin/testrunner memory_grow.json || exit 1
 
 wast2json test/testsuite/memory_size.wast || exit 1
 bin/testrunner memory_size.json || exit 1
+
+wast2json test/testsuite/memory.wast || exit 1
+bin/testrunner memory.json || exit 1
 
 wast2json test/testsuite/return.wast || exit 1
 bin/testrunner return.json || exit 1

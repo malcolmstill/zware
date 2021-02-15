@@ -1,7 +1,9 @@
 const std = @import("std");
 const mem = std.mem;
+const math = std.math;
 const ArrayList = std.ArrayList;
 
+pub const MAX_PAGES = 64 * 1024;
 pub const PAGE_SIZE = 64 * 1024;
 
 pub const Store = struct {
@@ -62,7 +64,7 @@ pub const Memory = struct {
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages > max_size) return error.MemoryGrowExceedsMaxSize;
+            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.MemoryGrowExceedsMaxSize;
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
