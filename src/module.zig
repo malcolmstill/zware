@@ -204,7 +204,7 @@ pub const Module = struct {
 
                     try self.tables.append(Limit{
                         .min = min,
-                        .max = std.math.maxInt(u32),
+                        .max = min,
                     });
                 },
                 .MinMax => {
