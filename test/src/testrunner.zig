@@ -69,7 +69,7 @@ pub fn main() anyerror!void {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
-                std.debug.warn("test: {s}:{s}\n", .{ wasm_filename, field });
+                errdefer std.debug.warn("\n\n\n\n\ntest: {s}:{s}\n", .{ wasm_filename, field });
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
@@ -211,6 +211,13 @@ const Command = union(enum) {
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
+    },
+    assert_exhaustion: struct {
+        comptime @"type": []const u8 = "assert_exhaustion",
+        line: usize,
+        action: Action,
+        text: []const u8,
+        expected: []const ValueTrap,
     },
 };
 

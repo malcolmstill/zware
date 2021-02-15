@@ -17,6 +17,9 @@ bin/testrunner br.json || exit 1
 wast2json test/testsuite/br_table.wast || exit 1
 bin/testrunner br_table.json || exit 1
 
+wast2json test/testsuite/call.wast || exit 1
+bin/testrunner call.json || exit 1
+
 wast2json test/testsuite/const.wast || exit 1
 bin/testrunner const.json || exit 1
 
