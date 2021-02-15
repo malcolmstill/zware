@@ -55,31 +55,31 @@ pub const Interpreter = struct {
     }
 
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        if (std.builtin.mode == .Debug) {
-            errdefer {
-                std.debug.warn("\n=====================================================\n", .{});
-                std.debug.warn("stack after: {}\n", .{opcode});
-                var i: usize = 0;
-                while (i < self.op_stack.len) : (i += 1) {
-                    std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-                }
-                std.debug.warn("\n", .{});
+        // if (std.builtin.mode == .Debug) {
+        // defer {
+        //     std.debug.warn("\n=====================================================\n", .{});
+        //     std.debug.warn("stack after: {}\n", .{opcode});
+        //     var i: usize = 0;
+        //     while (i < self.op_stack.len) : (i += 1) {
+        //         std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+        //     }
+        //     std.debug.warn("\n", .{});
 
-                std.debug.warn("label after: {}\n", .{opcode});
-                i = 0;
-                while (i < self.label_stack.len) : (i += 1) {
-                    std.debug.warn("label_stack[{}] = {}\n", .{ i, self.label_stack[i] });
-                }
-                std.debug.warn("\n", .{});
+        //     // std.debug.warn("label after: {}\n", .{opcode});
+        //     // i = 0;
+        //     // while (i < self.label_stack.len) : (i += 1) {
+        //     //     std.debug.warn("label_stack[{}] = {}\n", .{ i, self.label_stack[i] });
+        //     // }
+        //     // std.debug.warn("\n", .{});
 
-                std.debug.warn("frame_stack after: {}\n", .{opcode});
-                i = 0;
-                while (i < self.frame_stack.len) : (i += 1) {
-                    std.debug.warn("frame_stack[{}] = {}\n", .{ i, self.frame_stack[i] });
-                }
-                std.debug.warn("=====================================================\n", .{});
-            }
-        }
+        //     std.debug.warn("frame_stack after: {}\n", .{opcode});
+        //     i = 0;
+        //     while (i < self.frame_stack.len) : (i += 1) {
+        //         std.debug.warn("frame_stack[{}] = {}\n", .{ i, self.frame_stack[i] });
+        //     }
+        //     std.debug.warn("=====================================================\n", .{});
+        // }
+        // }
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
@@ -117,9 +117,17 @@ pub const Interpreter = struct {
             },
             .If => {
                 // TODO: perform findEnd during parsing
-                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
+                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
                 const end = try instruction.findEnd(code);
                 const else_branch = try instruction.findElse(code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    block_params = func_type.params_count;
+                    block_returns = func_type.results_count;
+                }
 
                 // For if control flow, the continuation for our label
                 // is the continuation of code after end
@@ -135,16 +143,16 @@ pub const Interpreter = struct {
 
                         // We are inside the if branch
                         try self.pushLabel(Label{
-                            .return_arity = if (block_type == 0x40) 0 else 1,
-                            .op_stack_len = self.op_stack.len,
+                            .return_arity = block_returns,
+                            .op_stack_len = self.op_stack.len - block_params,
                             .continuation = continuation,
                         });
                     }
                 } else {
                     // We are inside the if branch
                     try self.pushLabel(Label{
-                        .return_arity = if (block_type == 0x40) 0 else 1,
-                        .op_stack_len = self.op_stack.len,
+                        .return_arity = block_returns,
+                        .op_stack_len = self.op_stack.len - block_params,
                         .continuation = continuation,
                     });
                 }
@@ -165,6 +173,15 @@ pub const Interpreter = struct {
                 // resume after the call has returned. We want to use that if we've run
                 // out of code in the current function, i.e. self.continuation is empty
                 if (self.continuation.len == 0) {
+                    const frame = try self.peekNthFrame(0);
+                    const n = label.return_arity;
+                    var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+                    const src = self.op_stack[self.op_stack.len - n ..];
+                    mem.copy(u64, dst, src);
+
+                    self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+                    self.label_stack = self.label_stack[0..frame.label_stack_len];
+
                     self.continuation = label.continuation;
                     _ = try self.popFrame();
                 }
@@ -1152,6 +1169,10 @@ pub const Interpreter = struct {
             .I32WrapI64 => {
                 const c1 = try self.popOperand(i64);
                 try self.pushOperand(i32, @truncate(i32, c1));
+            },
+            .I64ExtendI32S => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(i64, @truncate(i32, c1));
             },
             .I64TruncF64S => {
                 const c1 = try self.popOperand(f64);

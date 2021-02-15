@@ -40,7 +40,7 @@ pub const InstructionIterator = struct {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
-            .I32Load, .F32Load, .I32Store, .I64Store, .F64Store => {
+            .CallIndirect, .I32Load, .F32Load, .I32Store, .I64Store, .F64Store => {
                 _ = try readULEB128Mem(u32, &self.code);
                 _ = try readULEB128Mem(u32, &self.code);
             },
