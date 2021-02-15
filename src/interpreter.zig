@@ -54,32 +54,30 @@ pub const Interpreter = struct {
         }
     }
 
+    fn debug(self: *Interpreter, opcode: Instruction) void {
+        std.debug.warn("\n=====================================================\n", .{});
+        std.debug.warn("after: {}\n", .{opcode});
+        var i: usize = 0;
+        while (i < self.op_stack.len) : (i += 1) {
+            std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+        }
+        std.debug.warn("\n", .{});
+
+        i = 0;
+        while (i < self.label_stack.len) : (i += 1) {
+            std.debug.warn("label_stack[{}] = [{}, {}, {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].continuation });
+        }
+        std.debug.warn("\n", .{});
+
+        i = 0;
+        while (i < self.frame_stack.len) : (i += 1) {
+            std.debug.warn("frame_stack[{}] = [{}, {}, {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
+        }
+        std.debug.warn("=====================================================\n", .{});
+    }
+
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        // if (std.builtin.mode == .Debug) {
-        // defer {
-        //     std.debug.warn("\n=====================================================\n", .{});
-        //     std.debug.warn("stack after: {}\n", .{opcode});
-        //     var i: usize = 0;
-        //     while (i < self.op_stack.len) : (i += 1) {
-        //         std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        //     }
-        //     std.debug.warn("\n", .{});
-
-        //     // std.debug.warn("label after: {}\n", .{opcode});
-        //     // i = 0;
-        //     // while (i < self.label_stack.len) : (i += 1) {
-        //     //     std.debug.warn("label_stack[{}] = {}\n", .{ i, self.label_stack[i] });
-        //     // }
-        //     // std.debug.warn("\n", .{});
-
-        //     std.debug.warn("frame_stack after: {}\n", .{opcode});
-        //     i = 0;
-        //     while (i < self.frame_stack.len) : (i += 1) {
-        //         std.debug.warn("frame_stack[{}] = {}\n", .{ i, self.frame_stack[i] });
-        //     }
-        //     std.debug.warn("=====================================================\n", .{});
-        // }
-        // }
+        // defer self.debug(opcode);
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
