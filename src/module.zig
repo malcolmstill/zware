@@ -446,6 +446,27 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
+    pub fn signaturesEqual(self: *Module, a: FuncType, b: FuncType) bool {
+        if (a.params_count != b.params_count) return false;
+        if (a.results_count != b.results_count) return false;
+
+        const params_a = self.value_types.items[a.params_offset .. a.params_offset + a.params_count];
+        const params_b = self.value_types.items[b.params_offset .. b.params_offset + b.params_count];
+
+        for (params_a) |p_a, i| {
+            if (p_a != params_b[i]) return false;
+        }
+
+        const results_a = self.value_types.items[a.results_offset .. a.results_offset + a.results_count];
+        const results_b = self.value_types.items[b.results_offset .. b.results_offset + b.results_count];
+
+        for (results_a) |r_a, i| {
+            if (r_a != results_b[i]) return false;
+        }
+
+        return true;
+    }
+
     pub fn instantiate(self: *Module) !ModuleInstance {
         var store = Store.init(self.alloc);
         var inst = ModuleInstance{

@@ -103,7 +103,26 @@ pub const Memory = struct {
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
 
-        std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little);
+        switch (T) {
+            u8,
+            u16,
+            u32,
+            u64,
+            i8,
+            i16,
+            i32,
+            i64,
+            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little),
+            f32 => {
+                const x = @bitCast(u32, value);
+                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[page][offset]), x, .Little);
+            },
+            f64 => {
+                const x = @bitCast(u64, value);
+                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[page][offset]), x, .Little);
+            },
+            else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
+        }
     }
 
     pub fn asSlice(self: *Memory) []u8 {
