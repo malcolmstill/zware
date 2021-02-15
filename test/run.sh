@@ -67,3 +67,6 @@ bin/testrunner memory.json || exit 1
 
 wast2json test/testsuite/return.wast || exit 1
 bin/testrunner return.json || exit 1
+
+wast2json test/testsuite/switch.wast || exit 1
+bin/testrunner switch.json || exit 1
