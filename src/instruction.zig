@@ -32,6 +32,7 @@ pub const InstructionIterator = struct {
             .Br,
             .BrIf,
             .Block,
+            .Loop,
             => _ = try readULEB128Mem(u32, &self.code),
             .BrTable => {
                 const label_count = try readULEB128Mem(u32, &self.code);
