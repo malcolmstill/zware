@@ -1108,6 +1108,16 @@ pub const Interpreter = struct {
                     try self.pushOperand(f32, math.max(c1, c2));
                 }
             },
+            .F32CopySign => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+
+                if (math.signbit(c2)) {
+                    try self.pushOperand(f32, -math.fabs(c1));
+                } else {
+                    try self.pushOperand(f32, math.fabs(c1));
+                }
+            },
             .F64Abs => {
                 const c1 = try self.popOperand(f64);
                 try self.pushOperand(f64, math.fabs(c1));
