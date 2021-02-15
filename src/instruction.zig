@@ -117,10 +117,14 @@ pub fn findElse(code: []const u8) !?InstructionMeta {
         }
 
         switch (meta.instruction) {
-            .If => i += 1,
-            .Else => i -= 1,
+            .If, .Block => i += 1,
+            .Else => {
+                if (i < 2) i -= 1;
+            },
+            .End => i -= 1,
             else => {},
         }
+        if (i == 0 and meta.instruction == .End) return null;
     }
     return null;
 }
