@@ -65,6 +65,9 @@ bin/testrunner loop.json || exit 1
 wast2json test/testsuite/memory.wast || exit 1
 bin/testrunner memory.json || exit 1
 
+wast2json test/testsuite/memory_size.wast || exit 1
+bin/testrunner memory_size.json || exit 1
+
 wast2json test/testsuite/return.wast || exit 1
 bin/testrunner return.json || exit 1
 

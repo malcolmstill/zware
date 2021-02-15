@@ -62,11 +62,11 @@ pub const Memory = struct {
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages >= max_size) return error.MemoryGrowExceedsMaxSize;
+            if (self.data.items.len + num_pages > max_size) return error.MemoryGrowExceedsMaxSize;
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
-        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * old_size + num_pages * PAGE_SIZE], 0);
+        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * (old_size + num_pages)], 0);
         return old_size;
     }
 
