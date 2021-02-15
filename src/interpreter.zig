@@ -187,9 +187,14 @@ pub const Interpreter = struct {
 
                 var label: u32 = 0;
                 var j: usize = 0;
-                while (j < label_count + 1) : (j += 1) {
+                while (j < label_count) : (j += 1) {
                     const tmp_label = try instruction.readULEB128Mem(u32, &self.continuation);
-                    if (i == j) label = tmp_label;
+                    if (j == i) label = tmp_label;
+                }
+
+                const ln = try instruction.readULEB128Mem(u32, &self.continuation);
+                if (i >= j) {
+                    label = ln;
                 }
 
                 try self.branch(label);
