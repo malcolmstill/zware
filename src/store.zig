@@ -39,6 +39,7 @@ pub const Store = struct {
 
     pub fn allocGlobals(self: *Store, count: usize) !void {
         _ = try self.globals.resize(count);
+        mem.set(u64, self.globals.items[0..], 0);
     }
 };
 
