@@ -259,9 +259,15 @@ pub const Interpreter = struct {
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
+                // Make space for locals (again, params already on stack)
+                var j: usize = 0;
+                while (j < func.locals_count) : (j += 1) {
+                    try self.pushOperand(u64, 0);
+                }
+
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len,
+                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
                     .label_stack_len = self.label_stack.len,
                     .return_arity = results.len,
                 }, func.locals_count + params.len);
@@ -269,15 +275,9 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
                     .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len,
+                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
                     .continuation = self.continuation,
                 });
-
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < func.locals_count) {
-                    try self.pushOperand(u64, 0);
-                }
 
                 self.continuation = func.code;
             },
@@ -307,9 +307,15 @@ pub const Interpreter = struct {
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
+                // Make space for locals (again, params already on stack)
+                var j: usize = 0;
+                while (j < func.locals_count) : (j += 1) {
+                    try self.pushOperand(u64, 0);
+                }
+
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len,
+                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
                     .label_stack_len = self.label_stack.len,
                     .return_arity = results.len,
                 }, func.locals_count + params.len);
@@ -317,15 +323,9 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
                     .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len,
+                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
                     .continuation = self.continuation,
                 });
-
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < func.locals_count) {
-                    try self.pushOperand(u64, 0);
-                }
 
                 self.continuation = func.code;
             },
@@ -1219,6 +1219,10 @@ pub const Interpreter = struct {
             .I64ExtendI32S => {
                 const c1 = try self.popOperand(i64);
                 try self.pushOperand(i64, @truncate(i32, c1));
+            },
+            .I64ExtendI32U => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(u64, @truncate(u32, c1));
             },
             .I64TruncF64S => {
                 const c1 = try self.popOperand(f64);

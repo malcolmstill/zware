@@ -41,6 +41,9 @@ bin/testrunner i32.json || exit 1
 wast2json test/testsuite/i64.wast || exit 1
 bin/testrunner i64.json || exit 1
 
+wast2json test/testsuite/if.wast || exit 1
+bin/testrunner if.json || exit 1
+
 wast2json test/testsuite/local_get.wast || exit 1
 bin/testrunner local_get.json || exit 1
 
