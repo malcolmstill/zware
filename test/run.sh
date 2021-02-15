@@ -35,6 +35,12 @@ bin/testrunner f64.json || exit 1
 wast2json test/testsuite/fac.wast || exit 1
 bin/testrunner fac.json || exit 1
 
+# wast2json test/testsuite/func.wast || exit 1
+# bin/testrunner func.json || exit 1
+
+# wast2json test/testsuite/global.wast || exit 1
+# bin/testrunner global.json || exit 1
+
 wast2json test/testsuite/i32.wast || exit 1
 bin/testrunner i32.json || exit 1
 
@@ -58,3 +64,6 @@ bin/testrunner loop.json || exit 1
 
 wast2json test/testsuite/memory.wast || exit 1
 bin/testrunner memory.json || exit 1
+
+wast2json test/testsuite/return.wast || exit 1
+bin/testrunner return.json || exit 1
