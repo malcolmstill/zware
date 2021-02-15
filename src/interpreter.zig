@@ -1376,6 +1376,95 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(i64);
                 try self.pushOperand(i64, @truncate(i32, c1));
             },
+            .TruncSat => {
+                const trunc_type = try instruction.readULEB128Mem(u32, &self.continuation);
+                switch (trunc_type) {
+                    0 => {
+                        const c1 = try self.popOperand(f32);
+                        const trunc = @trunc(c1);
+
+                        if (math.isNan(c1)) {
+                            try self.pushOperand(i32, 0);
+                            return;
+                        }
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
+                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+                            return;
+                        }
+                        if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
+                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
+                            return;
+                        }
+
+                        try self.pushOperand(i32, @floatToInt(i32, trunc));
+                    },
+                    1 => {
+                        const c1 = try self.popOperand(f32);
+                        const trunc = @trunc(c1);
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
+                        if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
+
+                        try self.pushOperand(u32, @floatToInt(u32, trunc));
+                    },
+                    2 => {
+                        const c1 = try self.popOperand(f64);
+                        const trunc = @trunc(c1);
+
+                        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
+                        if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
+
+                        try self.pushOperand(i32, @floatToInt(i32, trunc));
+                    },
+                    3 => {
+                        const c1 = try self.popOperand(f64);
+                        const trunc = @trunc(c1);
+
+                        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
+                        if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
+
+                        try self.pushOperand(u32, @floatToInt(u32, trunc));
+                    },
+                    4 => {
+                        const c1 = try self.popOperand(f32);
+                        const trunc = @trunc(c1);
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
+                        if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
+
+                        try self.pushOperand(i64, @floatToInt(i64, trunc));
+                    },
+                    5 => {
+                        const c1 = try self.popOperand(f32);
+                        const trunc = @trunc(c1);
+
+                        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
+                        if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
+
+                        try self.pushOperand(u64, @floatToInt(u64, trunc));
+                    },
+                    6 => {
+                        const c1 = try self.popOperand(f64);
+                        const trunc = @trunc(c1);
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
+                        if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
+
+                        try self.pushOperand(i64, @floatToInt(i64, trunc));
+                    },
+                    7 => {
+                        const c1 = try self.popOperand(f64);
+                        const trunc = @trunc(c1);
+
+                        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
+                        if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
+
+                        try self.pushOperand(u64, @floatToInt(u64, trunc));
+                    },
+                    else => return error.Trap,
+                }
+            },
             else => {
                 std.debug.warn("unimplemented instruction: {}\n", .{opcode});
                 return error.UnimplementedOpcode;
