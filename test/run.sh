@@ -35,6 +35,9 @@ bin/testrunner f64.json || exit 1
 wast2json test/testsuite/fac.wast || exit 1
 bin/testrunner fac.json || exit 1
 
+wast2json test/testsuite/forward.wast || exit 1
+bin/testrunner forward.json || exit 1
+
 # wast2json test/testsuite/func.wast || exit 1
 # bin/testrunner func.json || exit 1
 
