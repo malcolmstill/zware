@@ -637,7 +637,7 @@ pub const Interpreter = struct {
                 // TODO: we need to check this / handle multiple memories
 
                 const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                var memory = self.mod_inst.store.memories.items[memory_index];
+                var memory = &self.mod_inst.store.memories.items[memory_index];
 
                 const num_pages = try self.popOperand(u32);
                 if (memory.grow(num_pages)) |old_size| {
