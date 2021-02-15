@@ -290,10 +290,13 @@ pub const Interpreter = struct {
                 const function_index = table.data[lookup_index];
 
                 const func_type_index = module.functions.items[function_index];
-                if (func_type_index != op_func_type_index) return error.WrongFunctionType;
 
-                // Func type
+                // Check that signatures match
                 const func_type = module.types.items[func_type_index];
+                const call_indirect_func_type = module.types.items[op_func_type_index];
+                if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.SignatureMismatch;
+
+                // Our signatures match, let's go
                 const func = module.codes.items[function_index];
                 const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
@@ -749,10 +752,35 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(u64);
                 try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
             },
+            .F32Eq => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
+            },
+            .F32Ne => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
+            },
+            .F32Lt => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+            },
             .F32Gt => {
                 const c2 = try self.popOperand(f32);
                 const c1 = try self.popOperand(f32);
-                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+            },
+            .F32Le => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+            },
+            .F32Ge => {
+                const c2 = try self.popOperand(f32);
+                const c1 = try self.popOperand(f32);
+                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
             },
             .F64Eq => {
                 const c2 = try self.popOperand(f64);
