@@ -71,6 +71,11 @@ pub fn main() anyerror!void {
                 const field = action.field;
                 std.debug.warn("test: {s}:{s}\n", .{ wasm_filename, field });
 
+                if (expected.len > 1) {
+                    std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
+                    continue;
+                }
+
                 // Allocate input parameters and output results
                 var in = try arena.allocator.alloc(u64, action.args.len);
                 var out = try arena.allocator.alloc(u64, expected.len);

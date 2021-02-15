@@ -11,6 +11,9 @@ trap cleanup EXIT
 wast2json test/testsuite/br_if.wast || exit 1
 bin/testrunner br_if.json || exit 1
 
+wast2json test/testsuite/br.wast || exit 1
+bin/testrunner br.json || exit 1
+
 wast2json test/testsuite/const.wast || exit 1
 bin/testrunner const.json || exit 1
 
