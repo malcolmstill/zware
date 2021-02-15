@@ -69,7 +69,7 @@ pub fn main() anyerror!void {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
-                // std.debug.warn("test: {s}:{s}\n", .{ wasm_filename, field });
+                // std.debug.warn("test: {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
