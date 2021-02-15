@@ -29,6 +29,9 @@ bin/testrunner const.json || exit 1
 wast2json test/testsuite/f32_bitwise.wast || exit 1
 bin/testrunner f32_bitwise.json || exit 1
 
+wast2json test/testsuite/f32_cmp.wast || exit 1
+bin/testrunner f32_cmp.json || exit 1
+
 wast2json test/testsuite/f32.wast || exit 1
 bin/testrunner f32.json || exit 1
 
