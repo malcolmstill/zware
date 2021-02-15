@@ -54,32 +54,30 @@ pub const Interpreter = struct {
         }
     }
 
+    fn debug(self: *Interpreter, opcode: Instruction) void {
+        std.debug.warn("\n=====================================================\n", .{});
+        std.debug.warn("after: {}\n", .{opcode});
+        var i: usize = 0;
+        while (i < self.op_stack.len) : (i += 1) {
+            std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+        }
+        std.debug.warn("\n", .{});
+
+        i = 0;
+        while (i < self.label_stack.len) : (i += 1) {
+            std.debug.warn("label_stack[{}] = [{}, {}, {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].continuation });
+        }
+        std.debug.warn("\n", .{});
+
+        i = 0;
+        while (i < self.frame_stack.len) : (i += 1) {
+            std.debug.warn("frame_stack[{}] = [{}, {}, {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
+        }
+        std.debug.warn("=====================================================\n", .{});
+    }
+
     pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
-        // if (std.builtin.mode == .Debug) {
-        // defer {
-        //     std.debug.warn("\n=====================================================\n", .{});
-        //     std.debug.warn("stack after: {}\n", .{opcode});
-        //     var i: usize = 0;
-        //     while (i < self.op_stack.len) : (i += 1) {
-        //         std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        //     }
-        //     std.debug.warn("\n", .{});
-
-        //     // std.debug.warn("label after: {}\n", .{opcode});
-        //     // i = 0;
-        //     // while (i < self.label_stack.len) : (i += 1) {
-        //     //     std.debug.warn("label_stack[{}] = {}\n", .{ i, self.label_stack[i] });
-        //     // }
-        //     // std.debug.warn("\n", .{});
-
-        //     std.debug.warn("frame_stack after: {}\n", .{opcode});
-        //     i = 0;
-        //     while (i < self.frame_stack.len) : (i += 1) {
-        //         std.debug.warn("frame_stack[{}] = {}\n", .{ i, self.frame_stack[i] });
-        //     }
-        //     std.debug.warn("=====================================================\n", .{});
-        // }
-        // }
+        // defer self.debug(opcode);
         switch (opcode) {
             .Unreachable => return error.TrapUnreachable,
             .Nop => return,
@@ -104,14 +102,23 @@ pub const Interpreter = struct {
                 });
             },
             .Loop => {
-                const block_type = try instruction.readULEB128Mem(i32, &self.continuation);
+                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    block_params = func_type.params_count;
+                    block_returns = func_type.results_count;
+                }
 
                 // For loop control flow, the continuation is the loop body (including
                 // the initiating loop instruction, as branch consumes the existing label)
                 const continuation = code[0..];
                 try self.pushLabel(Label{
-                    .return_arity = if (block_type == 0x40) 0 else 1,
-                    .op_stack_len = self.op_stack.len,
+                    // note that we use block_params rather than block_returns for return arity:
+                    .return_arity = block_params,
+                    .op_stack_len = self.op_stack.len - block_params,
                     .continuation = continuation,
                 });
             },
@@ -181,7 +188,6 @@ pub const Interpreter = struct {
 
                     self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
                     self.label_stack = self.label_stack[0..frame.label_stack_len];
-
                     self.continuation = label.continuation;
                     _ = try self.popFrame();
                 }
