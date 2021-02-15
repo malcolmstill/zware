@@ -29,6 +29,9 @@ bin/testrunner const.json || exit 1
 wast2json test/testsuite/conversions.wast || exit 1
 bin/testrunner conversions.json || exit 1
 
+# wast2json test/testsuite/endianness.wast || exit 1
+# bin/testrunner endianness.json || exit 1
+
 wast2json test/testsuite/f32_bitwise.wast || exit 1
 bin/testrunner f32_bitwise.json || exit 1
 
@@ -97,6 +100,9 @@ bin/testrunner return.json || exit 1
 
 wast2json test/testsuite/stack.wast || exit 1
 bin/testrunner stack.json || exit 1
+
+wast2json test/testsuite/store.wast || exit 1
+bin/testrunner store.json || exit 1
 
 wast2json test/testsuite/switch.wast || exit 1
 bin/testrunner switch.json || exit 1
