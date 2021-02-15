@@ -1316,12 +1316,32 @@ pub const Interpreter = struct {
 
                 try self.pushOperand(u64, @floatToInt(u64, trunc));
             },
+            .F32ConvertI32S => {
+                const c1 = try self.popOperand(i32);
+                try self.pushOperand(f32, @intToFloat(f32, c1));
+            },
+            .F32ConvertI32U => {
+                const c1 = try self.popOperand(u32);
+                try self.pushOperand(f32, @intToFloat(f32, c1));
+            },
+            .F32ConvertI64S => {
+                const c1 = try self.popOperand(i64);
+                try self.pushOperand(f32, @intToFloat(f32, c1));
+            },
+            .F32ConvertI64U => {
+                const c1 = try self.popOperand(u64);
+                try self.pushOperand(f32, @intToFloat(f32, c1));
+            },
             .F64ConvertI32S => {
                 const c1 = try self.popOperand(i32);
                 try self.pushOperand(f64, @intToFloat(f64, c1));
             },
             .F64ConvertI32U => {
                 const c1 = try self.popOperand(u32);
+                try self.pushOperand(f64, @intToFloat(f64, c1));
+            },
+            .F64ConvertI64S => {
+                const c1 = try self.popOperand(i64);
                 try self.pushOperand(f64, @intToFloat(f64, c1));
             },
             .F64ConvertI64U => {
