@@ -253,6 +253,7 @@ const Command = union(enum) {
     module: struct {
         comptime @"type": []const u8 = "module",
         line: usize,
+        name: ?[]const u8 = null,
         filename: []const u8,
     },
     assert_return: struct {
