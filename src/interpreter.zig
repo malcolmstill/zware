@@ -93,7 +93,7 @@ pub const Interpreter = struct {
                 }
 
                 const end = try instruction.findEnd(code);
-                const continuation = code[end.offset..];
+                const continuation = code[end.offset + 1 ..];
 
                 try self.pushLabel(Label{
                     .return_arity = block_returns,
@@ -138,7 +138,7 @@ pub const Interpreter = struct {
 
                 // For if control flow, the continuation for our label
                 // is the continuation of code after end
-                const continuation = code[end.offset..];
+                const continuation = code[end.offset + 1 ..];
 
                 const condition = try self.popOperand(u32);
                 if (condition == 0) {
@@ -146,7 +146,7 @@ pub const Interpreter = struct {
                     self.continuation = continuation;
                     // unless we have an else branch
                     if (else_branch) |eb| {
-                        self.continuation = code[eb.offset..];
+                        self.continuation = code[eb.offset + 1 ..];
 
                         // We are inside the if branch
                         try self.pushLabel(Label{

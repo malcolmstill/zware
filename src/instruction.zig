@@ -69,7 +69,6 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .Block, .Loop, .If => continue,
@@ -82,6 +81,7 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
             .End => i -= 1,
             else => {},
         }
+        if (i == 0) return meta;
     }
     return error.CouldntFindEnd;
 }
@@ -107,7 +107,6 @@ pub fn findElse(code: []const u8) !?InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .If => continue,
@@ -124,6 +123,7 @@ pub fn findElse(code: []const u8) !?InstructionMeta {
             else => {},
         }
         if (i == 0 and meta.instruction == .End) return null;
+        if (i == 0) return meta;
     }
     return null;
 }
