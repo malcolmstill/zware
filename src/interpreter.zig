@@ -293,14 +293,15 @@ pub const Interpreter = struct {
 
                 // Lookup function index from table
                 const table = self.mod_inst.store.tables.items[table_index];
-                const function_index = table.data[lookup_index];
+                if (lookup_index >= table.data.len) return error.UndefinedElement;
+                const function_index = table.data[lookup_index] orelse return error.UndefinedElement;
 
                 const func_type_index = module.functions.items[function_index];
 
                 // Check that signatures match
                 const func_type = module.types.items[func_type_index];
                 const call_indirect_func_type = module.types.items[op_func_type_index];
-                if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.SignatureMismatch;
+                if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                 // Our signatures match, let's go
                 const func = module.codes.items[function_index];
@@ -393,6 +394,32 @@ pub const Interpreter = struct {
 
                 const value = try memory.read(u32, offset + address);
                 try self.pushOperand(u32, value);
+            },
+            .I64Load => {
+                const frame = try self.peekNthFrame(0);
+                // TODO: we need to check this / handle multiple memories
+                var memory = self.mod_inst.store.memories.items[0];
+
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                const address = try self.popOperand(u32);
+
+                const value = try memory.read(u64, offset + address);
+                try self.pushOperand(u64, value);
+            },
+            .F32Load => {
+                const frame = try self.peekNthFrame(0);
+                // TODO: we need to check this / handle multiple memories
+                var memory = self.mod_inst.store.memories.items[0];
+
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+
+                const address = try self.popOperand(u32);
+
+                const value = try memory.read(f32, offset + address);
+                try self.pushOperand(f32, value);
             },
             .F64Load => {
                 const frame = try self.peekNthFrame(0);
@@ -1238,6 +1265,7 @@ pub const Interpreter = struct {
             },
             .I32TruncF32S => {
                 const c1 = try self.popOperand(f32);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) return error.Overflow;
@@ -1247,6 +1275,7 @@ pub const Interpreter = struct {
             },
             .I32TruncF32U => {
                 const c1 = try self.popOperand(f32);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
@@ -1256,6 +1285,7 @@ pub const Interpreter = struct {
             },
             .I32TruncF64S => {
                 const c1 = try self.popOperand(f64);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
@@ -1265,6 +1295,7 @@ pub const Interpreter = struct {
             },
             .I32TruncF64U => {
                 const c1 = try self.popOperand(f64);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
@@ -1282,6 +1313,7 @@ pub const Interpreter = struct {
             },
             .I64TruncF32S => {
                 const c1 = try self.popOperand(f32);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
@@ -1291,6 +1323,7 @@ pub const Interpreter = struct {
             },
             .I64TruncF32U => {
                 const c1 = try self.popOperand(f32);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
@@ -1300,6 +1333,7 @@ pub const Interpreter = struct {
             },
             .I64TruncF64S => {
                 const c1 = try self.popOperand(f64);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
@@ -1309,6 +1343,7 @@ pub const Interpreter = struct {
             },
             .I64TruncF64U => {
                 const c1 = try self.popOperand(f64);
+                if (math.isNan(c1)) return error.InvalidConversion;
                 const trunc = @trunc(c1);
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
