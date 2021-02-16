@@ -12,7 +12,7 @@ pub const InstructionIterator = struct {
         };
     }
 
-    pub fn next(self: *InstructionIterator) !?InstructionMeta {
+    pub fn next(self: *InstructionIterator, comptime check: bool) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -41,7 +41,13 @@ pub const InstructionIterator = struct {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
-            .CallIndirect,
+            .CallIndirect => {
+                _ = try readULEB128Mem(u32, &self.code);
+                const reserved = try readULEB128Mem(u32, &self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedCallIndirectReserved;
+                }
+            },
             .I32Load,
             .I64Load,
             .F32Load,
@@ -89,10 +95,10 @@ pub const InstructionIterator = struct {
 // Errors:
 // - CouldntFindEnd if we run out of elements in `code`
 // - NotBranchTarget if the instruction at `code[0]` isn't branch target
-pub fn findEnd(code: []const u8) !InstructionMeta {
+pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .Block, .Loop, .If => continue,
@@ -110,10 +116,10 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     return error.CouldntFindEnd;
 }
 
-pub fn findExprEnd(code: []const u8) !InstructionMeta {
+pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
         switch (meta.instruction) {
             .End => i -= 1,
             else => {},
@@ -127,10 +133,10 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
 //
 // Similar to findEnd but finds the match else branch, if
 // one exists
-pub fn findElse(code: []const u8) !?InstructionMeta {
+pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .If => continue,
