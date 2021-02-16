@@ -1610,10 +1610,6 @@ pub const Interpreter = struct {
                     else => return error.Trap,
                 }
             },
-            else => {
-                std.debug.warn("unimplemented instruction: {}\n", .{opcode});
-                return error.UnimplementedOpcode;
-            },
         }
     }
 
