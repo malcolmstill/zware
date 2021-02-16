@@ -1052,15 +1052,18 @@ pub const Interpreter = struct {
             },
             .F32Nearest => {
                 const c1 = try self.popOperand(f32);
-                if (c1 < 0.0 and c1 >= -0.5) {
-                    try self.pushOperand(u32, 0x80000000);
-                    return;
+                const floor = @floor(c1);
+                const ceil = @ceil(c1);
+
+                if (ceil - c1 == c1 - floor) {
+                    if (@mod(ceil, 2) == 0) {
+                        try self.pushOperand(f32, ceil);
+                    } else {
+                        try self.pushOperand(f32, floor);
+                    }
+                } else {
+                    try self.pushOperand(f32, @round(c1));
                 }
-                if (c1 > 0.0 and c1 <= 0.5) {
-                    try self.pushOperand(f32, 0.0);
-                    return;
-                }
-                try self.pushOperand(f32, @round(c1));
             },
             .F32Sqrt => {
                 const c1 = try self.popOperand(f32);
@@ -1166,15 +1169,18 @@ pub const Interpreter = struct {
             },
             .F64Nearest => {
                 const c1 = try self.popOperand(f64);
-                if (c1 < 0.0 and c1 >= -0.5) {
-                    try self.pushOperand(u64, 0x8000000000000000);
-                    return;
+                const floor = @floor(c1);
+                const ceil = @ceil(c1);
+
+                if (ceil - c1 == c1 - floor) {
+                    if (@mod(ceil, 2) == 0) {
+                        try self.pushOperand(f64, ceil);
+                    } else {
+                        try self.pushOperand(f64, floor);
+                    }
+                } else {
+                    try self.pushOperand(f64, @round(c1));
                 }
-                if (c1 > 0.0 and c1 <= 0.5) {
-                    try self.pushOperand(f64, 0.0);
-                    return;
-                }
-                try self.pushOperand(f64, @round(c1));
             },
             .F64Sqrt => {
                 const c1 = try self.popOperand(f64);
