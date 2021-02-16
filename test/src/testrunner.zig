@@ -161,6 +161,44 @@ pub fn main() anyerror!void {
                         else => return error.TestsuiteExpectedOverflow,
                     }
                 }
+
+                if (mem.eql(u8, trap, "invalid conversion to integer")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.InvalidConversion => continue,
+                        else => return error.TestsuiteExpectedInvalidConversion,
+                    }
+                }
+
+                if (mem.eql(u8, trap, "out of bounds memory access")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.OutOfBoundsMemoryAccess => continue,
+                        else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                    }
+                }
+
+                if (mem.eql(u8, trap, "indirect call type mismatch")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.IndirectCallTypeMismatch => continue,
+                        else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                    }
+                }
+
+                if (mem.eql(u8, trap, "undefined element")) {
+                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                        return error.TestsuiteExpectedTrap;
+                    } else |err| switch (err) {
+                        error.UndefinedElement => continue,
+                        else => return error.TestsuiteExpectedUndefinedElement,
+                    }
+                }
+
+                return error.ExpectedTrapDidntOccur;
             },
             else => continue,
         }
