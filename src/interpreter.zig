@@ -570,8 +570,8 @@ pub const Interpreter = struct {
                 const frame = try self.peekNthFrame(0);
                 var memory = self.mod_inst.store.memories.items[0];
 
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
 
                 const value = try self.popOperand(u64);
                 const address = try self.popOperand(u32);
@@ -582,8 +582,8 @@ pub const Interpreter = struct {
                 const frame = try self.peekNthFrame(0);
                 var memory = self.mod_inst.store.memories.items[0];
 
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
+                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
 
                 const value = try self.popOperand(f64);
                 const address = try self.popOperand(u32);
