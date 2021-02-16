@@ -377,6 +377,7 @@ pub const Module = struct {
             }
 
             const code = locals_and_code[1 + 2 * locals_definitions_count ..];
+            try decodeCode(code);
 
             try self.codes.append(Code{
                 .locals = locals_definitions,
@@ -441,6 +442,16 @@ pub const Module = struct {
         });
 
         return 1;
+    }
+
+    // decodeCode
+    //
+    // Checks the binary representation of a function is well formed
+    pub fn decodeCode(code: []const u8) !void {
+        var it = instruction.InstructionIterator.init(code);
+        while (try it.next(true)) |meta| {
+            // try will fail on bad code
+        }
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
