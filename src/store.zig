@@ -158,8 +158,8 @@ test "Memory test" {
 
     try mem0.write(u8, 0xFFFF, 42);
     testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u16, 0xFFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
@@ -176,10 +176,10 @@ test "Memory test" {
     testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 
     testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0x1FFFF + 1));
 
     mem0.max_size = 2;
-    testing.expectError(error.MemoryGrowExceedsMaxSize, mem0.grow(1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));
 
     mem0.max_size = null;
     _ = try mem0.grow(1);
