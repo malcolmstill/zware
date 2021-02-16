@@ -292,9 +292,8 @@ pub const Interpreter = struct {
                 // TODO: debug build check that `table` exists
 
                 // Lookup function index from table
-                const table = self.mod_inst.store.tables.items[table_index];
-                if (lookup_index >= table.data.len) return error.UndefinedElement;
-                const function_index = table.data[lookup_index] orelse return error.UndefinedElement;
+                const table = &self.mod_inst.store.tables.items[table_index];
+                const function_index = try table.lookup(lookup_index);
 
                 const func_type_index = module.functions.items[function_index];
 
