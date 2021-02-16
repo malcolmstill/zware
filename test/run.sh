@@ -106,3 +106,9 @@ bin/testrunner store.json || exit 1
 
 wast2json test/testsuite/switch.wast || exit 1
 bin/testrunner switch.json || exit 1
+
+wast2json test/testsuite/traps.wast || exit 1
+bin/testrunner traps.json || exit 1
+
+wast2json test/testsuite/type.wast || exit 1
+bin/testrunner type.json || exit 1

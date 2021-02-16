@@ -64,7 +64,7 @@ pub const Memory = struct {
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.MemoryGrowExceedsMaxSize;
+            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
@@ -73,7 +73,7 @@ pub const Memory = struct {
     }
 
     pub fn read(self: *Memory, comptime T: type, address: u32) !T {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
@@ -101,7 +101,7 @@ pub const Memory = struct {
     }
 
     pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
@@ -158,8 +158,8 @@ test "Memory test" {
 
     try mem0.write(u8, 0xFFFF, 42);
     testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u16, 0xFFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0xFFFF + 1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
@@ -176,10 +176,10 @@ test "Memory test" {
     testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 
     testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
-    testing.expectError(error.MemoryIndexOutOfBounds, mem0.read(u8, 0x1FFFF + 1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0x1FFFF + 1));
 
     mem0.max_size = 2;
-    testing.expectError(error.MemoryGrowExceedsMaxSize, mem0.grow(1));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));
 
     mem0.max_size = null;
     _ = try mem0.grow(1);
@@ -190,16 +190,16 @@ test "Memory test" {
 
 pub const Table = struct {
     // Let's assume indices are u32
-    data: []u32,
+    data: []?u32,
 
     pub fn init(alloc: *mem.Allocator, max: usize) !Table {
         return Table{
-            .data = try alloc.alloc(u32, max),
+            .data = try alloc.alloc(?u32, max),
         };
     }
 
     pub fn lookup(self: *Table, index: usize) !u32 {
-        if (self.data.len < index + 1) return error.TableLookupOutOfBounds;
-        return self.data[index];
+        if (self.data.len < index + 1) return error.UndefinedElement;
+        return self.data[index] orelse return error.UndefinedElement;
     }
 };
