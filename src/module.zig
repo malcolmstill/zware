@@ -82,7 +82,11 @@ pub const Module = struct {
 
     pub fn decodeSection(self: *Module) !SectionType {
         const rd = self.buf.reader();
-        const id: SectionType = @intToEnum(SectionType, try rd.readByte());
+
+        const id: SectionType = rd.readEnum(SectionType, .Little) catch |err| switch (err) {
+            error.InvalidValue => return error.UnknownSectionId,
+            else => return err,
+        };
 
         const size = try leb.readULEB128(u32, rd);
 
