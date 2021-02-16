@@ -327,7 +327,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(expr);
+            const meta = try instruction.findExprEnd(true, expr);
 
             try rd.skipBytes(meta.offset + 1, .{});
 
@@ -399,7 +399,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(expr);
+            const meta = try instruction.findExprEnd(true, expr);
 
             try rd.skipBytes(meta.offset + 1, .{});
             const data_length = try leb.readULEB128(u32, rd);

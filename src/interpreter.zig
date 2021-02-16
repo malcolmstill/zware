@@ -92,7 +92,7 @@ pub const Interpreter = struct {
                     block_returns = func_type.results_count;
                 }
 
-                const end = try instruction.findEnd(code);
+                const end = try instruction.findEnd(false, code);
                 const continuation = code[end.offset + 1 ..];
 
                 try self.pushLabel(Label{
@@ -125,8 +125,8 @@ pub const Interpreter = struct {
             .If => {
                 // TODO: perform findEnd during parsing
                 const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
-                const end = try instruction.findEnd(code);
-                const else_branch = try instruction.findElse(code);
+                const end = try instruction.findEnd(false, code);
+                const else_branch = try instruction.findElse(false, code);
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
