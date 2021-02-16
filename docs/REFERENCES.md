@@ -1,4 +1,5 @@
 - https://webassembly.github.io/spec/core/exec/index.html
+- https://github.com/WebAssembly/design/blob/master/Semantics.md
 - https://github.com/WebAssembly/spec/tree/master/test/core
 - http://troubles.md/wasm-is-not-a-stack-machine/
 - https://stackoverflow.com/questions/48638653/can-anyone-help-explain-the-one-pass-verification-process-shows-in-webassembly
