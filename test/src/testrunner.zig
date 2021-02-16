@@ -57,6 +57,7 @@ pub fn main() anyerror!void {
         switch (command) {
             .module => {
                 wasm_filename = command.module.filename;
+                std.debug.warn("(module) test: {s}\n", .{wasm_filename});
 
                 // 3. Load .wasm from file
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
