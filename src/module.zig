@@ -67,6 +67,7 @@ pub const Module = struct {
         if (!mem.eql(u8, magic[0..], "\x00asm")) return error.MagicNumberNotFound;
 
         const version = try rd.readIntLittle(u32);
+        if (version != 1) return error.UnknownBinaryVersion;
 
         var i: usize = 0;
         while (true) : (i += 1) {
