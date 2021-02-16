@@ -72,11 +72,12 @@ pub const Memory = struct {
         return old_size;
     }
 
-    pub fn read(self: *Memory, comptime T: type, address: u32) !T {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
+    pub fn read(self: *Memory, comptime T: type, offset: u32, address: u32) !T {
+        const effective_address = @as(u33, offset) + @as(u33, address);
+        if (effective_address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
-        const page: u32 = address / PAGE_SIZE;
-        const offset: u32 = address % PAGE_SIZE;
+        const page = effective_address / PAGE_SIZE;
+        const page_offset = effective_address % PAGE_SIZE;
 
         switch (T) {
             u8,
@@ -87,24 +88,25 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little),
+            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little),
             f32 => {
-                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
                 return @bitCast(f32, x);
             },
             f64 => {
-                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][offset]), .Little);
+                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
                 return @bitCast(f64, x);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }
     }
 
-    pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
+    pub fn write(self: *Memory, comptime T: type, offset: u32, address: u32, value: T) !void {
+        const effective_address = @as(u33, offset) + @as(u33, address);
+        if (effective_address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
-        const page: u32 = address / PAGE_SIZE;
-        const offset: u32 = address % PAGE_SIZE;
+        const page = effective_address / PAGE_SIZE;
+        const page_offset = effective_address % PAGE_SIZE;
 
         switch (T) {
             u8,
@@ -115,14 +117,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][offset]), value, .Little),
+            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][page_offset]), value, .Little),
             f32 => {
                 const x = @bitCast(u32, value);
-                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[page][offset]), x, .Little);
+                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[page][page_offset]), x, .Little);
             },
             f64 => {
                 const x = @bitCast(u64, value);
-                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[page][offset]), x, .Little);
+                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[page][page_offset]), x, .Little);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }
@@ -150,33 +152,33 @@ test "Memory test" {
     testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 1), mem0.size());
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0));
-    try mem0.write(u8, 0, 15);
-    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0));
+    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0, 0));
+    try mem0.write(u8, 0, 0, 15);
+    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0, 0));
+    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0, 0));
 
-    try mem0.write(u8, 0xFFFF, 42);
-    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0xFFFF + 1));
+    try mem0.write(u8, 0, 0xFFFF, 42);
+    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 2), mem0.size());
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0xFFFF + 1));
     // Write across page boundary
-    try mem0.write(u16, 0xFFFF, 0xDEAD);
-    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0xFFFF));
-    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0xFFFF + 1));
-    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0xFFFF));
+    try mem0.write(u16, 0, 0xFFFF, 0xDEAD);
+    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0, 0xFFFF));
+    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0, 0xFFFF + 1));
+    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0, 0xFFFF));
     const slice = mem0.asSlice();
     testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
     testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0x1FFFF + 1));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0x1FFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0x1FFFF + 1));
 
     mem0.max_size = 2;
     testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));

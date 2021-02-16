@@ -8,6 +8,9 @@ function cleanup {
 
 trap cleanup EXIT
 
+wast2json test/testsuite/address.wast || exit 1
+bin/testrunner address.json || exit 1
+
 wast2json test/testsuite/br_if.wast || exit 1
 bin/testrunner br_if.json || exit 1
 

@@ -391,7 +391,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u32, offset + address);
+                const value = try memory.read(u32, offset, address);
                 try self.pushOperand(u32, value);
             },
             .I64Load => {
@@ -404,7 +404,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u64, offset + address);
+                const value = try memory.read(u64, offset, address);
                 try self.pushOperand(u64, value);
             },
             .F32Load => {
@@ -417,7 +417,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(f32, offset + address);
+                const value = try memory.read(f32, offset, address);
                 try self.pushOperand(f32, value);
             },
             .F64Load => {
@@ -430,7 +430,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(f64, offset + address);
+                const value = try memory.read(f64, offset, address);
                 try self.pushOperand(f64, value);
             },
             .I32Load8S => {
@@ -442,7 +442,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i8, offset + address);
+                const value = try memory.read(i8, offset, address);
                 try self.pushOperand(i32, value);
             },
             .I32Load8U => {
@@ -454,7 +454,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u8, offset + address);
+                const value = try memory.read(u8, offset, address);
                 try self.pushOperand(u32, value);
             },
             .I32Load16S => {
@@ -466,7 +466,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i16, offset + address);
+                const value = try memory.read(i16, offset, address);
                 try self.pushOperand(i32, value);
             },
             .I32Load16U => {
@@ -478,7 +478,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u16, offset + address);
+                const value = try memory.read(u16, offset, address);
                 try self.pushOperand(u32, value);
             },
             .I64Load8S => {
@@ -490,7 +490,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i8, offset + address);
+                const value = try memory.read(i8, offset, address);
                 try self.pushOperand(i64, value);
             },
             .I64Load8U => {
@@ -502,7 +502,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u8, offset + address);
+                const value = try memory.read(u8, offset, address);
                 try self.pushOperand(u64, value);
             },
             .I64Load16S => {
@@ -514,7 +514,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i16, offset + address);
+                const value = try memory.read(i16, offset, address);
                 try self.pushOperand(i64, value);
             },
             .I64Load16U => {
@@ -526,7 +526,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u16, offset + address);
+                const value = try memory.read(u16, offset, address);
                 try self.pushOperand(u64, value);
             },
             .I64Load32S => {
@@ -538,7 +538,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(i32, offset + address);
+                const value = try memory.read(i32, offset, address);
                 try self.pushOperand(i64, value);
             },
             .I64Load32U => {
@@ -550,7 +550,7 @@ pub const Interpreter = struct {
 
                 const address = try self.popOperand(u32);
 
-                const value = try memory.read(u32, offset + address);
+                const value = try memory.read(u32, offset, address);
                 try self.pushOperand(u64, value);
             },
             .I32Store => {
@@ -564,7 +564,7 @@ pub const Interpreter = struct {
                 const value = try self.popOperand(u32);
                 const address = try self.popOperand(u32);
 
-                try memory.write(u32, offset + address, value);
+                try memory.write(u32, offset, address, value);
             },
             .I64Store => {
                 const frame = try self.peekNthFrame(0);
@@ -576,7 +576,7 @@ pub const Interpreter = struct {
                 const value = try self.popOperand(u64);
                 const address = try self.popOperand(u32);
 
-                try memory.write(u64, offset + address, value);
+                try memory.write(u64, offset, address, value);
             },
             .F32Store => {
                 const frame = try self.peekNthFrame(0);
@@ -588,7 +588,7 @@ pub const Interpreter = struct {
                 const value = try self.popOperand(f64);
                 const address = try self.popOperand(u32);
 
-                try memory.write(f64, offset + address, value);
+                try memory.write(f64, offset, address, value);
             },
             .F64Store => {
                 const frame = try self.peekNthFrame(0);
@@ -600,7 +600,7 @@ pub const Interpreter = struct {
                 const value = try self.popOperand(f64);
                 const address = try self.popOperand(u32);
 
-                try memory.write(f64, offset + address, value);
+                try memory.write(f64, offset, address, value);
             },
             .I32Store8 => {
                 const frame = try self.peekNthFrame(0);
@@ -612,7 +612,7 @@ pub const Interpreter = struct {
                 const value = @truncate(u8, try self.popOperand(u32));
                 const address = try self.popOperand(u32);
 
-                try memory.write(u8, offset + address, value);
+                try memory.write(u8, offset, address, value);
             },
             .I32Store16 => {
                 const frame = try self.peekNthFrame(0);
@@ -624,7 +624,7 @@ pub const Interpreter = struct {
                 const value = @truncate(u16, try self.popOperand(u32));
                 const address = try self.popOperand(u32);
 
-                try memory.write(u16, offset + address, value);
+                try memory.write(u16, offset, address, value);
             },
             .I64Store8 => {
                 const frame = try self.peekNthFrame(0);
@@ -636,7 +636,7 @@ pub const Interpreter = struct {
                 const value = @truncate(u8, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
-                try memory.write(u8, offset + address, value);
+                try memory.write(u8, offset, address, value);
             },
             .I64Store16 => {
                 const frame = try self.peekNthFrame(0);
@@ -648,7 +648,7 @@ pub const Interpreter = struct {
                 const value = @truncate(u16, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
-                try memory.write(u16, offset + address, value);
+                try memory.write(u16, offset, address, value);
             },
             .I64Store32 => {
                 const frame = try self.peekNthFrame(0);
@@ -660,7 +660,7 @@ pub const Interpreter = struct {
                 const value = @truncate(u32, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
-                try memory.write(u32, offset + address, value);
+                try memory.write(u32, offset, address, value);
             },
             .MemorySize => {
                 const frame = try self.peekNthFrame(0);
