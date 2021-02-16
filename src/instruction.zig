@@ -43,7 +43,7 @@ pub const InstructionIterator = struct {
             },
             .CallIndirect => {
                 _ = try readULEB128Mem(u32, &self.code);
-                const reserved = try readULEB128Mem(u32, &self.code);
+                const reserved = try readByte(&self.code);
                 if (check) {
                     if (reserved != 0) return error.MalformedCallIndirectReserved;
                 }
@@ -235,6 +235,16 @@ pub fn readU64(ptr: *[]const u8) !u64 {
     var buf = std.io.fixedBufferStream(ptr.*);
     const rd = buf.reader();
     const value = try rd.readIntLittle(u64);
+
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
+pub fn readByte(ptr: *[]const u8) !u8 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readByte();
 
     ptr.*.ptr += buf.pos;
     ptr.*.len -= buf.pos;
