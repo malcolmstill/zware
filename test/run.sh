@@ -17,6 +17,9 @@ bin/testrunner align.json || exit 1
 wast2json test/testsuite/binary-leb128.wast || exit 1
 bin/testrunner binary-leb128.json || exit 1
 
+wast2json test/testsuite/binary.wast || exit 1
+bin/testrunner binary.json || exit 1
+
 wast2json test/testsuite/br_if.wast || exit 1
 bin/testrunner br_if.json || exit 1
 
