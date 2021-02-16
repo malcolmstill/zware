@@ -199,7 +199,7 @@ pub const Table = struct {
     }
 
     pub fn lookup(self: *Table, index: usize) !u32 {
-        if (self.data.len < index + 1) return error.TableLookupOutOfBounds;
-        return self.data[index];
+        if (self.data.len < index + 1) return error.UndefinedElement;
+        return self.data[index] orelse return error.UndefinedElement;
     }
 };
