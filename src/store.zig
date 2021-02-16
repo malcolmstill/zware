@@ -190,11 +190,11 @@ test "Memory test" {
 
 pub const Table = struct {
     // Let's assume indices are u32
-    data: []u32,
+    data: []?u32,
 
     pub fn init(alloc: *mem.Allocator, max: usize) !Table {
         return Table{
-            .data = try alloc.alloc(u32, max),
+            .data = try alloc.alloc(?u32, max),
         };
     }
 
