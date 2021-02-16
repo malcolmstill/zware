@@ -64,7 +64,7 @@ pub const Memory = struct {
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
         if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.MemoryGrowExceedsMaxSize;
+            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
@@ -73,7 +73,7 @@ pub const Memory = struct {
     }
 
     pub fn read(self: *Memory, comptime T: type, address: u32) !T {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
@@ -101,7 +101,7 @@ pub const Memory = struct {
     }
 
     pub fn write(self: *Memory, comptime T: type, address: u32, value: T) !void {
-        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.MemoryIndexOutOfBounds;
+        if (address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
         const page: u32 = address / PAGE_SIZE;
         const offset: u32 = address % PAGE_SIZE;
