@@ -155,7 +155,7 @@ test "instruction iterator" {
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
 
     const if_end_meta = try findEnd(func.code[5..]);
-    testing.expectEqual(if_end_meta.offset, 6);
+    testing.expectEqual(if_end_meta.offset + 1, 6);
 
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
