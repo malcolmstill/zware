@@ -152,33 +152,33 @@ test "Memory test" {
     testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 1), mem0.size());
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0));
-    try mem0.write(u8, 0, 15);
-    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0));
-    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0));
+    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0, 0));
+    try mem0.write(u8, 0, 0, 15);
+    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0, 0));
+    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0, 0));
 
-    try mem0.write(u8, 0xFFFF, 42);
-    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0xFFFF + 1));
+    try mem0.write(u8, 0, 0xFFFF, 42);
+    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0, 0xFFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0xFFFF + 1));
 
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
     testing.expectEqual(@as(usize, 2), mem0.size());
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0xFFFF + 1));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0xFFFF + 1));
     // Write across page boundary
-    try mem0.write(u16, 0xFFFF, 0xDEAD);
-    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0xFFFF));
-    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0xFFFF + 1));
-    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0xFFFF));
+    try mem0.write(u16, 0, 0xFFFF, 0xDEAD);
+    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0, 0xFFFF));
+    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0, 0xFFFF + 1));
+    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0, 0xFFFF));
     const slice = mem0.asSlice();
     testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
     testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0x1FFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0x1FFFF + 1));
+    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0x1FFFF));
+    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0x1FFFF + 1));
 
     mem0.max_size = 2;
     testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));
