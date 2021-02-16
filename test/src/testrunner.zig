@@ -58,14 +58,11 @@ pub fn main() anyerror!void {
             .module => {
                 wasm_filename = command.module.filename;
                 std.debug.warn("(module) test: {s}\n", .{wasm_filename});
-
-                // 3. Load .wasm from file
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
-
                 modinst = try module.instantiate();
             },
             .assert_return => {
@@ -202,6 +199,92 @@ pub fn main() anyerror!void {
                 }
 
                 return error.ExpectedTrapDidntOccur;
+            },
+            .assert_malformed => {
+                if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
+                std.debug.warn("(malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                wasm_filename = command.assert_malformed.filename;
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                module = Module.init(&arena.allocator, program);
+
+                const trap = command.assert_malformed.text;
+
+                errdefer {
+                    std.debug.warn("ERROR (malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                }
+
+                if (mem.eql(u8, trap, "unexpected end")) {
+                    if (module.decode()) |x| {
+                        return error.TestsuiteExpectedUnexpectedEnd;
+                    } else |err| switch (err) {
+                        error.EndOfStream => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.TestsuiteExpectedUnexpectedEnd;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "magic header not detected")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.MagicNumberNotFound => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "unknown binary version")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownBinaryVersion => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "malformed section id")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownSectionId => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "integer representation too long")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.ExpectedFuncTypeTag => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "zero flag expected")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                return error.ExpectedError;
             },
             .action => {
                 const action = command.action.action;
