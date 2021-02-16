@@ -90,12 +90,11 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
-
         switch (meta.instruction) {
             .End => i -= 1,
             else => {},
         }
+        if (i == 0) return meta;
     }
     return error.CouldntFindExprEnd;
 }
