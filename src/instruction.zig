@@ -41,7 +41,7 @@ pub const InstructionIterator = struct {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
-            .CallIndirect, .I32Load, .F32Load, .I32Store, .I64Store, .F64Store => {
+            .CallIndirect, .I32Load, .I64Load, .F32Load, .F64Load, .I32Store, .I64Store, .F32Store, .F64Store => {
                 _ = try readULEB128Mem(u32, &self.code);
                 _ = try readULEB128Mem(u32, &self.code);
             },
@@ -69,7 +69,6 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .Block, .Loop, .If => continue,
@@ -82,6 +81,7 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
             .End => i -= 1,
             else => {},
         }
+        if (i == 0) return meta;
     }
     return error.CouldntFindEnd;
 }
@@ -90,12 +90,11 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
-
         switch (meta.instruction) {
             .End => i -= 1,
             else => {},
         }
+        if (i == 0) return meta;
     }
     return error.CouldntFindExprEnd;
 }
@@ -108,7 +107,6 @@ pub fn findElse(code: []const u8) !?InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
-        if (i == 0) return meta;
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .If => continue,
@@ -125,6 +123,7 @@ pub fn findElse(code: []const u8) !?InstructionMeta {
             else => {},
         }
         if (i == 0 and meta.instruction == .End) return null;
+        if (i == 0) return meta;
     }
     return null;
 }
@@ -156,7 +155,7 @@ test "instruction iterator" {
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
 
     const if_end_meta = try findEnd(func.code[5..]);
-    testing.expectEqual(if_end_meta.offset, 6);
+    testing.expectEqual(if_end_meta.offset + 1, 6);
 
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
     testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });

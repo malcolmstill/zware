@@ -324,7 +324,7 @@ pub const Module = struct {
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(expr);
 
-            try rd.skipBytes(meta.offset, .{});
+            try rd.skipBytes(meta.offset + 1, .{});
 
             // Number of u32's in our data (not the length in bytes!)
             const data_length = try leb.readULEB128(u32, rd);
@@ -339,7 +339,7 @@ pub const Module = struct {
 
             try self.elements.append(Segment{
                 .index = table_index,
-                .offset = self.module[expr_start .. expr_start + meta.offset],
+                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -396,7 +396,7 @@ pub const Module = struct {
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(expr);
 
-            try rd.skipBytes(meta.offset, .{});
+            try rd.skipBytes(meta.offset + 1, .{});
             const data_length = try leb.readULEB128(u32, rd);
 
             const offset = rd.context.pos;
@@ -405,7 +405,7 @@ pub const Module = struct {
 
             try self.datas.append(Segment{
                 .index = mem_idx,
-                .offset = self.module[expr_start .. expr_start + meta.offset],
+                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
                 .count = data_length,
                 .data = self.module[offset..rd.context.pos],
             });
