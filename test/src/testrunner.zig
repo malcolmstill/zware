@@ -277,6 +277,7 @@ pub fn main() anyerror!void {
                     if (module.decode()) |x| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
+                        error.MalformedCallIndirectReserved => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
