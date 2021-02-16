@@ -23,6 +23,8 @@ const ArenaAllocator = std.heap.ArenaAllocator;
 // tests but still include the testsuite as part of, say, Github
 // Actions.
 //
+// See https://github.com/WebAssembly/spec/blob/master/interpreter/README.md#s-expression-syntax
+// for information on the format of the .wast files.
 
 var gpa = GeneralPurposeAllocator(.{}){};
 
@@ -200,6 +202,34 @@ pub fn main() anyerror!void {
 
                 return error.ExpectedTrapDidntOccur;
             },
+            .action => {
+                const action = command.action.action;
+                const expected = command.action.expected;
+                const field = action.field;
+                std.debug.warn("(return) test: {s}:{}\n", .{ r.source_filename, command.action.line });
+
+                if (expected.len > 1) {
+                    std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
+                    continue;
+                }
+
+                // Allocate input parameters and output results
+                var in = try arena.allocator.alloc(u64, action.args.len);
+                var out = try arena.allocator.alloc(u64, expected.len);
+
+                // Initialise input parameters
+                for (action.args) |value, i| {
+                    const arg = try fmt.parseInt(u64, value.value, 10);
+                    in[i] = arg;
+                }
+
+                // Invoke the function
+                modinst.invokeDynamic(field, in, out, .{}) catch |err| {
+                    std.debug.warn("(result) invoke = {s}\n", .{field});
+                    std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
+                    return err;
+                };
+            },
             else => continue,
         }
     }
@@ -256,6 +286,12 @@ const Command = union(enum) {
         line: usize,
         action: Action,
         text: []const u8,
+        expected: []const ValueTrap,
+    },
+    action: struct {
+        comptime @"type": []const u8 = "action",
+        line: usize,
+        action: Action,
         expected: []const ValueTrap,
     },
 };
