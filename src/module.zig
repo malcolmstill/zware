@@ -82,6 +82,7 @@ pub const Module = struct {
         }
 
         if (self.types.count != self.types.list.items.len) return error.TypeCountMismatch;
+        if (self.imports.count != self.imports.list.items.len) return error.ImportsCountMismatch;
         if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
     }
 
@@ -161,6 +162,7 @@ pub const Module = struct {
     fn decodeImportSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
+        self.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
