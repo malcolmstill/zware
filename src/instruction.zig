@@ -206,33 +206,33 @@ test "instruction iterator" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    const func = module.codes.items[0];
+    const func = module.codes.list.items[0];
 
     var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
 
-    const if_end_meta = try findEnd(func.code[5..]);
+    const if_end_meta = try findEnd(false, func.code[5..]);
     testing.expectEqual(if_end_meta.offset + 1, 6);
 
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
 
-    testing.expectEqual(try it.next(), null);
+    testing.expectEqual(try it.next(false), null);
 }
 
 pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {

@@ -623,14 +623,14 @@ pub const ModuleInstance = struct {
     pub fn invoke(self: *ModuleInstance, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
         // 1.
         const index = try self.module.getExport(.Func, name);
-        if (index >= self.module.functions.items.len) return error.FuncIndexExceedsTypesLength;
+        if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function_type_index = self.module.functions.items[index];
+        const function_type_index = self.module.functions.list.items[index];
 
         // 2.
-        const func_type = self.module.types.items[function_type_index];
-        const params = self.module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-        const results = self.module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+        const func_type = self.module.types.list.items[function_type_index];
+        const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+        const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
         if (params.len != args.len) return error.ParamCountMismatch;
 
@@ -646,7 +646,7 @@ pub const ModuleInstance = struct {
         }
 
         // 5. get the function bytecode
-        const func = self.module.codes.items[index];
+        const func = self.module.codes.list.items[index];
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
