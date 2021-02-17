@@ -220,6 +220,7 @@ pub fn main() anyerror!void {
                         error.FunctionCodeSectionsInconsistent => continue,
                         error.EndOfStream => continue,
                         error.CouldntFindExprEnd => continue,
+                        error.ElementsCountMismatch => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.TestsuiteExpectedUnexpectedEnd;
@@ -323,6 +324,10 @@ pub fn main() anyerror!void {
                         error.TablesCountMismatch => continue,
                         error.MemoriesCountMismatch => continue,
                         error.GlobalsCountMismatch => continue,
+                        error.ElementsCountMismatch => continue,
+                        error.FunctionsCountMismatch => continue,
+                        error.CodesCountMismatch => continue,
+                        error.DatasCountMismatch => continue,
                         error.UnexpectedEndOfSection => continue,
                         error.InvalidValue => continue,
                         else => {
