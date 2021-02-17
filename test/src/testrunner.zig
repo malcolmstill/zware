@@ -356,6 +356,8 @@ pub fn main() anyerror!void {
                     if (module.decode()) |x| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
+                        error.Overflow => continue,
+                        error.UnknownSectionId => continue,
                         error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
