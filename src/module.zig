@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const leb = std.leb;
+const unicode = std.unicode;
 const ArrayList = std.ArrayList;
 const Instruction = @import("instruction.zig").Instruction;
 const FuncType = @import("common.zig").FuncType;
@@ -79,15 +80,23 @@ pub const Module = struct {
                     else => return err,
                 }
             };
+            try self.verify();
         }
+        try self.verify();
+        if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+    }
 
+    pub fn verify(self: *Module) !void {
         if (self.types.count != self.types.list.items.len) return error.TypeCountMismatch;
         if (self.imports.count != self.imports.list.items.len) return error.ImportsCountMismatch;
         if (self.tables.count != self.tables.list.items.len) return error.TablesCountMismatch;
         if (self.memories.count != self.memories.list.items.len) return error.MemoriesCountMismatch;
         if (self.globals.count != self.globals.list.items.len) return error.GlobalsCountMismatch;
         if (self.exports.count != self.exports.list.items.len) return error.ExportsCountMismatch;
-        if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+        if (self.elements.count != self.elements.list.items.len) return error.ElementsCountMismatch;
+        if (self.functions.count != self.functions.list.items.len) return error.FunctionsCountMismatch;
+        if (self.codes.count != self.codes.list.items.len) return error.CodesCountMismatch;
+        if (self.datas.count != self.datas.list.items.len) return error.DatasCountMismatch;
     }
 
     pub fn decodeSection(self: *Module) !SectionType {
@@ -195,6 +204,7 @@ pub const Module = struct {
     fn decodeFunctionSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
+        self.functions.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -337,6 +347,7 @@ pub const Module = struct {
     fn decodeElementSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
+        self.elements.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -374,6 +385,7 @@ pub const Module = struct {
         const rd = self.buf.reader();
         var x = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
+        self.codes.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -419,12 +431,14 @@ pub const Module = struct {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
         const count = try leb.readULEB128(u32, rd);
+        self.datas.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const mem_idx = try leb.readULEB128(u32, rd);
 
             const expr_start = rd.context.pos;
+            // TODO: bounds check
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(true, expr);
 
@@ -443,8 +457,8 @@ pub const Module = struct {
             });
         }
 
-        const remaining_data = size - (rd.context.pos - section_offset);
-        try rd.skipBytes(remaining_data, .{});
+        // const remaining_data = size - (rd.context.pos - section_offset);
+        // try rd.skipBytes(remaining_data, .{});
 
         return count;
     }
@@ -454,11 +468,15 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         const name_length = try leb.readULEB128(u32, rd);
+        if (rd.context.pos + name_length > self.module.len) return error.UnexpectedEndOfSection;
         const name = self.module[rd.context.pos .. rd.context.pos + name_length];
         try rd.skipBytes(name_length, .{});
 
+        if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
+
         const remaining_size = size - (rd.context.pos - offset);
 
+        if (rd.context.pos + remaining_size > self.module.len) return error.UnexpectedEndOfSection;
         const data = self.module[rd.context.pos .. rd.context.pos + remaining_size];
         try rd.skipBytes(remaining_size, .{});
 
