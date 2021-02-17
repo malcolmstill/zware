@@ -85,6 +85,7 @@ pub const Module = struct {
         if (self.imports.count != self.imports.list.items.len) return error.ImportsCountMismatch;
         if (self.tables.count != self.tables.list.items.len) return error.TablesCountMismatch;
         if (self.memories.count != self.memories.list.items.len) return error.MemoriesCountMismatch;
+        if (self.globals.count != self.globals.list.items.len) return error.GlobalsCountMismatch;
         if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
     }
 
@@ -273,6 +274,7 @@ pub const Module = struct {
     fn decodeGlobalSection(self: *Module) !usize {
         const rd = self.buf.reader();
         const count = try leb.readULEB128(u32, rd);
+        self.globals.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -304,6 +306,7 @@ pub const Module = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const name_length = try leb.readULEB128(u32, rd);
+            if (rd.context.pos + name_length > self.module.len) return error.UnexpectedEndOfSection;
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             try rd.skipBytes(name_length, .{});
 

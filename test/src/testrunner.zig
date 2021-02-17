@@ -320,6 +320,8 @@ pub fn main() anyerror!void {
                         error.ImportsCountMismatch => continue,
                         error.TablesCountMismatch => continue,
                         error.MemoriesCountMismatch => continue,
+                        error.GlobalsCountMismatch => continue,
+                        error.UnexpectedEndOfSection => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
