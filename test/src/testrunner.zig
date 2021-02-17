@@ -310,6 +310,19 @@ pub fn main() anyerror!void {
                     }
                 }
 
+                if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
+                        error.TypeCountMismatch => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
                 return error.ExpectedError;
             },
             .action => {
