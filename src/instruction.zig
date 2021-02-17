@@ -23,8 +23,8 @@ pub const InstructionIterator = struct {
         // 2. Find the start of the next instruction
         // TODO: complete this for all opcodes
         switch (instr) {
-            .I32Const,
-            .I64Const,
+            .I32Const => _ = try readILEB128Mem(i32, &self.code),
+            .I64Const => _ = try readILEB128Mem(i64, &self.code),
             .LocalGet,
             .LocalSet,
             .If,
