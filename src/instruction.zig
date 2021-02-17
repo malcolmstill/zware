@@ -27,6 +27,7 @@ pub const InstructionIterator = struct {
             .I64Const => _ = try readILEB128Mem(i64, &self.code),
             .LocalGet,
             .LocalSet,
+            .LocalTee,
             .If,
             .Call,
             .Br,
@@ -83,6 +84,7 @@ pub const InstructionIterator = struct {
             },
             .F32Const => self.code = self.code[4..],
             .F64Const => self.code = self.code[8..],
+            .TruncSat => self.code = self.code[1..],
             else => {},
         }
 
