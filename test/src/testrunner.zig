@@ -217,7 +217,9 @@ pub fn main() anyerror!void {
                     if (module.decode()) |x| {
                         return error.TestsuiteExpectedUnexpectedEnd;
                     } else |err| switch (err) {
+                        error.FunctionCodeSectionsInconsistent => continue,
                         error.EndOfStream => continue,
+                        error.CouldntFindExprEnd => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.TestsuiteExpectedUnexpectedEnd;
@@ -322,6 +324,7 @@ pub fn main() anyerror!void {
                         error.MemoriesCountMismatch => continue,
                         error.GlobalsCountMismatch => continue,
                         error.UnexpectedEndOfSection => continue,
+                        error.InvalidValue => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
