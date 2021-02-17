@@ -317,6 +317,7 @@ pub fn main() anyerror!void {
                         error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
                         error.TypeCountMismatch => continue,
                         error.ImportsCountMismatch => continue,
+                        error.TablesCountMismatch => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
