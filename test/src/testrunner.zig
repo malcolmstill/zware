@@ -265,6 +265,7 @@ pub fn main() anyerror!void {
                     if (module.decode()) |x| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
+                        error.InvalidValue => continue,
                         error.ExpectedFuncTypeTag => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
@@ -318,6 +319,7 @@ pub fn main() anyerror!void {
                         error.TypeCountMismatch => continue,
                         error.ImportsCountMismatch => continue,
                         error.TablesCountMismatch => continue,
+                        error.MemoriesCountMismatch => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
