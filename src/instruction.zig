@@ -12,7 +12,7 @@ pub const InstructionIterator = struct {
         };
     }
 
-    pub fn next(self: *InstructionIterator) !?InstructionMeta {
+    pub fn next(self: *InstructionIterator, comptime check: bool) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -23,10 +23,11 @@ pub const InstructionIterator = struct {
         // 2. Find the start of the next instruction
         // TODO: complete this for all opcodes
         switch (instr) {
-            .I32Const,
-            .I64Const,
+            .I32Const => _ = try readILEB128Mem(i32, &self.code),
+            .I64Const => _ = try readILEB128Mem(i64, &self.code),
             .LocalGet,
             .LocalSet,
+            .LocalTee,
             .If,
             .Call,
             .Br,
@@ -34,6 +35,12 @@ pub const InstructionIterator = struct {
             .Block,
             .Loop,
             => _ = try readULEB128Mem(u32, &self.code),
+            .MemorySize, .MemoryGrow => {
+                const reserved = try readByte(&self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedMemoryReserved;
+                }
+            },
             .BrTable => {
                 const label_count = try readULEB128Mem(u32, &self.code);
                 var j: usize = 0;
@@ -41,7 +48,13 @@ pub const InstructionIterator = struct {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
-            .CallIndirect,
+            .CallIndirect => {
+                _ = try readULEB128Mem(u32, &self.code);
+                const reserved = try readByte(&self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedCallIndirectReserved;
+                }
+            },
             .I32Load,
             .I64Load,
             .F32Load,
@@ -71,6 +84,7 @@ pub const InstructionIterator = struct {
             },
             .F32Const => self.code = self.code[4..],
             .F64Const => self.code = self.code[8..],
+            .TruncSat => self.code = self.code[1..],
             else => {},
         }
 
@@ -89,10 +103,10 @@ pub const InstructionIterator = struct {
 // Errors:
 // - CouldntFindEnd if we run out of elements in `code`
 // - NotBranchTarget if the instruction at `code[0]` isn't branch target
-pub fn findEnd(code: []const u8) !InstructionMeta {
+pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .Block, .Loop, .If => continue,
@@ -110,10 +124,32 @@ pub fn findEnd(code: []const u8) !InstructionMeta {
     return error.CouldntFindEnd;
 }
 
-pub fn findExprEnd(code: []const u8) !InstructionMeta {
+// findFunctionEnd
+//
+// Similar to findEnd. findEnd however, is looking to match the end of
+// block, loop or if. This function simply takes what should be a valid
+// function and attempts to find its end. If it can't, we have an error
+pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
+        if (meta.offset == 0 and meta.instruction == .End) return meta;
+        if (meta.offset == 0) continue;
+
+        switch (meta.instruction) {
+            .Block, .Loop, .If => i += 1,
+            .End => i -= 1,
+            else => {},
+        }
+        if (i == 0) return meta;
+    }
+    return error.CouldntFindEnd;
+}
+
+pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next(check)) |meta| {
         switch (meta.instruction) {
             .End => i -= 1,
             else => {},
@@ -127,10 +163,10 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
 //
 // Similar to findEnd but finds the match else branch, if
 // one exists
-pub fn findElse(code: []const u8) !?InstructionMeta {
+pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next()) |meta| {
+    while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
                 .If => continue,
@@ -170,33 +206,33 @@ test "instruction iterator" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    const func = module.codes.items[0];
+    const func = module.codes.list.items[0];
 
     var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
 
-    const if_end_meta = try findEnd(func.code[5..]);
+    const if_end_meta = try findEnd(false, func.code[5..]);
     testing.expectEqual(if_end_meta.offset + 1, 6);
 
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
-    testing.expectEqual(try it.next(), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
 
-    testing.expectEqual(try it.next(), null);
+    testing.expectEqual(try it.next(false), null);
 }
 
 pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
@@ -229,6 +265,16 @@ pub fn readU64(ptr: *[]const u8) !u64 {
     var buf = std.io.fixedBufferStream(ptr.*);
     const rd = buf.reader();
     const value = try rd.readIntLittle(u64);
+
+    ptr.*.ptr += buf.pos;
+    ptr.*.len -= buf.pos;
+    return value;
+}
+
+pub fn readByte(ptr: *[]const u8) !u8 {
+    var buf = std.io.fixedBufferStream(ptr.*);
+    const rd = buf.reader();
+    const value = try rd.readByte();
 
     ptr.*.ptr += buf.pos;
     ptr.*.len -= buf.pos;

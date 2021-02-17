@@ -87,12 +87,12 @@ pub const Interpreter = struct {
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
 
-                const end = try instruction.findEnd(code);
+                const end = try instruction.findEnd(false, code);
                 const continuation = code[end.offset + 1 ..];
 
                 try self.pushLabel(Label{
@@ -107,7 +107,7 @@ pub const Interpreter = struct {
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
@@ -125,13 +125,13 @@ pub const Interpreter = struct {
             .If => {
                 // TODO: perform findEnd during parsing
                 const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
-                const end = try instruction.findEnd(code);
-                const else_branch = try instruction.findElse(code);
+                const end = try instruction.findEnd(false, code);
+                const else_branch = try instruction.findElse(false, code);
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.items[@intCast(usize, block_type)];
+                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
@@ -253,11 +253,11 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.mod_inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
-                const func_type_index = module.functions.items[function_index];
-                const func_type = module.types.items[func_type_index];
-                const func = module.codes.items[function_index];
-                const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const func_type_index = module.functions.list.items[function_index];
+                const func_type = module.types.list.items[func_type_index];
+                const func = module.codes.list.items[function_index];
+                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
                 // Make space for locals (again, params already on stack)
                 var j: usize = 0;
@@ -295,17 +295,17 @@ pub const Interpreter = struct {
                 const table = &self.mod_inst.store.tables.items[table_index];
                 const function_index = try table.lookup(lookup_index);
 
-                const func_type_index = module.functions.items[function_index];
+                const func_type_index = module.functions.list.items[function_index];
 
                 // Check that signatures match
-                const func_type = module.types.items[func_type_index];
-                const call_indirect_func_type = module.types.items[op_func_type_index];
+                const func_type = module.types.list.items[func_type_index];
+                const call_indirect_func_type = module.types.list.items[op_func_type_index];
                 if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                 // Our signatures match, let's go
-                const func = module.codes.items[function_index];
-                const params = module.value_types.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const func = module.codes.list.items[function_index];
+                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
                 // Make space for locals (again, params already on stack)
                 var j: usize = 0;

@@ -58,14 +58,11 @@ pub fn main() anyerror!void {
             .module => {
                 wasm_filename = command.module.filename;
                 std.debug.warn("(module) test: {s}\n", .{wasm_filename});
-
-                // 3. Load .wasm from file
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
-
                 modinst = try module.instantiate();
             },
             .assert_return => {
@@ -203,6 +200,186 @@ pub fn main() anyerror!void {
 
                 return error.ExpectedTrapDidntOccur;
             },
+            .assert_malformed => {
+                if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
+                std.debug.warn("(malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                wasm_filename = command.assert_malformed.filename;
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                module = Module.init(&arena.allocator, program);
+
+                const trap = command.assert_malformed.text;
+
+                errdefer {
+                    std.debug.warn("ERROR (malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                }
+
+                if (mem.eql(u8, trap, "unexpected end")) {
+                    if (module.decode()) |x| {
+                        return error.TestsuiteExpectedUnexpectedEnd;
+                    } else |err| switch (err) {
+                        error.FunctionCodeSectionsInconsistent => continue,
+                        error.EndOfStream => continue,
+                        error.CouldntFindExprEnd => continue,
+                        error.ElementsCountMismatch => continue,
+                        error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.TestsuiteExpectedUnexpectedEnd;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "magic header not detected")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.MagicNumberNotFound => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "unknown binary version")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownBinaryVersion => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "malformed section id")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownSectionId => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "integer representation too long")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.InvalidValue => continue,
+                        error.ExpectedFuncTypeTag => continue,
+                        error.Overflow => continue,
+                        error.UnknownSectionId => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "zero flag expected")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.MalformedCallIndirectReserved => continue,
+                        error.MalformedMemoryReserved => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "too many locals")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.TooManyLocals => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "function and code section have inconsistent lengths")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.FunctionCodeSectionsInconsistent => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
+                        error.TypeCountMismatch => continue,
+                        error.ImportsCountMismatch => continue,
+                        error.TablesCountMismatch => continue,
+                        error.MemoriesCountMismatch => continue,
+                        error.GlobalsCountMismatch => continue,
+                        error.ElementsCountMismatch => continue,
+                        error.FunctionsCountMismatch => continue,
+                        error.CodesCountMismatch => continue,
+                        error.DatasCountMismatch => continue,
+                        error.UnexpectedEndOfSection => continue,
+                        error.InvalidValue => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "malformed import kind")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.InvalidValue => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "integer too large")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.Overflow => continue,
+                        error.UnknownSectionId => continue,
+                        error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "junk after last section")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.MultipleStartSections => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                return error.ExpectedError;
+            },
             .action => {
                 const action = command.action.action;
                 const expected = command.action.expected;
@@ -253,6 +430,7 @@ const Command = union(enum) {
     module: struct {
         comptime @"type": []const u8 = "module",
         line: usize,
+        name: ?[]const u8 = null,
         filename: []const u8,
     },
     assert_return: struct {
