@@ -286,6 +286,18 @@ pub fn main() anyerror!void {
                     }
                 }
 
+                if (mem.eql(u8, trap, "too many locals")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.TooManyLocals => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
                 return error.ExpectedError;
             },
             .action => {
