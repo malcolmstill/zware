@@ -221,6 +221,7 @@ pub fn main() anyerror!void {
                         error.EndOfStream => continue,
                         error.CouldntFindExprEnd => continue,
                         error.ElementsCountMismatch => continue,
+                        error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.TestsuiteExpectedUnexpectedEnd;
@@ -354,6 +355,18 @@ pub fn main() anyerror!void {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "junk after last section")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.MultipleStartSections => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;

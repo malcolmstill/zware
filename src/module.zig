@@ -35,7 +35,7 @@ pub const Module = struct {
     memories: Section(Limit),
     globals: Section(Global),
     exports: Section(Export),
-    start: u32,
+    start: ?u32,
     elements: Section(Segment),
     codes: Section(Code),
     datas: Section(Segment),
@@ -54,7 +54,7 @@ pub const Module = struct {
             .memories = Section(Limit).init(alloc),
             .globals = Section(Global).init(alloc),
             .exports = Section(Export).init(alloc),
-            .start = undefined,
+            .start = null,
             .elements = Section(Segment).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
@@ -336,6 +336,7 @@ pub const Module = struct {
     }
 
     fn decodeStartSection(self: *Module) !usize {
+        if (self.start != null) return error.MultipleStartSections;
         const rd = self.buf.reader();
         const index = try leb.readULEB128(u32, rd);
 
@@ -496,6 +497,8 @@ pub const Module = struct {
         while (try it.next(true)) |meta| {
             // try will fail on bad code
         }
+        // 2. Make sure we can find the end of every function
+        _ = try instruction.findFunctionEnd(true, code);
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {

@@ -124,6 +124,28 @@ pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     return error.CouldntFindEnd;
 }
 
+// findFunctionEnd
+//
+// Similar to findEnd. findEnd however, is looking to match the end of
+// block, loop or if. This function simply takes what should be a valid
+// function and attempts to find its end. If it can't, we have an error
+pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next(check)) |meta| {
+        if (meta.offset == 0 and meta.instruction == .End) return meta;
+        if (meta.offset == 0) continue;
+
+        switch (meta.instruction) {
+            .Block, .Loop, .If => i += 1,
+            .End => i -= 1,
+            else => {},
+        }
+        if (i == 0) return meta;
+    }
+    return error.CouldntFindEnd;
+}
+
 pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
