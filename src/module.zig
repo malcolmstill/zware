@@ -362,28 +362,35 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             const size = try leb.readULEB128(u32, rd); // includes bytes defining locals
             const offset = rd.context.pos;
-            try rd.skipBytes(size, .{});
 
             // TODO: run some verification on the code
             //      e.g. check last value is End instruction
-            const locals_and_code = self.module[offset..rd.context.pos];
-            const locals_definitions_count = locals_and_code[0]; // probably a leb so this won't work
-            const locals_definitions = locals_and_code[1 .. 1 + 2 * locals_definitions_count];
+            var locals_and_code = self.module[offset .. offset + size];
+            const locals_definitions_count = try leb.readULEB128(u32, rd);
+
+            const locals_start = rd.context.pos;
+
+            // Iterate over local definitions counting them
             var j: usize = 0;
             var locals_count: usize = 0;
             while (j < locals_definitions_count) : (j += 1) {
-                const definition = locals_definitions[2 * j .. 2 * j + 2];
-                locals_count += definition[0];
+                const type_count = try leb.readULEB128(u32, rd);
+                const local_type = try rd.readByte();
+                locals_count += type_count;
             }
+            const code_start = rd.context.pos;
 
-            const code = locals_and_code[1 + 2 * locals_definitions_count ..];
+            const locals = self.module[locals_start..code_start];
+            const code = self.module[code_start .. offset + size];
+
             try decodeCode(code);
 
             try self.codes.append(Code{
-                .locals = locals_definitions,
+                .locals = locals,
                 .locals_count = locals_count,
                 .code = code,
             });
+            try rd.skipBytes(code.len, .{});
         }
 
         return count;
