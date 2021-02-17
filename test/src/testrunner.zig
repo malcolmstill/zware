@@ -272,6 +272,7 @@ pub fn main() anyerror!void {
                         error.InvalidValue => continue,
                         error.ExpectedFuncTypeTag => continue,
                         error.Overflow => continue,
+                        error.UnknownSectionId => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
