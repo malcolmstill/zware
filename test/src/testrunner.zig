@@ -278,6 +278,7 @@ pub fn main() anyerror!void {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.MalformedCallIndirectReserved => continue,
+                        error.MalformedMemoryReserved => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
