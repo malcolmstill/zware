@@ -78,6 +78,8 @@ pub const Module = struct {
                 }
             };
         }
+
+        if (self.codes.items.len != self.functions.items.len) return error.FunctionCodeSectionsInconsistent;
     }
 
     pub fn decodeSection(self: *Module) !SectionType {

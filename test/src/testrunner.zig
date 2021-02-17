@@ -298,6 +298,18 @@ pub fn main() anyerror!void {
                     }
                 }
 
+                if (mem.eql(u8, trap, "function and code section have inconsistent lengths")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.FunctionCodeSectionsInconsistent => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
                 return error.ExpectedError;
             },
             .action => {
