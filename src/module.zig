@@ -293,12 +293,15 @@ pub const Module = struct {
             const mutability = try rd.readEnum(Mutability, .Little);
             const offset = rd.context.pos;
 
+            // TODO: this isn't right
             var j: usize = 0;
             while (true) : (j += 1) {
                 const byte = try rd.readByte();
                 if (byte == @enumToInt(Instruction.End)) break;
             }
             const code = self.module[offset .. offset + j + 1];
+
+            try decodeCode(code);
 
             try self.globals.list.append(Global{
                 .value_type = global_type,
