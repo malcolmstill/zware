@@ -44,8 +44,8 @@ bin/testrunner const.json || exit 1
 wast2json test/testsuite/conversions.wast || exit 1
 bin/testrunner conversions.json || exit 1
 
-# wast2json test/testsuite/endianness.wast || exit 1
-# bin/testrunner endianness.json || exit 1
+wast2json test/testsuite/endianness.wast || exit 1
+bin/testrunner endianness.json || exit 1
 
 wast2json test/testsuite/f32_bitwise.wast || exit 1
 bin/testrunner f32_bitwise.json || exit 1
