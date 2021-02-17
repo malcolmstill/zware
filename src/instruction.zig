@@ -34,6 +34,12 @@ pub const InstructionIterator = struct {
             .Block,
             .Loop,
             => _ = try readULEB128Mem(u32, &self.code),
+            .MemorySize, .MemoryGrow => {
+                const reserved = try readByte(&self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedMemoryReserved;
+                }
+            },
             .BrTable => {
                 const label_count = try readULEB128Mem(u32, &self.code);
                 var j: usize = 0;
