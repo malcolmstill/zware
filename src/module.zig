@@ -378,6 +378,8 @@ pub const Module = struct {
                 const local_type = try rd.readByte();
                 locals_count += type_count;
             }
+            if (locals_count > 0x100000000) return error.TooManyLocals;
+
             const code_start = rd.context.pos;
 
             const locals = self.module[locals_start..code_start];
