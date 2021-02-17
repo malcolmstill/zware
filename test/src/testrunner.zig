@@ -271,6 +271,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
                         error.ExpectedFuncTypeTag => continue,
+                        error.Overflow => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
