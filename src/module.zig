@@ -248,9 +248,6 @@ pub const Module = struct {
         const count = try leb.readULEB128(u32, rd);
         self.tables.count = count;
 
-        const tag = try rd.readByte();
-        if (tag != 0x70) return error.ExpectedTable;
-
         var i: usize = 0;
         while (i < count) : (i += 1) {
             try self.decodeTable(null);
@@ -261,6 +258,9 @@ pub const Module = struct {
 
     fn decodeTable(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
+
+        const tag = try rd.readByte();
+        if (tag != 0x70) return error.ExpectedTable;
         const limit_type = try rd.readEnum(LimitType, .Little);
         switch (limit_type) {
             .Min => {
