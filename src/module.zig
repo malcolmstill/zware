@@ -24,6 +24,7 @@ const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").Store;
 
 pub const Module = struct {
+    decoded: bool = false,
     alloc: *mem.Allocator,
     module: []const u8 = undefined,
     buf: std.io.FixedBufferStream([]const u8) = undefined,
@@ -86,6 +87,7 @@ pub const Module = struct {
         }
         try self.verify();
         if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+        self.decoded = true;
     }
 
     pub fn verify(self: *Module) !void {
@@ -591,6 +593,7 @@ pub const Module = struct {
     }
 
     pub fn instantiate(self: *Module) !ModuleInstance {
+        if (self.decoded == false) return error.ModuleNotDecoded;
         var store = Store.init(self.alloc);
         var inst = ModuleInstance{
             .module = self,
