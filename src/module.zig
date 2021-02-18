@@ -846,23 +846,18 @@ pub const ModuleInstance = struct {
 
         const locals_start = interp.op_stack.len;
 
-        // 7a. push control frame
         try interp.pushFrame(Interpreter.Frame{
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = 1,
         }, 0);
 
-        // 7a.2. push label for our implicit function block. We know we don't have
-        // any code to execute after calling invoke, but we will need to
-        // pop a Label
         try interp.pushLabel(Interpreter.Label{
             .return_arity = 1,
             .op_stack_len = locals_start,
             .continuation = expr[0..0],
         });
 
-        // 8. Execute our function
         try interp.invoke(expr);
 
         return try interp.popOperand(Result);
