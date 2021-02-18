@@ -454,59 +454,58 @@ const Command = union(enum) {
         line: usize,
         name: ?[]const u8 = null,
         filename: []const u8,
-    },
-    assert_return: struct {
+    }, assert_return: struct {
         comptime @"type": []const u8 = "assert_return",
         line: usize,
         action: Action,
         expected: []const Value,
-    },
-    assert_trap: struct {
+    }, assert_trap: struct {
         comptime @"type": []const u8 = "assert_trap",
         line: usize,
         action: Action,
         text: []const u8,
         expected: []const ValueTrap,
-    },
-    assert_malformed: struct {
+    }, assert_malformed: struct {
         comptime @"type": []const u8 = "assert_malformed",
         line: usize,
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
-    },
-    assert_invalid: struct {
+    }, assert_invalid: struct {
         comptime @"type": []const u8 = "assert_invalid",
         line: usize,
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
-    },
-    assert_exhaustion: struct {
+    }, assert_exhaustion: struct {
         comptime @"type": []const u8 = "assert_exhaustion",
         line: usize,
         action: Action,
         text: []const u8,
         expected: []const ValueTrap,
-    },
-    assert_unlinkable: struct {
+    }, assert_unlinkable: struct {
         comptime @"type": []const u8 = "assert_unlinkable",
         line: usize,
         filename: []const u8,
         text: []const u8,
         module_type: []const u8,
-    },
-    action: struct {
+    }, action: struct {
         comptime @"type": []const u8 = "action",
         line: usize,
         action: Action,
         expected: []const ValueTrap,
-    },
+    }, register: struct {
+        comptime @"type": []const u8 = "register",
+        line: usize,
+        name: []const u8,
+        as: []const u8,
+    }
 };
 
 const Action = struct {
     comptime @"type": []const u8 = "invoke",
     field: []const u8,
+    module: ?[]const u8 = null,
     args: []const Value,
 };
 
