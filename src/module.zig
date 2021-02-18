@@ -656,16 +656,16 @@ pub const Module = struct {
     }
 
     pub fn print(module: *Module) void {
-        std.debug.warn("    Types: {}\n", .{module.types.items.len});
-        std.debug.warn("Functions: {}\n", .{module.functions.items.len});
-        std.debug.warn("   Tables: {}\n", .{module.tables.items.len});
-        std.debug.warn(" Memories: {}\n", .{module.memories.items.len});
-        std.debug.warn("  Globals: {}\n", .{module.globals.items.len});
-        std.debug.warn("  Exports: {}\n", .{module.exports.items.len});
-        std.debug.warn("  Imports: {}\n", .{module.imports.items.len});
-        std.debug.warn("    Codes: {}\n", .{module.codes.items.len});
-        std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
-        std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
+        std.debug.warn("    Types: {}\n", .{module.types.list.items.len});
+        std.debug.warn("Functions: {}\n", .{module.functions.list.items.len});
+        std.debug.warn("   Tables: {}\n", .{module.tables.list.items.len});
+        std.debug.warn(" Memories: {}\n", .{module.memories.list.items.len});
+        std.debug.warn("  Globals: {}\n", .{module.globals.list.items.len});
+        std.debug.warn("  Exports: {}\n", .{module.exports.list.items.len});
+        std.debug.warn("  Imports: {}\n", .{module.imports.list.items.len});
+        std.debug.warn("    Codes: {}\n", .{module.codes.list.items.len});
+        std.debug.warn("    Datas: {}\n", .{module.datas.list.items.len});
+        std.debug.warn("  Customs: {}\n", .{module.customs.list.items.len});
     }
 };
 
