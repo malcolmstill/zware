@@ -57,7 +57,8 @@ pub fn main() anyerror!void {
         switch (command) {
             .module => {
                 wasm_filename = command.module.filename;
-                std.debug.warn("(module) test: {s}\n", .{wasm_filename});
+
+                std.debug.warn("(module) test: {s}, {s}:{}\n", .{ wasm_filename, r.source_filename, command.module.line });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
