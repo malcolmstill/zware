@@ -58,7 +58,7 @@ pub fn main() anyerror!void {
             .module => {
                 wasm_filename = command.module.filename;
 
-                std.debug.warn("(module) test: {s}, {s}:{}\n", .{ wasm_filename, r.source_filename, command.module.line });
+                std.debug.warn("(module): {s}, {s}:{}\n", .{ wasm_filename, r.source_filename, command.module.line });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
@@ -73,7 +73,7 @@ pub fn main() anyerror!void {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
-                std.debug.warn("(return) test: {s}:{}\n", .{ r.source_filename, command.assert_return.line });
+                std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
@@ -134,7 +134,7 @@ pub fn main() anyerror!void {
                 const expected = command.assert_trap.expected;
                 const field = action.field;
                 const trap = command.assert_trap.text;
-                std.debug.warn("(trap) test: {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
+                std.debug.warn("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
                 errdefer {
                     std.debug.warn("(trap) invoke = {s}\n", .{field});
@@ -209,7 +209,7 @@ pub fn main() anyerror!void {
             },
             .assert_malformed => {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
-                std.debug.warn("(malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                std.debug.warn("(malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
                 wasm_filename = command.assert_malformed.filename;
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
                 module = Module.init(&arena.allocator, program);
@@ -217,7 +217,7 @@ pub fn main() anyerror!void {
                 const trap = command.assert_malformed.text;
 
                 errdefer {
-                    std.debug.warn("ERROR (malformed) test: {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                    std.debug.warn("ERROR (malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
                 }
 
                 if (mem.eql(u8, trap, "unexpected end")) {
@@ -394,7 +394,7 @@ pub fn main() anyerror!void {
                 const action = command.action.action;
                 const expected = command.action.expected;
                 const field = action.field;
-                std.debug.warn("(return) test: {s}:{}\n", .{ r.source_filename, command.action.line });
+                std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
@@ -419,7 +419,7 @@ pub fn main() anyerror!void {
                 };
             },
             .assert_unlinkable => {
-                std.debug.warn("(unlinkable) test: {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
+                std.debug.warn("(unlinkable): {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
                 if (module.instantiate()) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
