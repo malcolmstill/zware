@@ -47,6 +47,9 @@ bin/testrunner conversions.json || exit 1
 wast2json test/testsuite/data.wast || exit 1
 bin/testrunner data.json || exit 1
 
+wast2json test/testsuite/elem.wast || exit 1
+bin/testrunner elem.json || exit 1
+
 wast2json test/testsuite/endianness.wast || exit 1
 bin/testrunner endianness.json || exit 1
 
