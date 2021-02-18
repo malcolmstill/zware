@@ -33,9 +33,9 @@ pub const Store = struct {
         return mem_ptr;
     }
 
-    pub fn addTable(self: *Store, entries: usize) !*Table {
+    pub fn addTable(self: *Store, entries: u32, max: ?u32) !*Table {
         const tbl_ptr = try self.tables.addOne();
-        tbl_ptr.* = try Table.init(self.alloc, entries);
+        tbl_ptr.* = try Table.init(self.alloc, entries, max);
         return tbl_ptr;
     }
 
@@ -199,15 +199,17 @@ test "Memory test" {
 pub const Table = struct {
     // Let's assume indices are u32
     data: []?u32,
+    max: ?u32,
 
-    pub fn init(alloc: *mem.Allocator, max: usize) !Table {
+    pub fn init(alloc: *mem.Allocator, min: u32, max: ?u32) !Table {
         return Table{
-            .data = try alloc.alloc(?u32, max),
+            .data = try alloc.alloc(?u32, min),
+            .max = max,
         };
     }
 
-    pub fn lookup(self: *Table, index: usize) !u32 {
-        if (self.data.len < index + 1) return error.UndefinedElement;
+    pub fn lookup(self: *Table, index: u32) !u32 {
+        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
         return self.data[index] orelse return error.UndefinedElement;
     }
 
