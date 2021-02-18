@@ -612,13 +612,13 @@ pub const Module = struct {
 
         // 4. Initialise memories with data
         for (self.datas.list.items) |data, i| {
-            // TODO: validate mem_idx
-            const memory = inst.store.memories.items[data.index].asSlice();
+            if (data.index >= inst.store.memories.items.len) return error.BadMemoryIndex;
+            const memory = &inst.store.memories.items[data.index];
             const data_len = data.data.len;
 
             // TODO: execute rather than take middle byte
             const offset = data.offset[1];
-            mem.copy(u8, memory[offset .. offset + data_len], data.data);
+            try memory.copy(offset, data.data);
         }
 
         // 5. Initialise tables
