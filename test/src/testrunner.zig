@@ -51,21 +51,25 @@ pub fn main() anyerror!void {
     var module: Module = undefined;
     var store: Store = undefined;
     var mem0: *Memory = undefined;
-    var modinst: ModuleInstance = undefined;
+    var modinst: ?ModuleInstance = null;
 
     for (r.commands) |command| {
         switch (command) {
             .module => {
                 wasm_filename = command.module.filename;
-                std.debug.warn("(module) test: {s}\n", .{wasm_filename});
+
+                std.debug.warn("(module) test: {s}, {s}:{}\n", .{ wasm_filename, r.source_filename, command.module.line });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
-                modinst = try module.instantiate();
+                modinst = null;
             },
             .assert_return => {
+                if (modinst == null) modinst = try module.instantiate();
+                var inst = modinst orelse return error.NoInstance;
+
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
@@ -87,7 +91,7 @@ pub fn main() anyerror!void {
                 }
 
                 // Invoke the function
-                modinst.invokeDynamic(field, in, out, .{}) catch |err| {
+                inst.invokeDynamic(field, in, out, .{}) catch |err| {
                     std.debug.warn("(result) invoke = {s}\n", .{field});
                     std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                     return err;
@@ -123,6 +127,9 @@ pub fn main() anyerror!void {
                 }
             },
             .assert_trap => {
+                if (modinst == null) modinst = try module.instantiate();
+                var inst = modinst orelse return error.NoInstance;
+
                 const action = command.assert_trap.action;
                 const expected = command.assert_trap.expected;
                 const field = action.field;
@@ -145,7 +152,7 @@ pub fn main() anyerror!void {
 
                 // Test the result
                 if (mem.eql(u8, trap, "integer divide by zero")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.DivisionByZero => continue,
@@ -154,7 +161,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "integer overflow")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.Overflow => continue,
@@ -163,7 +170,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.InvalidConversion => continue,
@@ -172,7 +179,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "out of bounds memory access")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.OutOfBoundsMemoryAccess => continue,
@@ -181,7 +188,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.IndirectCallTypeMismatch => continue,
@@ -190,7 +197,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "undefined element")) {
-                    if (modinst.invokeDynamic(field, in, out, .{})) |x| {
+                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.UndefinedElement => continue,
@@ -381,6 +388,9 @@ pub fn main() anyerror!void {
                 return error.ExpectedError;
             },
             .action => {
+                if (modinst == null) modinst = try module.instantiate();
+                var inst = modinst orelse return error.NoInstance;
+
                 const action = command.action.action;
                 const expected = command.action.expected;
                 const field = action.field;
@@ -402,11 +412,23 @@ pub fn main() anyerror!void {
                 }
 
                 // Invoke the function
-                modinst.invokeDynamic(field, in, out, .{}) catch |err| {
+                inst.invokeDynamic(field, in, out, .{}) catch |err| {
                     std.debug.warn("(result) invoke = {s}\n", .{field});
                     std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
                     return err;
                 };
+            },
+            .assert_unlinkable => {
+                std.debug.warn("(unlinkable) test: {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
+                if (module.instantiate()) |x| {
+                    return error.ExpectedUnlinkable;
+                } else |err| switch (err) {
+                    error.OutOfBoundsMemoryAccess => continue,
+                    else => {
+                        std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
+                        return error.UnexpectedExpected;
+                    },
+                }
             },
             else => continue,
         }
@@ -466,6 +488,13 @@ const Command = union(enum) {
         action: Action,
         text: []const u8,
         expected: []const ValueTrap,
+    },
+    assert_unlinkable: struct {
+        comptime @"type": []const u8 = "assert_unlinkable",
+        line: usize,
+        filename: []const u8,
+        text: []const u8,
+        module_type: []const u8,
     },
     action: struct {
         comptime @"type": []const u8 = "action",

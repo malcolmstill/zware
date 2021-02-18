@@ -253,8 +253,8 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.mod_inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
-                const func_type_index = module.functions.list.items[function_index];
-                const func_type = module.types.list.items[func_type_index];
+                const function = module.functions.list.items[function_index];
+                const func_type = module.types.list.items[function.typeidx];
                 const func = module.codes.list.items[function_index];
                 const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
                 const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
@@ -295,10 +295,10 @@ pub const Interpreter = struct {
                 const table = &self.mod_inst.store.tables.items[table_index];
                 const function_index = try table.lookup(lookup_index);
 
-                const func_type_index = module.functions.list.items[function_index];
+                const function = module.functions.list.items[function_index];
 
                 // Check that signatures match
-                const func_type = module.types.list.items[func_type_index];
+                const func_type = module.types.list.items[function.typeidx];
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
                 if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 

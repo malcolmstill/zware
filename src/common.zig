@@ -5,9 +5,11 @@ pub const LimitType = enum(u8) {
     MinMax,
 };
 
+// Table / Memory
 pub const Limit = struct {
     min: u32,
     max: u32,
+    import: ?u32,
 };
 
 pub const Mutability = enum(u8) {
@@ -40,17 +42,23 @@ pub const FuncType = struct {
     results_count: usize,
 };
 
+pub const Function = struct {
+    typeidx: u32,
+    import: ?u32,
+};
+
 pub const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
-    code: []const u8,
+    code: ?[]const u8,
+    import: ?u32,
 };
 
 pub const Import = struct {
     module: []const u8,
     name: []const u8,
     desc_tag: Tag,
-    desc: u8,
+    // desc: u8,
 };
 
 pub const Export = struct {
