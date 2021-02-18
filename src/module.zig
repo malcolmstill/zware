@@ -686,10 +686,10 @@ pub const ModuleInstance = struct {
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function_type_index = self.module.functions.list.items[index];
+        const function = self.module.functions.list.items[index];
 
         // 2.
-        const func_type = self.module.types.list.items[function_type_index];
+        const func_type = self.module.types.list.items[function.typeidx];
         const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
         const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
