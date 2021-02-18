@@ -420,13 +420,19 @@ pub fn main() anyerror!void {
             },
             .assert_unlinkable => {
                 std.debug.warn("(unlinkable): {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
+                wasm_filename = command.assert_unlinkable.filename;
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+
+                module = Module.init(&arena.allocator, program);
+                try module.decode();
+
                 if (module.instantiate()) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
                     error.OutOfBoundsMemoryAccess => continue,
                     else => {
                         std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
-                        return error.UnexpectedExpected;
+                        return error.UnexpectedError;
                     },
                 }
             },
