@@ -3,7 +3,7 @@ const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
-const ModuleInstance = @import("module.zig").ModuleInstance;
+const Instance = @import("instance.zig").Instance;
 const Instruction = @import("instruction.zig").Instruction;
 const instruction = @import("instruction.zig");
 
@@ -30,9 +30,9 @@ pub const Interpreter = struct {
     label_stack: []Label = undefined,
 
     continuation: []const u8 = undefined,
-    mod_inst: *ModuleInstance = undefined,
+    mod_inst: *Instance = undefined,
 
-    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, mod_inst: *ModuleInstance) Interpreter {
+    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, mod_inst: *Instance) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
             .op_stack = op_stack_mem[0..0],
@@ -1774,7 +1774,7 @@ test "operand push / pop test" {
     var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var mod_inst: ModuleInstance = undefined;
+    var mod_inst: Instance = undefined;
 
     var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &mod_inst);
 
@@ -1812,7 +1812,7 @@ test "simple interpret tests" {
     var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var mod_inst: ModuleInstance = undefined;
+    var mod_inst: Instance = undefined;
     var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &mod_inst);
 
     try i.pushOperand(i32, 22);
