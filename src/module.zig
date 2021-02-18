@@ -617,10 +617,8 @@ pub const Module = struct {
         for (self.datas.list.items) |data, i| {
             if (data.index >= inst.store.memories.items.len) return error.BadMemoryIndex;
             const memory = &inst.store.memories.items[data.index];
-            const data_len = data.data.len;
 
-            // TODO: execute rather than take middle byte
-            const offset = data.offset[1];
+            const offset = try inst.invokeExpression(data.offset, u32, .{});
             try memory.copy(offset, data.data);
         }
 
@@ -838,6 +836,36 @@ pub const ModuleInstance = struct {
         for (out) |o, out_index| {
             out[out_index] = try interp.popOperand(u64);
         }
+    }
+
+    pub fn invokeExpression(self: *ModuleInstance, expr: []const u8, comptime Result: type, comptime options: InterpreterOptions) !Result {
+        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+
+        const locals_start = interp.op_stack.len;
+
+        // 7a. push control frame
+        try interp.pushFrame(Interpreter.Frame{
+            .op_stack_len = locals_start,
+            .label_stack_len = interp.label_stack.len,
+            .return_arity = 1,
+        }, 0);
+
+        // 7a.2. push label for our implicit function block. We know we don't have
+        // any code to execute after calling invoke, but we will need to
+        // pop a Label
+        try interp.pushLabel(Interpreter.Label{
+            .return_arity = 1,
+            .op_stack_len = locals_start,
+            .continuation = expr[0..0],
+        });
+
+        // 8. Execute our function
+        try interp.invoke(expr);
+
+        return try interp.popOperand(Result);
     }
 };
 
