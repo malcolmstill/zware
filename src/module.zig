@@ -1,23 +1,25 @@
 const std = @import("std");
 const mem = std.mem;
 const leb = std.leb;
+const math = std.math;
 const unicode = std.unicode;
-const ArrayList = std.ArrayList;
-const Instruction = @import("instruction.zig").Instruction;
-const FuncType = @import("common.zig").FuncType;
-const ValueType = @import("common.zig").ValueType;
-const Import = @import("common.zig").Import;
-const Export = @import("common.zig").Export;
-const Limit = @import("common.zig").Limit;
-const LimitType = @import("common.zig").LimitType;
-const Mutability = @import("common.zig").Mutability;
-const Global = @import("common.zig").Global;
-const Element = @import("common.zig").Element;
-const Code = @import("common.zig").Code;
-const Segment = @import("common.zig").Segment;
-const Tag = @import("common.zig").Tag;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
+const ArrayList = std.ArrayList;
+const Instruction = instruction.Instruction;
+const FuncType = common.FuncType;
+const ValueType = common.ValueType;
+const Import = common.Import;
+const Export = common.Export;
+const Limit = common.Limit;
+const LimitType = common.LimitType;
+const Mutability = common.Mutability;
+const Function = common.Function;
+const Global = common.Global;
+const Element = common.Element;
+const Code = common.Code;
+const Segment = common.Segment;
+const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").Store;
 
@@ -28,9 +30,9 @@ pub const Module = struct {
     version: u32 = 0,
     customs: Section(Custom),
     types: Section(FuncType),
-    value_types: Section(ValueType),
+    value_types: Section(ValueType), // Not really a section
     imports: Section(Import),
-    functions: Section(u32),
+    functions: Section(Function),
     tables: Section(Limit),
     memories: Section(Limit),
     globals: Section(Global),
@@ -49,7 +51,7 @@ pub const Module = struct {
             .types = Section(FuncType).init(alloc),
             .value_types = Section(ValueType).init(alloc),
             .imports = Section(Import).init(alloc),
-            .functions = Section(u32).init(alloc),
+            .functions = Section(Function).init(alloc),
             .tables = Section(Limit).init(alloc),
             .memories = Section(Limit).init(alloc),
             .globals = Section(Global).init(alloc),
@@ -87,16 +89,28 @@ pub const Module = struct {
     }
 
     pub fn verify(self: *Module) !void {
+        std.debug.warn("mem.count = {}, mem nonimport = {}, mem total = {}\n", .{ self.memories.count, nonImportCount(self.memories.list.items), self.memories.list.items.len });
         if (self.types.count != self.types.list.items.len) return error.TypeCountMismatch;
         if (self.imports.count != self.imports.list.items.len) return error.ImportsCountMismatch;
-        if (self.tables.count != self.tables.list.items.len) return error.TablesCountMismatch;
-        if (self.memories.count != self.memories.list.items.len) return error.MemoriesCountMismatch;
-        if (self.globals.count != self.globals.list.items.len) return error.GlobalsCountMismatch;
+        if (self.functions.count != nonImportCount(self.functions.list.items)) return error.FunctionsCountMismatch;
+        if (self.tables.count != nonImportCount(self.tables.list.items)) return error.TablesCountMismatch;
+        if (self.memories.count != nonImportCount(self.memories.list.items)) return error.MemoriesCountMismatch;
+        if (self.globals.count != nonImportCount(self.globals.list.items)) return error.GlobalsCountMismatch;
         if (self.exports.count != self.exports.list.items.len) return error.ExportsCountMismatch;
         if (self.elements.count != self.elements.list.items.len) return error.ElementsCountMismatch;
-        if (self.functions.count != self.functions.list.items.len) return error.FunctionsCountMismatch;
         if (self.codes.count != self.codes.list.items.len) return error.CodesCountMismatch;
         if (self.datas.count != self.datas.list.items.len) return error.DatasCountMismatch;
+    }
+
+    // Some types can be imported. For validation we want to check the non-imported
+    // counts of each type match the what is stated in the binary. This function
+    // counts the non-imports.
+    fn nonImportCount(imported_type: anytype) usize {
+        var count: usize = 0;
+        for (imported_type) |import| {
+            if (import.import == null) count += 1;
+        }
+        return count;
     }
 
     pub fn decodeSection(self: *Module) !SectionType {
@@ -188,13 +202,20 @@ pub const Module = struct {
             try rd.skipBytes(name_length, .{});
 
             const desc_tag = try rd.readEnum(Tag, .Little);
-            const desc = try rd.readByte(); // TODO: not sure if this is a byte or leb
+
+            if (i > math.maxInt(u32)) return error.ExpectedU32Index;
+            const import_index = @truncate(u32, i);
+            _ = switch (desc_tag) {
+                .Func => try self.decodeFunction(import_index),
+                .Table => try self.decodeTable(import_index),
+                .Mem => try self.decodeMemory(import_index),
+                .Global => try self.decodeGlobal(import_index),
+            };
 
             try self.imports.list.append(Import{
                 .module = module_name,
                 .name = name,
                 .desc_tag = desc_tag,
-                .desc = desc,
             });
         }
 
@@ -208,11 +229,19 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const type_index = try leb.readULEB128(u32, rd);
-            try self.functions.list.append(type_index);
+            try self.decodeFunction(null);
         }
 
         return count;
+    }
+
+    fn decodeFunction(self: *Module, import: ?u32) !void {
+        const rd = self.buf.reader();
+        const type_index = try leb.readULEB128(u32, rd);
+        try self.functions.list.append(Function{
+            .typeidx = type_index,
+            .import = import,
+        });
     }
 
     fn decodeTableSection(self: *Module) !usize {
@@ -225,29 +254,36 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const limit_type = try rd.readEnum(LimitType, .Little);
-            switch (limit_type) {
-                .Min => {
-                    const min = try leb.readULEB128(u32, rd);
-
-                    try self.tables.list.append(Limit{
-                        .min = min,
-                        .max = min,
-                    });
-                },
-                .MinMax => {
-                    const min = try leb.readULEB128(u32, rd);
-                    const max = try leb.readULEB128(u32, rd);
-
-                    try self.tables.list.append(Limit{
-                        .min = min,
-                        .max = max,
-                    });
-                },
-            }
+            try self.decodeTable(null);
         }
 
         return count;
+    }
+
+    fn decodeTable(self: *Module, import: ?u32) !void {
+        const rd = self.buf.reader();
+        const limit_type = try rd.readEnum(LimitType, .Little);
+        switch (limit_type) {
+            .Min => {
+                const min = try leb.readULEB128(u32, rd);
+
+                try self.tables.list.append(Limit{
+                    .min = min,
+                    .max = min,
+                    .import = import,
+                });
+            },
+            .MinMax => {
+                const min = try leb.readULEB128(u32, rd);
+                const max = try leb.readULEB128(u32, rd);
+
+                try self.tables.list.append(Limit{
+                    .min = min,
+                    .max = max,
+                    .import = import,
+                });
+            },
+        }
     }
 
     fn decodeMemorySection(self: *Module) !usize {
@@ -257,29 +293,36 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const limit_type = try rd.readEnum(LimitType, .Little);
-            switch (limit_type) {
-                .Min => {
-                    const min = try leb.readULEB128(u32, rd);
-
-                    try self.memories.list.append(Limit{
-                        .min = min,
-                        .max = std.math.maxInt(u32),
-                    });
-                },
-                .MinMax => {
-                    const min = try leb.readULEB128(u32, rd);
-                    const max = try leb.readULEB128(u32, rd);
-
-                    try self.memories.list.append(Limit{
-                        .min = min,
-                        .max = max,
-                    });
-                },
-            }
+            try self.decodeMemory(null);
         }
 
         return count;
+    }
+
+    fn decodeMemory(self: *Module, import: ?u32) !void {
+        const rd = self.buf.reader();
+        const limit_type = try rd.readEnum(LimitType, .Little);
+        switch (limit_type) {
+            .Min => {
+                const min = try leb.readULEB128(u32, rd);
+
+                try self.memories.list.append(Limit{
+                    .min = min,
+                    .max = std.math.maxInt(u32),
+                    .import = import,
+                });
+            },
+            .MinMax => {
+                const min = try leb.readULEB128(u32, rd);
+                const max = try leb.readULEB128(u32, rd);
+
+                try self.memories.list.append(Limit{
+                    .min = min,
+                    .max = max,
+                    .import = import,
+                });
+            },
+        }
     }
 
     fn decodeGlobalSection(self: *Module) !usize {
@@ -289,28 +332,43 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const global_type = try rd.readEnum(ValueType, .Little);
-            const mutability = try rd.readEnum(Mutability, .Little);
-            const offset = rd.context.pos;
+            try self.decodeGlobal(null);
+        }
 
+        return count;
+    }
+
+    fn decodeGlobal(self: *Module, import: ?u32) !void {
+        const rd = self.buf.reader();
+        const global_type = try rd.readEnum(ValueType, .Little);
+        const mutability = try rd.readEnum(Mutability, .Little);
+        const offset = rd.context.pos;
+
+        var code: ?[]const u8 = null;
+
+        // If we're not importing the global we will expect
+        // an expression
+        if (import == null) {
             // TODO: this isn't right
             var j: usize = 0;
             while (true) : (j += 1) {
                 const byte = try rd.readByte();
                 if (byte == @enumToInt(Instruction.End)) break;
             }
-            const code = self.module[offset .. offset + j + 1];
+            code = self.module[offset .. offset + j + 1];
 
-            try decodeCode(code);
-
-            try self.globals.list.append(Global{
-                .value_type = global_type,
-                .mutability = mutability,
-                .code = code,
-            });
+            try decodeCode(code orelse return error.ExpectedCode);
         }
 
-        return count;
+        if (code == null and import == null) return error.ExpectedOneOrTheOther;
+        if (code != null and import != null) return error.ExpectedOneOrTheOther;
+
+        try self.globals.list.append(Global{
+            .value_type = global_type,
+            .mutability = mutability,
+            .code = code,
+            .import = import,
+        });
     }
 
     fn decodeExportSection(self: *Module) !usize {
@@ -704,10 +762,10 @@ pub const ModuleInstance = struct {
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function_type_index = self.module.functions.list.items[index];
+        const function = self.module.functions.list.items[index];
 
         // 2.
-        const func_type = self.module.types.list.items[function_type_index];
+        const func_type = self.module.types.list.items[function.typeidx];
         const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
         const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
 
