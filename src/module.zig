@@ -89,7 +89,6 @@ pub const Module = struct {
     }
 
     pub fn verify(self: *Module) !void {
-        std.debug.warn("mem.count = {}, mem nonimport = {}, mem total = {}\n", .{ self.memories.count, nonImportCount(self.memories.list.items), self.memories.list.items.len });
         if (self.types.count != self.types.list.items.len) return error.TypeCountMismatch;
         if (self.imports.count != self.imports.list.items.len) return error.ImportsCountMismatch;
         if (self.functions.count != nonImportCount(self.functions.list.items)) return error.FunctionsCountMismatch;
