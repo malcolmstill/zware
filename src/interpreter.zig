@@ -282,7 +282,7 @@ pub const Interpreter = struct {
                 self.continuation = func.code;
             },
             .CallIndirect => {
-                const module = self.mod_inst.module;
+                var module = self.mod_inst.module;
 
                 const op_func_type_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const table_index = try instruction.readULEB128Mem(u32, &self.continuation);
