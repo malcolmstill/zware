@@ -596,7 +596,7 @@ pub const Module = struct {
         if (self.decoded == false) return error.ModuleNotDecoded;
         var store = Store.init(self.alloc);
         var inst = ModuleInstance{
-            .module = self,
+            .module = self.*,
             .store = store,
         };
 
@@ -677,7 +677,7 @@ const InterpreterOptions = struct {
 };
 
 pub const ModuleInstance = struct {
-    module: *Module,
+    module: Module,
     store: Store,
 
     // invoke:
