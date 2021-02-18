@@ -632,16 +632,23 @@ pub const Module = struct {
 
         // 6. Initialise from elements
         for (self.elements.list.items) |element_def, i| {
-            const table_index = element_def.index;
-            const table = inst.store.tables.items[table_index];
+            if (element_def.index >= inst.store.tables.items.len) return error.BadTableIndex;
+            const table = &inst.store.tables.items[element_def.index];
 
             // TODO: execute rather than take middle byte
             const offset = element_def.offset[1];
+
+            // Test that offset is in bounds
+            _ = table.lookup(offset) catch |err| switch (err) {
+                error.UndefinedElement => {},
+                else => return err,
+            };
+
             var data = element_def.data;
             var j: usize = 0;
             while (j < element_def.count) : (j += 1) {
                 const value = try instruction.readULEB128Mem(u32, &data);
-                table.data[offset + j] = value;
+                try table.set(@intCast(u32, offset + j), value);
             }
         }
 
