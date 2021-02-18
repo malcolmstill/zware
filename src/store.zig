@@ -210,4 +210,9 @@ pub const Table = struct {
         if (self.data.len < index + 1) return error.UndefinedElement;
         return self.data[index] orelse return error.UndefinedElement;
     }
+
+    pub fn set(self: *Table, index: u32, value: u32) !void {
+        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
+        self.data[index] = value;
+    }
 };
