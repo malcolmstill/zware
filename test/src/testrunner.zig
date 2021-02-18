@@ -418,6 +418,18 @@ pub fn main() anyerror!void {
                     return err;
                 };
             },
+            .assert_unlinkable => {
+                std.debug.warn("(unlinkable) test: {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
+                if (module.instantiate()) |x| {
+                    return error.ExpectedUnlinkable;
+                } else |err| switch (err) {
+                    error.OutOfBoundsMemoryAccess => continue,
+                    else => {
+                        std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
+                        return error.UnexpectedExpected;
+                    },
+                }
+            },
             else => continue,
         }
     }
@@ -476,6 +488,13 @@ const Command = union(enum) {
         action: Action,
         text: []const u8,
         expected: []const ValueTrap,
+    },
+    assert_unlinkable: struct {
+        comptime @"type": []const u8 = "assert_unlinkable",
+        line: usize,
+        filename: []const u8,
+        text: []const u8,
+        module_type: []const u8,
     },
     action: struct {
         comptime @"type": []const u8 = "action",
