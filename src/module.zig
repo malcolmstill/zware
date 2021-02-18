@@ -627,7 +627,7 @@ pub const Module = struct {
         // 5. Initialise tables
         const tables_count = self.tables.list.items.len;
         for (self.tables.list.items) |table_def, i| {
-            const table = try inst.store.addTable(table_def.max);
+            const table = try inst.store.addTable(table_def.min, table_def.max);
         }
 
         // 6. Initialise from elements
