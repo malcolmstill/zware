@@ -197,7 +197,6 @@ test "Memory test" {
 }
 
 pub const Table = struct {
-    // Let's assume indices are u32
     data: []?u32,
     max: ?u32,
 
