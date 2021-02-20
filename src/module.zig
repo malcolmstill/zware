@@ -605,12 +605,9 @@ pub const Module = struct {
         };
 
         // 2. Initialise globals
-        {
-            var i: usize = 0;
-            while (i < self.globals.list.items.len) {
-                const handle = try inst.store.addGlobal();
-                try inst.globaladdrs.append(handle);
-            }
+        for (self.globals.list.items) |global_def, i| {
+            const handle = try inst.store.addGlobal();
+            try inst.globaladdrs.append(handle);
         }
 
         // 3. Initialise memories
@@ -625,7 +622,8 @@ pub const Module = struct {
 
         // 4. Initialise memories with data
         for (self.datas.list.items) |data, i| {
-            const memory = try inst.store.memory(data.index);
+            const handle = inst.memaddrs.items[data.index];
+            const memory = try inst.store.memory(handle);
 
             const offset = try inst.invokeExpression(data.offset, u32, .{});
             try memory.copy(offset, data.data);
@@ -634,11 +632,13 @@ pub const Module = struct {
         // 5. Initialise tables
         for (self.tables.list.items) |table_size, i| {
             const handle = try inst.store.addTable(table_size.min, table_size.max);
+            try inst.tableaddrs.append(handle);
         }
 
         // 6. Initialise from elements
         for (self.elements.list.items) |element_def, i| {
-            const table = try inst.store.table(element_def.index);
+            const store_index = inst.tableaddrs.items[element_def.index];
+            const table = try inst.store.table(store_index);
 
             // TODO: execute rather than take middle byte
             const offset = element_def.offset[1];
