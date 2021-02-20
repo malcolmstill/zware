@@ -3,6 +3,7 @@ const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
 const Memory = @import("memory.zig").Memory;
+const Table = @import("table.zig").Table;
 
 pub const Store = struct {
     alloc: *mem.Allocator,
@@ -40,27 +41,5 @@ pub const Store = struct {
     pub fn allocGlobals(self: *Store, count: usize) !void {
         _ = try self.globals.resize(count);
         mem.set(u64, self.globals.items[0..], 0);
-    }
-};
-
-pub const Table = struct {
-    data: []?u32,
-    max: ?u32,
-
-    pub fn init(alloc: *mem.Allocator, min: u32, max: ?u32) !Table {
-        return Table{
-            .data = try alloc.alloc(?u32, min),
-            .max = max,
-        };
-    }
-
-    pub fn lookup(self: *Table, index: u32) !u32 {
-        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
-        return self.data[index] orelse return error.UndefinedElement;
-    }
-
-    pub fn set(self: *Table, index: u32, value: u32) !void {
-        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
-        self.data[index] = value;
     }
 };
