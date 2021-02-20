@@ -606,7 +606,13 @@ pub const Module = struct {
 
         // 1. Initialise imports
         for (self.imports.list.items) |import, i| {
-            std.debug.warn("import[{}] = {s}.{s} ({})\n", .{ i, import.module, import.name, import.desc_tag });
+            const import_handle = try store.import(import.module, import.name, import.desc_tag);
+            switch (import.desc_tag) {
+                .Func => {},
+                .Mem => try inst.memaddrs.append(import_handle),
+                .Table => try inst.tableaddrs.append(import_handle),
+                .Global => try inst.globaladdrs.append(import_handle),
+            }
         }
 
         // 2. Initialise globals
