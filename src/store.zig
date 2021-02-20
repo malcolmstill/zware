@@ -31,20 +31,22 @@ pub const ArrayListStore = struct {
         return store;
     }
 
-    pub fn addMemory(self: *ArrayListStore) !*Memory {
+    pub fn addMemory(self: *ArrayListStore) !usize {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
-        return mem_ptr;
+        return self.memories.items.len - 1;
     }
 
-    pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !*Table {
+    pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !usize {
         const tbl_ptr = try self.tables.addOne();
         tbl_ptr.* = try Table.init(self.alloc, entries, max);
-        return tbl_ptr;
+        return self.tables.items.len - 1;
     }
 
-    pub fn addGlobals(self: *ArrayListStore, count: usize) !void {
-        _ = try self.globals.resize(count);
+    pub fn addGlobal(self: *ArrayListStore) !usize {
+        _ = try self.globals.resize(1);
         mem.set(u64, self.globals.items[0..], 0);
+
+        return self.globals.items.len - 1;
     }
 };
