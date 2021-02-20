@@ -31,10 +31,20 @@ pub const ArrayListStore = struct {
         return store;
     }
 
+    pub fn memory(self: *ArrayListStore, handle: usize) !*Memory {
+        if (handle >= self.memories.items.len) return error.BadMemoryIndex;
+        return &self.memories.items[handle];
+    }
+
     pub fn addMemory(self: *ArrayListStore) !usize {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
         return self.memories.items.len - 1;
+    }
+
+    pub fn table(self: *ArrayListStore, handle: usize) !*Table {
+        if (handle >= self.tables.items.len) return error.BadTableIndex;
+        return &self.tables.items[handle];
     }
 
     pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !usize {

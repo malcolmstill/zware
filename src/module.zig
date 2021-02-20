@@ -593,49 +593,52 @@ pub const Module = struct {
         return true;
     }
 
-    pub fn instantiate(self: *Module, store: *Store) !Instance {
+    pub fn instantiate(self: *Module, allocator: *mem.Allocator, store: *Store) !Instance {
         if (self.decoded == false) return error.ModuleNotDecoded;
 
         var inst = Instance{
             .module = self.*,
             .store = store,
+            .memaddrs = ArrayList(usize).init(allocator),
+            .tableaddrs = ArrayList(usize).init(allocator),
+            .globaladdrs = ArrayList(usize).init(allocator),
         };
 
         // 2. Initialise globals
-        try inst.store.addGlobals(self.globals.list.items.len);
-
-        // 3. Initialise memories
         {
             var i: usize = 0;
-            while (i < self.memories.list.items.len) {
-                _ = try inst.store.addMemory();
+            while (i < self.globals.list.items.len) {
+                const handle = try inst.store.addGlobal();
+                try inst.globaladdrs.append(handle);
             }
         }
 
+        // 3. Initialise memories
         for (self.memories.list.items) |memory_definition, i| {
-            _ = try inst.store.memories.items[i].grow(memory_definition.min);
-            inst.store.memories.items[i].max_size = memory_definition.max;
+            const handle = try inst.store.addMemory();
+            const memory = try inst.store.memory(handle);
+
+            try inst.memaddrs.append(handle);
+            _ = try memory.grow(memory_definition.min);
+            memory.max_size = memory_definition.max;
         }
 
         // 4. Initialise memories with data
         for (self.datas.list.items) |data, i| {
-            if (data.index >= inst.store.memories.items.len) return error.BadMemoryIndex;
-            const memory = &inst.store.memories.items[data.index];
+            const memory = try inst.store.memory(data.index);
 
             const offset = try inst.invokeExpression(data.offset, u32, .{});
             try memory.copy(offset, data.data);
         }
 
         // 5. Initialise tables
-        const tables_count = self.tables.list.items.len;
-        for (self.tables.list.items) |table_def, i| {
-            const table = try inst.store.addTable(table_def.min, table_def.max);
+        for (self.tables.list.items) |table_size, i| {
+            const handle = try inst.store.addTable(table_size.min, table_size.max);
         }
 
         // 6. Initialise from elements
         for (self.elements.list.items) |element_def, i| {
-            if (element_def.index >= inst.store.tables.items.len) return error.BadTableIndex;
-            const table = &inst.store.tables.items[element_def.index];
+            const table = try inst.store.table(element_def.index);
 
             // TODO: execute rather than take middle byte
             const offset = element_def.offset[1];
