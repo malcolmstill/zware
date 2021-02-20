@@ -22,7 +22,7 @@ const Code = common.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
-const Store = @import("store.zig").Store;
+const Store = @import("store.zig").ArrayListStore;
 
 pub const Module = struct {
     decoded: bool = false,
@@ -593,9 +593,9 @@ pub const Module = struct {
         return true;
     }
 
-    pub fn instantiate(self: *Module) !Instance {
+    pub fn instantiate(self: *Module, store: *Store) !Instance {
         if (self.decoded == false) return error.ModuleNotDecoded;
-        var store = Store.init(self.alloc);
+
         var inst = Instance{
             .module = self.*,
             .store = store,
