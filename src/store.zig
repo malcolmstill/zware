@@ -4,6 +4,8 @@ const math = std.math;
 const ArrayList = std.ArrayList;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
+const Import = @import("common.zig").Import;
+const Tag = @import("common.zig").Tag;
 
 // - Stores provide the runtime memory shared between modules
 // - For different applications you may want to use a store that
@@ -14,11 +16,17 @@ const Table = @import("table.zig").Table;
 //   with an arena allocator, i.e. you are going to deallocate
 //   everything at the same time.
 
+pub const ImportExport = struct {
+    import: Import,
+    handle: usize,
+};
+
 pub const ArrayListStore = struct {
     alloc: *mem.Allocator,
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(u64),
+    imports: ArrayList(ImportExport),
 
     pub fn init(alloc: *mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
@@ -26,9 +34,36 @@ pub const ArrayListStore = struct {
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(u64).init(alloc),
+            .imports = ArrayList(ImportExport).init(alloc),
         };
 
         return store;
+    }
+
+    // import
+    //
+    // import attempts to find in the store, the given module.name pair
+    // for the given type
+    pub fn import(self: *ArrayListStore, module: []const u8, name: []const u8, tag: Tag) !usize {
+        for (self.imports.items) |importexport| {
+            if (tag != importexport.import.desc_tag) continue;
+            if (!mem.eql(u8, module, importexport.import.module)) continue;
+            if (!mem.eql(u8, name, importexport.import.name)) continue;
+
+            return importexport.handle;
+        }
+        return error.ImportNotFound;
+    }
+
+    pub fn @"export"(self: *ArrayListStore, module: []const u8, name: []const u8, tag: Tag, handle: usize) !void {
+        try self.imports.append(ImportExport{
+            .import = Import{
+                .module = module,
+                .name = name,
+                .desc_tag = tag,
+            },
+            .handle = handle,
+        });
     }
 
     pub fn memory(self: *ArrayListStore, handle: usize) !*Memory {
