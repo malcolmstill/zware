@@ -602,12 +602,15 @@ pub const Module = struct {
         };
 
         // 2. Initialise globals
-        const globals_count = self.globals.list.items.len;
-        try inst.store.allocGlobals(globals_count);
+        try inst.store.addGlobals(self.globals.list.items.len);
 
         // 3. Initialise memories
-        const memories_count = self.memories.list.items.len;
-        try inst.store.addMemories(memories_count);
+        {
+            var i: usize = 0;
+            while (i < self.memories.list.items.len) {
+                _ = try inst.store.addMemory();
+            }
+        }
 
         for (self.memories.list.items) |memory_definition, i| {
             _ = try inst.store.memories.items[i].grow(memory_definition.min);
