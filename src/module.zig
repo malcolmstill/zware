@@ -604,6 +604,11 @@ pub const Module = struct {
             .globaladdrs = ArrayList(usize).init(allocator),
         };
 
+        // 1. Initialise imports
+        for (self.imports.list.items) |import, i| {
+            std.debug.warn("import[{}] = {s}.{s} ({})\n", .{ i, import.module, import.name, import.desc_tag });
+        }
+
         // 2. Initialise globals
         for (self.globals.list.items) |global_def, i| {
             const handle = try inst.store.addGlobal();
