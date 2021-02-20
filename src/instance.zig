@@ -2,6 +2,7 @@ const std = @import("std");
 const common = @import("common.zig");
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
+const Memory = @import("memory.zig").Memory;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const ArrayList = std.ArrayList;
 
@@ -28,6 +29,14 @@ pub const Instance = struct {
     memaddrs: ArrayList(usize),
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
+
+    // Lookup a memory in store via the modules index
+    pub fn memory(self: *Instance, index: usize) !*Memory {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
+        const handle = self.memaddrs.items[index];
+        return try self.store.memory(handle);
+    }
 
     // invoke:
     //  1. Lookup our function by name with getExport
