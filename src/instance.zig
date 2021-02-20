@@ -1,7 +1,7 @@
 const std = @import("std");
 const common = @import("common.zig");
 const Module = @import("module.zig").Module;
-const Store = @import("store.zig").Store;
+const Store = @import("store.zig").ArrayListStore;
 const Interpreter = @import("interpreter.zig").Interpreter;
 
 const InterpreterOptions = struct {
@@ -12,7 +12,7 @@ const InterpreterOptions = struct {
 
 pub const Instance = struct {
     module: Module,
-    store: Store,
+    store: *Store,
 
     // invoke:
     //  1. Lookup our function by name with getExport
