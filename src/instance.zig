@@ -3,6 +3,7 @@ const common = @import("common.zig");
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Interpreter = @import("interpreter.zig").Interpreter;
+const ArrayList = std.ArrayList;
 
 const InterpreterOptions = struct {
     operand_stack_size: comptime_int = 64 * 1024,
@@ -10,9 +11,23 @@ const InterpreterOptions = struct {
     label_stack_size: comptime_int = 64 * 1024,
 };
 
+// Instance
+//
+// An Instance represents the runtime instantiation of a particular module.
+//
+// It contains:
+//      - a copy of the module it is an instance of
+//      - a pointer to the Store shared amongst modules
+//      - `memaddrs`: a set of addresses in the store to map a modules
+//        definitions to those in the store
+//      - `tableaddrs`: as per `memaddrs` but for tables
+//      - `globaladdrs`: as per `memaddrs` but for globals
 pub const Instance = struct {
     module: Module,
     store: *Store,
+    memaddrs: ArrayList(usize),
+    tableaddrs: ArrayList(usize),
+    globaladdrs: ArrayList(usize),
 
     // invoke:
     //  1. Lookup our function by name with getExport
