@@ -289,9 +289,7 @@ pub const Interpreter = struct {
 
                 // Read lookup index from stack
                 const lookup_index = try self.popOperand(u32);
-                // TODO: debug build check that `table` exists
-
-                const table = try self.inst.store.table(table_index);
+                const table = try self.inst.table(table_index);
                 const function_index = try table.lookup(lookup_index);
 
                 const function = module.functions.list.items[function_index];

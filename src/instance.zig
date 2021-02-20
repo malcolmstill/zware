@@ -3,6 +3,7 @@ const common = @import("common.zig");
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
+const Table = @import("table.zig").Table;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const ArrayList = std.ArrayList;
 
@@ -36,6 +37,13 @@ pub const Instance = struct {
         if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
         const handle = self.memaddrs.items[index];
         return try self.store.memory(handle);
+    }
+
+    pub fn table(self: *Instance, index: usize) !*Table {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
+        const handle = self.tableaddrs.items[index];
+        return try self.store.table(handle);
     }
 
     // invoke:
