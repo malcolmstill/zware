@@ -637,10 +637,8 @@ pub const Module = struct {
 
         // Initialise (internal) functions
         const imported_function_count = inst.funcaddrs.items.len;
-        std.debug.warn("import functions = {}\n", .{imported_function_count});
         for (self.functions.list.items) |function_def, i| {
             if (function_def.import != null) continue;
-            std.debug.warn("function_def[{}] = {}\n", .{ i, function_def });
             // TODO: clean this up
             const code = self.codes.list.items[i - imported_function_count];
             const func = self.functions.list.items[i];
