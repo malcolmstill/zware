@@ -253,33 +253,36 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
-                const function = module.functions.list.items[function_index];
-                const func_type = module.types.list.items[function.typeidx];
-                const func = module.codes.list.items[function_index];
-                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const function = try self.inst.func(function_index);
 
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < func.locals_count) : (j += 1) {
-                    try self.pushOperand(u64, 0);
+                switch (function) {
+                    .function => |f| {
+                        // Make space for locals (again, params already on stack)
+                        var j: usize = 0;
+                        while (j < f.locals_count) : (j += 1) {
+                            try self.pushOperand(u64, 0);
+                        }
+
+                        // Consume parameters from the stack
+                        try self.pushFrame(Frame{
+                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                            .label_stack_len = self.label_stack.len,
+                            .return_arity = f.results.len,
+                        }, f.locals_count + f.params.len);
+
+                        // Our continuation is the code after call
+                        try self.pushLabel(Label{
+                            .return_arity = f.results.len,
+                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                            .continuation = self.continuation,
+                        });
+
+                        self.continuation = f.code;
+                    },
+                    .host_function => |hf| {
+                        try hf.func(self);
+                    },
                 }
-
-                // Consume parameters from the stack
-                try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
-                    .label_stack_len = self.label_stack.len,
-                    .return_arity = results.len,
-                }, func.locals_count + params.len);
-
-                // Our continuation is the code after call
-                try self.pushLabel(Label{
-                    .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
-                    .continuation = self.continuation,
-                });
-
-                self.continuation = func.code;
             },
             .CallIndirect => {
                 var module = self.inst.module;
