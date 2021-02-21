@@ -695,13 +695,16 @@ pub const Module = struct {
         }
 
         // 3. Initialise memories
-        for (self.memories.list.items) |memory_definition, i| {
-            const handle = try inst.store.addMemory();
-            const memory = try inst.store.memory(handle);
+        for (self.memories.list.items) |mem_size, i| {
+            if (mem_size.import != null) {
+                const imported_mem = try inst.memory(i);
+                if (!common.limitMatch(imported_mem.min, imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
+            } else {
+                const handle = try inst.store.addMemory(mem_size.min, mem_size.max);
+                // const memory = try inst.store.memory(handle);
 
-            try inst.memaddrs.append(handle);
-            _ = try memory.grow(memory_definition.min);
-            memory.max_size = memory_definition.max;
+                try inst.memaddrs.append(handle);
+            }
         }
 
         // 4. Initialise memories with data
