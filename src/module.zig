@@ -636,26 +636,54 @@ pub const Module = struct {
         }
 
         // Initialise (internal) functions
+        //
+        // We have two possibilities:
+        // 1. the function is imported
+        // 2. the function is defined in this module (i.e. there is an associatd code section)
+        //
+        // In the case of 1 we need to check that the type of import matches the type
+        // of the actual function in the store
+        //
+        // For 2, we need to add the function to the store
         const imported_function_count = inst.funcaddrs.items.len;
         for (self.functions.list.items) |function_def, i| {
-            if (function_def.import != null) continue;
-            // TODO: clean this up
-            const code = self.codes.list.items[i - imported_function_count];
-            const func = self.functions.list.items[i];
-            const func_type = self.types.list.items[func.typeidx];
-            const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-            const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
-            const handle = try inst.store.addFunction(Function{
-                .function = .{
-                    .code = code.code,
-                    .locals = code.locals,
-                    .locals_count = code.locals_count,
-                    .params = params,
-                    .results = results,
-                },
-            });
-            // Need to do this regardless of if import or internal
-            try inst.funcaddrs.append(handle);
+            if (function_def.import) |imported_function| {
+                // Check that the function defintion (which this module expects)
+                // is the same as the function in the store
+                const func_type = self.types.list.items[function_def.typeidx];
+                const external_function = try inst.func(i);
+                switch (external_function) {
+                    .function => |ef| {
+                        if (!self.signaturesEqual2(ef.params, ef.results, func_type)) {
+                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
+                        }
+                    },
+                    .host_function => |hef| {
+                        if (!self.signaturesEqual2(hef.params, hef.results, func_type)) {
+                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
+                        }
+                    },
+                }
+            } else {
+                // if (function_def.import != null) continue;
+                // TODO: clean this up
+                const code = self.codes.list.items[i - imported_function_count];
+                const func = self.functions.list.items[i];
+                const func_type = self.types.list.items[func.typeidx];
+                const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const handle = try inst.store.addFunction(Function{
+                    .function = .{
+                        .code = code.code,
+                        .locals = code.locals,
+                        .locals_count = code.locals_count,
+                        .params = params,
+                        .results = results,
+                    },
+                });
+                // Need to do this regardless of if import or internal
+                try inst.funcaddrs.append(handle);
+            }
         }
 
         // 2. Initialise globals
