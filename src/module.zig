@@ -310,7 +310,7 @@ pub const Module = struct {
 
                 try self.memories.list.append(Limit{
                     .min = min,
-                    .max = std.math.maxInt(u32),
+                    .max = null,
                     .import = import,
                 });
             },
