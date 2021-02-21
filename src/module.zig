@@ -716,17 +716,9 @@ pub const Module = struct {
         // 5. Initialise tables
         for (self.tables.list.items) |table_size, i| {
             if (table_size.import != null) {
-                // TODO: this is a bit confusing, clean it up
                 const imported_table = try inst.table(i);
-                if (imported_table.min < table_size.min) return error.ImportedTableNotBigEnough;
-                if (table_size.max) |defined_max| {
-                    if (imported_table.max) |imported_max| {
-                        if (!(imported_max <= defined_max)) {
-                            return error.ImportedTableNotBigEnough;
-                        }
-                    } else {
-                        return error.ImportedTableNotBigEnough;
-                    }
+                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) {
+                    return error.ImportedTableNotBigEnough;
                 }
             } else {
                 const handle = try inst.store.addTable(table_size.min, table_size.max);
