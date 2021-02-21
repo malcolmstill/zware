@@ -717,9 +717,7 @@ pub const Module = struct {
         for (self.tables.list.items) |table_size, i| {
             if (table_size.import != null) {
                 const imported_table = try inst.table(i);
-                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) {
-                    return error.ImportedTableNotBigEnough;
-                }
+                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) return error.ImportedTableNotBigEnough;
             } else {
                 const handle = try inst.store.addTable(table_size.min, table_size.max);
                 try inst.tableaddrs.append(handle);
