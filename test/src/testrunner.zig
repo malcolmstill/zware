@@ -643,6 +643,8 @@ pub fn main() anyerror!void {
                 if (module.instantiate(&arena.allocator, &store)) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
+                    error.ImportNotFound => continue,
+                    error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     else => {
