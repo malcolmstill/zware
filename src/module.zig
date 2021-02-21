@@ -688,6 +688,7 @@ pub const Module = struct {
 
         // 2. Initialise globals
         for (self.globals.list.items) |global_def, i| {
+            if (global_def.import != null) continue;
             const value = if (global_def.code) |code| try inst.invokeExpression(code, u64, .{}) else 0;
             const handle = try inst.store.addGlobal(value);
             try inst.globaladdrs.append(handle);
