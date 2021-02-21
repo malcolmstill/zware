@@ -109,6 +109,7 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
+    // TODO: supply a setGlobal function instead?
     pub fn global(self: *ArrayListStore, handle: usize) !*u64 {
         if (handle >= self.globals.items.len) return error.BadGlobalIndex;
         return &self.globals.items[handle];
