@@ -109,14 +109,14 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
-    pub fn global(self: *ArrayListStore, handle: usize) !u64 {
+    pub fn global(self: *ArrayListStore, handle: usize) !*u64 {
         if (handle >= self.functions.items.len) return error.BadFunctionIndex;
-        return self.globals.items[handle];
+        return &self.globals.items[handle];
     }
 
     pub fn addGlobal(self: *ArrayListStore, value: u64) !usize {
-        _ = try self.globals.resize(1);
-        self.globals.items[self.globals.items.len - 1] = value;
+        const glbl_ptr = try self.globals.addOne();
+        glbl_ptr.* = value;
 
         return self.globals.items.len - 1;
     }
