@@ -648,11 +648,10 @@ pub const Module = struct {
 
         // 6. Initialise from elements
         for (self.elements.list.items) |element_def, i| {
-            const store_index = inst.tableaddrs.items[element_def.index];
-            const table = try inst.store.table(store_index);
+            if (element_def.count == 0) continue; // Zero-length is allowed and shouldn't error
+            const table = try inst.table(element_def.index);
 
-            // TODO: execute rather than take middle byte
-            const offset = element_def.offset[1];
+            const offset = try inst.invokeExpression(element_def.offset, u32, .{});
 
             // Test that offset is in bounds
             _ = table.lookup(offset) catch |err| switch (err) {
