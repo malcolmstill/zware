@@ -21,4 +21,8 @@ pub const Table = struct {
         if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
         self.data[index] = value;
     }
+
+    pub fn size(self: *Table) usize {
+        return self.data.len;
+    }
 };
