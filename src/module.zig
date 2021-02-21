@@ -15,7 +15,6 @@ const Export = common.Export;
 const Limit = common.Limit;
 const LimitType = common.LimitType;
 const Mutability = common.Mutability;
-const Function = common.Function;
 const Global = common.Global;
 const Element = common.Element;
 const Code = common.Code;
@@ -23,6 +22,7 @@ const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
+const Function = @import("function.zig").Function;
 
 pub const Module = struct {
     decoded: bool = false,
@@ -34,7 +34,7 @@ pub const Module = struct {
     types: Section(FuncType),
     value_types: Section(ValueType), // Not really a section
     imports: Section(Import),
-    functions: Section(Function),
+    functions: Section(common.Function),
     tables: Section(Limit),
     memories: Section(Limit),
     globals: Section(Global),
@@ -53,7 +53,7 @@ pub const Module = struct {
             .types = Section(FuncType).init(alloc),
             .value_types = Section(ValueType).init(alloc),
             .imports = Section(Import).init(alloc),
-            .functions = Section(Function).init(alloc),
+            .functions = Section(common.Function).init(alloc),
             .tables = Section(Limit).init(alloc),
             .memories = Section(Limit).init(alloc),
             .globals = Section(Global).init(alloc),
@@ -240,7 +240,7 @@ pub const Module = struct {
     fn decodeFunction(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
         const type_index = try leb.readULEB128(u32, rd);
-        try self.functions.list.append(Function{
+        try self.functions.list.append(common.Function{
             .typeidx = type_index,
             .import = import,
         });
@@ -635,16 +635,28 @@ pub const Module = struct {
             }
         }
 
-        // Initialise functions
+        // Initialise (internal) functions
+        const imported_function_count = inst.funcaddrs.items.len;
+        std.debug.warn("import functions = {}\n", .{imported_function_count});
         for (self.functions.list.items) |function_def, i| {
-            // TODO: we only add non-imported functions?
+            if (function_def.import != null) continue;
+            std.debug.warn("function_def[{}] = {}\n", .{ i, function_def });
             // TODO: clean this up
-            const code = self.codes.list.items[i];
+            const code = self.codes.list.items[i - imported_function_count];
             const func = self.functions.list.items[i];
             const func_type = self.types.list.items[func.typeidx];
             const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
             const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
-            const handle = try inst.store.addFunction(code.code, code.locals, code.locals_count, params, results);
+            const handle = try inst.store.addFunction(Function{
+                .function = .{
+                    .code = code.code,
+                    .locals = code.locals,
+                    .locals_count = code.locals_count,
+                    .params = params,
+                    .results = results,
+                },
+            });
+            // Need to do this regardless of if import or internal
             try inst.funcaddrs.append(handle);
         }
 
