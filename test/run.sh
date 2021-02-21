@@ -110,6 +110,9 @@ bin/testrunner if.json || exit 1
 wast2json test/testsuite/imports.wast || exit 1
 bin/testrunner imports.json || exit 1
 
+wast2json test/testsuite/inline-module.wast || exit 1
+bin/testrunner inline-module.json || exit 1
+
 wast2json test/testsuite/labels.wast || exit 1
 bin/testrunner labels.json || exit 1
 
