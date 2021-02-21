@@ -599,6 +599,7 @@ pub const Module = struct {
         var inst = Instance{
             .module = self.*,
             .store = store,
+            .funcaddrs = ArrayList(usize).init(allocator),
             .memaddrs = ArrayList(usize).init(allocator),
             .tableaddrs = ArrayList(usize).init(allocator),
             .globaladdrs = ArrayList(usize).init(allocator),
@@ -608,11 +609,19 @@ pub const Module = struct {
         for (self.imports.list.items) |import, i| {
             const import_handle = try store.import(import.module, import.name, import.desc_tag);
             switch (import.desc_tag) {
-                .Func => {},
+                .Func => try inst.funcaddrs.append(import_handle),
                 .Mem => try inst.memaddrs.append(import_handle),
                 .Table => try inst.tableaddrs.append(import_handle),
                 .Global => try inst.globaladdrs.append(import_handle),
             }
+        }
+
+        // Initialise functions
+        for (self.functions.list.items) |function_def, i| {
+            const handle = try inst.store.addFunction();
+            try inst.funcaddrs.append(handle);
+            const function = try inst.func(i);
+            function.* = self.codes.list.items[i];
         }
 
         // 2. Initialise globals
