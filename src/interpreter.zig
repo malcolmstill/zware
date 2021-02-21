@@ -576,10 +576,10 @@ pub const Interpreter = struct {
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
 
-                const value = try self.popOperand(f64);
+                const value = try self.popOperand(f32);
                 const address = try self.popOperand(u32);
 
-                try memory.write(f64, offset, address, value);
+                try memory.write(f32, offset, address, value);
             },
             .F64Store => {
                 const frame = try self.peekNthFrame(0);
@@ -1089,6 +1089,7 @@ pub const Interpreter = struct {
             .F32Div => {
                 const c2 = try self.popOperand(f32);
                 const c1 = try self.popOperand(f32);
+                std.debug.warn("c1 / c2 = {} / {} = {}\n", .{ c1, c2, c1 / c2 });
                 try self.pushOperand(f32, c1 / c2);
             },
             .F32Min => {
