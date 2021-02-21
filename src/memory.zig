@@ -113,7 +113,8 @@ test "Memory test" {
     defer _ = arena.deinit();
 
     var store = ArrayListStore.init(&arena.allocator);
-    var mem0 = try store.addMemory();
+    const mem_handle = try store.addMemory();
+    var mem0 = try store.memory(mem_handle);
     testing.expectEqual(@as(usize, 0), mem0.asSlice().len);
 
     _ = try mem0.grow(1);
