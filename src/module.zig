@@ -593,6 +593,25 @@ pub const Module = struct {
         return true;
     }
 
+    pub fn signaturesEqual2(self: *Module, params: []ValueType, results: []ValueType, b: FuncType) bool {
+        if (params.len != b.params_count) return false;
+        if (results.len != b.results_count) return false;
+
+        const params_b = self.value_types.list.items[b.params_offset .. b.params_offset + b.params_count];
+
+        for (params) |p_a, i| {
+            if (p_a != params_b[i]) return false;
+        }
+
+        const results_b = self.value_types.list.items[b.results_offset .. b.results_offset + b.results_count];
+
+        for (results) |r_a, i| {
+            if (r_a != results_b[i]) return false;
+        }
+
+        return true;
+    }
+
     pub fn instantiate(self: *Module, allocator: *mem.Allocator, store: *Store) !Instance {
         if (self.decoded == false) return error.ModuleNotDecoded;
 
@@ -618,10 +637,15 @@ pub const Module = struct {
 
         // Initialise functions
         for (self.functions.list.items) |function_def, i| {
-            const handle = try inst.store.addFunction();
+            // TODO: we only add non-imported functions?
+            // TODO: clean this up
+            const code = self.codes.list.items[i];
+            const func = self.functions.list.items[i];
+            const func_type = self.types.list.items[func.typeidx];
+            const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+            const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+            const handle = try inst.store.addFunction(code.code, code.locals, code.locals_count, params, results);
             try inst.funcaddrs.append(handle);
-            const function = try inst.func(i);
-            function.* = self.codes.list.items[i];
         }
 
         // 2. Initialise globals
@@ -672,7 +696,7 @@ pub const Module = struct {
             var j: usize = 0;
             while (j < segment.count) : (j += 1) {
                 const value = try instruction.readULEB128Mem(u32, &data);
-                try table.set(@intCast(u32, offset + j), value);
+                try table.set(@intCast(u32, offset + j), try inst.funcHandle(value));
             }
         }
 
