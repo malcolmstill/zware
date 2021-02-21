@@ -87,7 +87,7 @@ pub const Module = struct {
             try self.verify();
         }
         try self.verify();
-        if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+        if (self.codes.list.items.len != nonImportCount(self.functions.list.items)) return error.FunctionCodeSectionsInconsistent;
         self.decoded = true;
     }
 
