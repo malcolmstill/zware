@@ -290,41 +290,35 @@ pub const Interpreter = struct {
                 // Read lookup index from stack
                 const lookup_index = try self.popOperand(u32);
                 const table = try self.inst.table(table_index);
-                const function_index = try table.lookup(lookup_index);
-
-                const function = module.functions.list.items[function_index];
+                const function_handle = try table.lookup(lookup_index);
+                const function = try self.inst.store.function(function_handle);
 
                 // Check that signatures match
-                const func_type = module.types.list.items[function.typeidx];
+                // const func_type = module.types.list.items[function.typeidx];
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
-
-                // Our signatures match, let's go
-                const func = module.codes.list.items[function_index];
-                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                if (!module.signaturesEqual2(function.params, function.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                 // Make space for locals (again, params already on stack)
                 var j: usize = 0;
-                while (j < func.locals_count) : (j += 1) {
+                while (j < function.locals_count) : (j += 1) {
                     try self.pushOperand(u64, 0);
                 }
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
+                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
                     .label_stack_len = self.label_stack.len,
-                    .return_arity = results.len,
-                }, func.locals_count + params.len);
+                    .return_arity = function.results.len,
+                }, function.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
                     .continuation = self.continuation,
                 });
 
-                self.continuation = func.code;
+                self.continuation = function.code;
             },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
