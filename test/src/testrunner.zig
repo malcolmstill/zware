@@ -11,6 +11,8 @@ const Module = foxwren.Module;
 const Instance = foxwren.Instance;
 const Store = foxwren.Store;
 const Memory = foxwren.Memory;
+const Function = foxwren.Function;
+const Interpreter = foxwren.Interpreter;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.hash_map.StringHashMap;
@@ -29,6 +31,38 @@ const ArrayList = std.ArrayList;
 // for information on the format of the .wast files.
 
 var gpa = GeneralPurposeAllocator(.{}){};
+
+fn print_i32(interp: *Interpreter) !void {
+    const value = try interp.popOperand(i32);
+    std.debug.warn("print_i32: {}\n", .{value});
+}
+
+fn print_i64(interp: *Interpreter) !void {
+    const value = try interp.popOperand(i64);
+    std.debug.warn("print_i64: {}\n", .{value});
+}
+
+fn print_f32(interp: *Interpreter) !void {
+    const value = try interp.popOperand(f32);
+    std.debug.warn("print_f32: {}\n", .{value});
+}
+
+fn print_f64(interp: *Interpreter) !void {
+    const value = try interp.popOperand(f64);
+    std.debug.warn("print_f64: {}\n", .{value});
+}
+
+fn print_i32_f32(interp: *Interpreter) !void {
+    const value_f32 = try interp.popOperand(f32);
+    const value_i32 = try interp.popOperand(i32);
+    std.debug.warn("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
+}
+
+fn print_f64_f64(interp: *Interpreter) !void {
+    const value_f64_2 = try interp.popOperand(f64);
+    const value_f64_1 = try interp.popOperand(f64);
+    std.debug.warn("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
+}
 
 pub fn main() anyerror!void {
     defer _ = gpa.deinit();
@@ -58,10 +92,9 @@ pub fn main() anyerror!void {
     const spectest_module = "spectest";
 
     // Init spectest memory
-    const mem_handle = try store.addMemory();
+    const mem_handle = try store.addMemory(1, 2);
     const memory = try store.memory(mem_handle);
-    memory.max_size = 2;
-    _ = try memory.grow(1);
+
     const spectest_memory_name = "memory";
     try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
 
@@ -72,21 +105,98 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
 
     // Initiliase spectest globals
-    const i32_handle = try store.addGlobal(0);
+    const i32_handle = try store.addGlobal(666);
     const i32_name = "global_i32";
     try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
 
-    const i64_handle = try store.addGlobal(0);
+    const i64_handle = try store.addGlobal(666);
     const i64_name = "global_i64";
     try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
 
-    const f32_handle = try store.addGlobal(0);
+    const f32_handle = try store.addGlobal(666);
     const f32_name = "global_f32";
     try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
 
-    const f64_handle = try store.addGlobal(0);
+    const f64_handle = try store.addGlobal(666);
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
+
+    var print_i32_params = [_]ValueType{.I32} ** 1;
+    var print_i32_results = [_]ValueType{.I32} ** 0;
+    const print_i32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i32,
+            .params = print_i32_params[0..],
+            .results = print_i32_results[0..],
+        },
+    });
+    const print_i32_name = "print_i32";
+    try store.@"export"(spectest_module[0..], print_i32_name[0..], .Func, print_i32_handle);
+
+    // print_i64
+    var print_i64_params = [_]ValueType{.I64} ** 1;
+    var print_i64_results = [_]ValueType{.I64} ** 0;
+    const print_i64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i64,
+            .params = print_i64_params[0..],
+            .results = print_i64_results[0..],
+        },
+    });
+    const print_i64_name = "print_i64";
+    try store.@"export"(spectest_module[0..], print_i64_name[0..], .Func, print_i64_handle);
+
+    // export print_f32
+    var print_f32_params = [_]ValueType{.F32} ** 1;
+    var print_f32_results = [_]ValueType{.F32} ** 0;
+    const print_f32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f32,
+            .params = print_f32_params[0..],
+            .results = print_f32_results[0..],
+        },
+    });
+    const print_f32_name = "print_f32";
+    try store.@"export"(spectest_module[0..], print_f32_name[0..], .Func, print_f32_handle);
+
+    // export print_f64
+    var print_f64_params = [_]ValueType{.F64} ** 1;
+    var print_f64_results = [_]ValueType{.F64} ** 0;
+    const print_f64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f64,
+            .params = print_f64_params[0..],
+            .results = print_f64_results[0..],
+        },
+    });
+    const print_f64_name = "print_f64";
+    try store.@"export"(spectest_module[0..], print_f64_name[0..], .Func, print_f64_handle);
+
+    // export print_i32_f32
+    var print_i32_f32_params: [2]ValueType = [_]ValueType{ .I32, .F32 };
+    var print_i32_f32_results = [_]ValueType{.F32} ** 0;
+    const print_i32_f32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i32_f32,
+            .params = print_i32_f32_params[0..],
+            .results = print_i32_f32_results[0..],
+        },
+    });
+    const print_i32_f32_name = "print_i32_f32";
+    try store.@"export"(spectest_module[0..], print_i32_f32_name[0..], .Func, print_i32_f32_handle);
+
+    // export print_i64_f64
+    var print_f64_f64_params: [2]ValueType = [_]ValueType{ .F64, .F64 };
+    var print_f64_f64_results: [0]ValueType = [_]ValueType{};
+    const print_f64_f64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f64_f64,
+            .params = print_f64_f64_params[0..],
+            .results = print_f64_f64_results[0..],
+        },
+    });
+    const print_f64_f64_name = "print_f64_f64";
+    try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
 
     var inst: Instance = undefined;
 
@@ -532,6 +642,10 @@ pub fn main() anyerror!void {
                 if (module.instantiate(&arena.allocator, &store)) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
+                    error.ImportedMemoryNotBigEnough => continue,
+                    error.ImportedTableNotBigEnough => continue,
+                    error.ImportNotFound => continue,
+                    error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     else => {
@@ -542,26 +656,49 @@ pub fn main() anyerror!void {
             },
             .register => {
                 std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
-                const registered_inst = registered_names.get(command.register.name) orelse return error.NotRegistered;
+                if (command.register.name) |name| {
+                    const registered_inst = registered_names.get(name) orelse return error.NotRegistered;
 
-                for (registered_inst.module.exports.list.items) |exprt, i| {
-                    switch (exprt.tag) {
-                        .Table => {
-                            const handle = registered_inst.tableaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Table, handle);
-                        },
-                        .Func => {
-                            const handle = registered_inst.funcaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Func, handle);
-                        },
-                        .Global => {
-                            const handle = registered_inst.globaladdrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Global, handle);
-                        },
-                        .Mem => {
-                            const handle = registered_inst.memaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Mem, handle);
-                        },
+                    for (registered_inst.module.exports.list.items) |exprt, i| {
+                        switch (exprt.tag) {
+                            .Table => {
+                                const handle = registered_inst.tableaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Table, handle);
+                            },
+                            .Func => {
+                                const handle = registered_inst.funcaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Func, handle);
+                            },
+                            .Global => {
+                                const handle = registered_inst.globaladdrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Global, handle);
+                            },
+                            .Mem => {
+                                const handle = registered_inst.memaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Mem, handle);
+                            },
+                        }
+                    }
+                } else {
+                    for (inst.module.exports.list.items) |exprt, i| {
+                        switch (exprt.tag) {
+                            .Table => {
+                                const handle = inst.tableaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Table, handle);
+                            },
+                            .Func => {
+                                const handle = inst.funcaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Func, handle);
+                            },
+                            .Global => {
+                                const handle = inst.globaladdrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Global, handle);
+                            },
+                            .Mem => {
+                                const handle = inst.memaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Mem, handle);
+                            },
+                        }
                     }
                 }
             },
@@ -632,7 +769,7 @@ const Command = union(enum) {
     }, register: struct {
         comptime @"type": []const u8 = "register",
         line: usize,
-        name: []const u8,
+        name: ?[]const u8 = null,
         as: []const u8,
     }
 };

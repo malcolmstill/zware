@@ -56,6 +56,7 @@ pub const ArrayListStore = struct {
 
             return importexport.handle;
         }
+        std.log.err("Import not found: {s}.{s}\n", .{ module, name });
         return error.ImportNotFound;
     }
 
@@ -70,20 +71,14 @@ pub const ArrayListStore = struct {
         });
     }
 
-    pub fn function(self: *ArrayListStore, handle: usize) !*Function {
+    pub fn function(self: *ArrayListStore, handle: usize) !Function {
         if (handle >= self.functions.items.len) return error.BadFunctionIndex;
-        return &self.functions.items[handle];
+        return self.functions.items[handle];
     }
 
-    pub fn addFunction(self: *ArrayListStore, code: []const u8, locals: []const u8, locals_count: usize, params: []ValueType, results: []ValueType) !usize {
+    pub fn addFunction(self: *ArrayListStore, func: Function) !usize {
         const fun_ptr = try self.functions.addOne();
-        fun_ptr.* = Function{
-            .code = code,
-            .locals = locals,
-            .locals_count = locals_count,
-            .params = params,
-            .results = results,
-        };
+        fun_ptr.* = func;
         return self.functions.items.len - 1;
     }
 
@@ -92,9 +87,10 @@ pub const ArrayListStore = struct {
         return &self.memories.items[handle];
     }
 
-    pub fn addMemory(self: *ArrayListStore) !usize {
+    pub fn addMemory(self: *ArrayListStore, min: u32, max: ?u32) !usize {
         const mem_ptr = try self.memories.addOne();
-        mem_ptr.* = Memory.init(self.alloc);
+        mem_ptr.* = Memory.init(self.alloc, min, max);
+        _ = try mem_ptr.grow(min);
         return self.memories.items.len - 1;
     }
 
@@ -109,6 +105,7 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
+    // TODO: supply a setGlobal function instead?
     pub fn global(self: *ArrayListStore, handle: usize) !*u64 {
         if (handle >= self.globals.items.len) return error.BadGlobalIndex;
         return &self.globals.items[handle];

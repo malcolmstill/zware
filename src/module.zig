@@ -15,7 +15,6 @@ const Export = common.Export;
 const Limit = common.Limit;
 const LimitType = common.LimitType;
 const Mutability = common.Mutability;
-const Function = common.Function;
 const Global = common.Global;
 const Element = common.Element;
 const Code = common.Code;
@@ -23,6 +22,7 @@ const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
+const Function = @import("function.zig").Function;
 
 pub const Module = struct {
     decoded: bool = false,
@@ -34,7 +34,7 @@ pub const Module = struct {
     types: Section(FuncType),
     value_types: Section(ValueType), // Not really a section
     imports: Section(Import),
-    functions: Section(Function),
+    functions: Section(common.Function),
     tables: Section(Limit),
     memories: Section(Limit),
     globals: Section(Global),
@@ -53,7 +53,7 @@ pub const Module = struct {
             .types = Section(FuncType).init(alloc),
             .value_types = Section(ValueType).init(alloc),
             .imports = Section(Import).init(alloc),
-            .functions = Section(Function).init(alloc),
+            .functions = Section(common.Function).init(alloc),
             .tables = Section(Limit).init(alloc),
             .memories = Section(Limit).init(alloc),
             .globals = Section(Global).init(alloc),
@@ -87,7 +87,7 @@ pub const Module = struct {
             try self.verify();
         }
         try self.verify();
-        if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+        if (self.codes.list.items.len != nonImportCount(self.functions.list.items)) return error.FunctionCodeSectionsInconsistent;
         self.decoded = true;
     }
 
@@ -240,7 +240,7 @@ pub const Module = struct {
     fn decodeFunction(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
         const type_index = try leb.readULEB128(u32, rd);
-        try self.functions.list.append(Function{
+        try self.functions.list.append(common.Function{
             .typeidx = type_index,
             .import = import,
         });
@@ -271,7 +271,7 @@ pub const Module = struct {
 
                 try self.tables.list.append(Limit{
                     .min = min,
-                    .max = min,
+                    .max = null,
                     .import = import,
                 });
             },
@@ -310,7 +310,7 @@ pub const Module = struct {
 
                 try self.memories.list.append(Limit{
                     .min = min,
-                    .max = std.math.maxInt(u32),
+                    .max = null,
                     .import = import,
                 });
             },
@@ -635,34 +635,74 @@ pub const Module = struct {
             }
         }
 
-        // Initialise functions
+        // Initialise (internal) functions
+        //
+        // We have two possibilities:
+        // 1. the function is imported
+        // 2. the function is defined in this module (i.e. there is an associatd code section)
+        //
+        // In the case of 1 we need to check that the type of import matches the type
+        // of the actual function in the store
+        //
+        // For 2, we need to add the function to the store
+        const imported_function_count = inst.funcaddrs.items.len;
         for (self.functions.list.items) |function_def, i| {
-            // TODO: we only add non-imported functions?
-            // TODO: clean this up
-            const code = self.codes.list.items[i];
-            const func = self.functions.list.items[i];
-            const func_type = self.types.list.items[func.typeidx];
-            const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-            const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
-            const handle = try inst.store.addFunction(code.code, code.locals, code.locals_count, params, results);
-            try inst.funcaddrs.append(handle);
+            if (function_def.import) |imported_function| {
+                // Check that the function defintion (which this module expects)
+                // is the same as the function in the store
+                const func_type = self.types.list.items[function_def.typeidx];
+                const external_function = try inst.func(i);
+                switch (external_function) {
+                    .function => |ef| {
+                        if (!self.signaturesEqual2(ef.params, ef.results, func_type)) {
+                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
+                        }
+                    },
+                    .host_function => |hef| {
+                        if (!self.signaturesEqual2(hef.params, hef.results, func_type)) {
+                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
+                        }
+                    },
+                }
+            } else {
+                // if (function_def.import != null) continue;
+                // TODO: clean this up
+                const code = self.codes.list.items[i - imported_function_count];
+                const func = self.functions.list.items[i];
+                const func_type = self.types.list.items[func.typeidx];
+                const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const handle = try inst.store.addFunction(Function{
+                    .function = .{
+                        .code = code.code,
+                        .locals = code.locals,
+                        .locals_count = code.locals_count,
+                        .params = params,
+                        .results = results,
+                    },
+                });
+                // Need to do this regardless of if import or internal
+                try inst.funcaddrs.append(handle);
+            }
         }
 
         // 2. Initialise globals
         for (self.globals.list.items) |global_def, i| {
+            if (global_def.import != null) continue;
             const value = if (global_def.code) |code| try inst.invokeExpression(code, u64, .{}) else 0;
             const handle = try inst.store.addGlobal(value);
             try inst.globaladdrs.append(handle);
         }
 
         // 3. Initialise memories
-        for (self.memories.list.items) |memory_definition, i| {
-            const handle = try inst.store.addMemory();
-            const memory = try inst.store.memory(handle);
-
-            try inst.memaddrs.append(handle);
-            _ = try memory.grow(memory_definition.min);
-            memory.max_size = memory_definition.max;
+        for (self.memories.list.items) |mem_size, i| {
+            if (mem_size.import != null) {
+                const imported_mem = try inst.memory(i);
+                if (!common.limitMatch(imported_mem.min, imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
+            } else {
+                const handle = try inst.store.addMemory(mem_size.min, mem_size.max);
+                try inst.memaddrs.append(handle);
+            }
         }
 
         // 4. Initialise memories with data
@@ -676,8 +716,13 @@ pub const Module = struct {
 
         // 5. Initialise tables
         for (self.tables.list.items) |table_size, i| {
-            const handle = try inst.store.addTable(table_size.min, table_size.max);
-            try inst.tableaddrs.append(handle);
+            if (table_size.import != null) {
+                const imported_table = try inst.table(i);
+                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) return error.ImportedTableNotBigEnough;
+            } else {
+                const handle = try inst.store.addTable(table_size.min, table_size.max);
+                try inst.tableaddrs.append(handle);
+            }
         }
 
         // 6. Initialise from elements

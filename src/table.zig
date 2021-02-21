@@ -3,11 +3,13 @@ const mem = std.mem;
 
 pub const Table = struct {
     data: []?usize,
+    min: u32,
     max: ?u32,
 
     pub fn init(alloc: *mem.Allocator, min: u32, max: ?u32) !Table {
         return Table{
             .data = try alloc.alloc(?usize, min),
+            .min = min,
             .max = max,
         };
     }

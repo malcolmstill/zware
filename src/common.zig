@@ -5,10 +5,25 @@ pub const LimitType = enum(u8) {
     MinMax,
 };
 
+pub fn limitMatch(min_imported: u32, max_imported: ?u32, min_stated: u32, max_stated: ?u32) bool {
+    // TODO: this is a bit confusing, clean it up
+    if (min_imported < min_stated) return false;
+    if (max_stated) |defined_max| {
+        if (max_imported) |imported_max| {
+            if (!(imported_max <= defined_max)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
+
 // Table / Memory
 pub const Limit = struct {
     min: u32,
-    max: u32,
+    max: ?u32,
     import: ?u32,
 };
 

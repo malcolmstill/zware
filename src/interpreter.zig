@@ -253,33 +253,36 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
-                const function = module.functions.list.items[function_index];
-                const func_type = module.types.list.items[function.typeidx];
-                const func = module.codes.list.items[function_index];
-                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                const function = try self.inst.func(function_index);
 
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < func.locals_count) : (j += 1) {
-                    try self.pushOperand(u64, 0);
+                switch (function) {
+                    .function => |f| {
+                        // Make space for locals (again, params already on stack)
+                        var j: usize = 0;
+                        while (j < f.locals_count) : (j += 1) {
+                            try self.pushOperand(u64, 0);
+                        }
+
+                        // Consume parameters from the stack
+                        try self.pushFrame(Frame{
+                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                            .label_stack_len = self.label_stack.len,
+                            .return_arity = f.results.len,
+                        }, f.locals_count + f.params.len);
+
+                        // Our continuation is the code after call
+                        try self.pushLabel(Label{
+                            .return_arity = f.results.len,
+                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                            .continuation = self.continuation,
+                        });
+
+                        self.continuation = f.code;
+                    },
+                    .host_function => |hf| {
+                        try hf.func(self);
+                    },
                 }
-
-                // Consume parameters from the stack
-                try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
-                    .label_stack_len = self.label_stack.len,
-                    .return_arity = results.len,
-                }, func.locals_count + params.len);
-
-                // Our continuation is the code after call
-                try self.pushLabel(Label{
-                    .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
-                    .continuation = self.continuation,
-                });
-
-                self.continuation = func.code;
             },
             .CallIndirect => {
                 var module = self.inst.module;
@@ -293,32 +296,42 @@ pub const Interpreter = struct {
                 const function_handle = try table.lookup(lookup_index);
                 const function = try self.inst.store.function(function_handle);
 
-                // Check that signatures match
-                // const func_type = module.types.list.items[function.typeidx];
-                const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                if (!module.signaturesEqual2(function.params, function.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+                switch (function) {
+                    .function => |func| {
+                        // Check that signatures match
+                        // const func_type = module.types.list.items[function.typeidx];
+                        const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                        if (!module.signaturesEqual2(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < function.locals_count) : (j += 1) {
-                    try self.pushOperand(u64, 0);
+                        // Make space for locals (again, params already on stack)
+                        var j: usize = 0;
+                        while (j < func.locals_count) : (j += 1) {
+                            try self.pushOperand(u64, 0);
+                        }
+
+                        // Consume parameters from the stack
+                        try self.pushFrame(Frame{
+                            .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
+                            .label_stack_len = self.label_stack.len,
+                            .return_arity = func.results.len,
+                        }, func.locals_count + func.params.len);
+
+                        // Our continuation is the code after call
+                        try self.pushLabel(Label{
+                            .return_arity = func.results.len,
+                            .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
+                            .continuation = self.continuation,
+                        });
+
+                        self.continuation = func.code;
+                    },
+                    .host_function => |host_func| {
+                        const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                        if (!module.signaturesEqual2(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+
+                        try host_func.func(self);
+                    },
                 }
-
-                // Consume parameters from the stack
-                try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
-                    .label_stack_len = self.label_stack.len,
-                    .return_arity = function.results.len,
-                }, function.locals_count + function.params.len);
-
-                // Our continuation is the code after call
-                try self.pushLabel(Label{
-                    .return_arity = function.results.len,
-                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
-                    .continuation = self.continuation,
-                });
-
-                self.continuation = function.code;
             },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
