@@ -718,7 +718,7 @@ pub const Module = struct {
             if (table_size.import != null) {
                 // TODO: this is a bit confusing, clean it up
                 const imported_table = try inst.table(i);
-                if (imported_table.data.len < table_size.min) return error.ImportedTableNotBigEnough;
+                if (imported_table.min < table_size.min) return error.ImportedTableNotBigEnough;
                 if (table_size.max) |defined_max| {
                     if (imported_table.max) |imported_max| {
                         if (!(imported_max <= defined_max)) {
