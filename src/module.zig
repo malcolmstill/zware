@@ -765,11 +765,13 @@ test "module loading (simple add function)" {
 
     const bytes = @embedFile("../test/test.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
+    const result = try inst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
 }
 
@@ -780,17 +782,19 @@ test "module loading (fib)" {
 
     const bytes = @embedFile("../test/fib.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try modinst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try modinst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try modinst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try modinst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try modinst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try inst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try inst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try inst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try inst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try inst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
 }
 
 test "module loading (fact)" {
@@ -800,13 +804,15 @@ test "module loading (fact)" {
 
     const bytes = @embedFile("../test/fact.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try modinst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try modinst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try modinst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try inst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try inst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try inst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try inst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }
