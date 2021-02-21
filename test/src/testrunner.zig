@@ -92,10 +92,9 @@ pub fn main() anyerror!void {
     const spectest_module = "spectest";
 
     // Init spectest memory
-    const mem_handle = try store.addMemory();
+    const mem_handle = try store.addMemory(1, 2);
     const memory = try store.memory(mem_handle);
-    memory.max_size = 2;
-    _ = try memory.grow(1);
+
     const spectest_memory_name = "memory";
     try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
 
@@ -643,6 +642,7 @@ pub fn main() anyerror!void {
                 if (module.instantiate(&arena.allocator, &store)) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
+                    error.ImportedMemoryNotBigEnough => continue,
                     error.ImportedTableNotBigEnough => continue,
                     error.ImportNotFound => continue,
                     error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
