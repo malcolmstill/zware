@@ -653,26 +653,49 @@ pub fn main() anyerror!void {
             },
             .register => {
                 std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
-                const registered_inst = registered_names.get(command.register.name) orelse return error.NotRegistered;
+                if (command.register.name) |name| {
+                    const registered_inst = registered_names.get(name) orelse return error.NotRegistered;
 
-                for (registered_inst.module.exports.list.items) |exprt, i| {
-                    switch (exprt.tag) {
-                        .Table => {
-                            const handle = registered_inst.tableaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Table, handle);
-                        },
-                        .Func => {
-                            const handle = registered_inst.funcaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Func, handle);
-                        },
-                        .Global => {
-                            const handle = registered_inst.globaladdrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Global, handle);
-                        },
-                        .Mem => {
-                            const handle = registered_inst.memaddrs.items[exprt.index];
-                            try store.@"export"(command.register.as, exprt.name, .Mem, handle);
-                        },
+                    for (registered_inst.module.exports.list.items) |exprt, i| {
+                        switch (exprt.tag) {
+                            .Table => {
+                                const handle = registered_inst.tableaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Table, handle);
+                            },
+                            .Func => {
+                                const handle = registered_inst.funcaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Func, handle);
+                            },
+                            .Global => {
+                                const handle = registered_inst.globaladdrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Global, handle);
+                            },
+                            .Mem => {
+                                const handle = registered_inst.memaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Mem, handle);
+                            },
+                        }
+                    }
+                } else {
+                    for (inst.module.exports.list.items) |exprt, i| {
+                        switch (exprt.tag) {
+                            .Table => {
+                                const handle = inst.tableaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Table, handle);
+                            },
+                            .Func => {
+                                const handle = inst.funcaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Func, handle);
+                            },
+                            .Global => {
+                                const handle = inst.globaladdrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Global, handle);
+                            },
+                            .Mem => {
+                                const handle = inst.memaddrs.items[exprt.index];
+                                try store.@"export"(command.register.as, exprt.name, .Mem, handle);
+                            },
+                        }
                     }
                 }
             },
@@ -743,7 +766,7 @@ const Command = union(enum) {
     }, register: struct {
         comptime @"type": []const u8 = "register",
         line: usize,
-        name: []const u8,
+        name: ?[]const u8 = null,
         as: []const u8,
     }
 };
