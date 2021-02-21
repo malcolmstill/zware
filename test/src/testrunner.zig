@@ -72,19 +72,19 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
 
     // Initiliase spectest globals
-    const i32_handle = try store.addGlobal();
+    const i32_handle = try store.addGlobal(0);
     const i32_name = "global_i32";
     try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
 
-    const i64_handle = try store.addGlobal();
+    const i64_handle = try store.addGlobal(0);
     const i64_name = "global_i64";
     try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
 
-    const f32_handle = try store.addGlobal();
+    const f32_handle = try store.addGlobal(0);
     const f32_name = "global_f32";
     try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
 
-    const f64_handle = try store.addGlobal();
+    const f64_handle = try store.addGlobal(0);
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
 
@@ -119,145 +119,176 @@ pub fn main() anyerror!void {
             .assert_return => {
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
-                const field = action.field;
-                std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
+                switch (action) {
+                    .invoke => {
+                        const field = action.invoke.field;
+                        std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
-                var instance = inst;
-                if (command.assert_return.action.module) |name| {
-                    if (registered_names.get(name)) |instptr| {
-                        instance = instptr;
-                    }
-                }
-
-                if (expected.len > 1) {
-                    std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
-                    continue;
-                }
-
-                // Allocate input parameters and output results
-                var in = try arena.allocator.alloc(u64, action.args.len);
-                var out = try arena.allocator.alloc(u64, expected.len);
-
-                // Initialise input parameters
-                for (action.args) |value, i| {
-                    const arg = try fmt.parseInt(u64, value.value, 10);
-                    in[i] = arg;
-                }
-
-                // Invoke the function
-                instance.invokeDynamic(field, in, out, .{}) catch |err| {
-                    std.debug.warn("(result) invoke = {s}\n", .{field});
-                    std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                    return err;
-                };
-
-                // Test the result
-                for (expected) |result, i| {
-                    const value_type = try valueTypeFromString(result.@"type");
-                    if (mem.startsWith(u8, result.value, "nan:")) {
-                        if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
-                            continue;
+                        var instance = inst;
+                        if (command.assert_return.action.invoke.module) |name| {
+                            if (registered_names.get(name)) |instptr| {
+                                instance = instptr;
+                            }
                         }
-                        if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+
+                        if (expected.len > 1) {
+                            std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
                             continue;
                         }
 
-                        std.debug.warn("(result) invoke = {s}\n", .{field});
-                        std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                        std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
-                        return error.TestsuiteTestFailureTrapResult;
-                    }
+                        // Allocate input parameters and output results
+                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
+                        var out = try arena.allocator.alloc(u64, expected.len);
 
-                    // Otherwise
-                    errdefer {
-                        std.debug.warn("(result) invoke = {s}\n", .{field});
-                        std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                        std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, result.value, out[i], out[i] });
-                    }
-                    const result_value = try fmt.parseInt(u64, result.value, 10);
-                    if (result_value != out[i]) {
-                        return error.TestsuiteTestFailureTrapResult;
-                    }
+                        // Initialise input parameters
+                        for (action.invoke.args) |value, i| {
+                            const arg = try fmt.parseInt(u64, value.value, 10);
+                            in[i] = arg;
+                        }
+
+                        // Invoke the function
+                        instance.invokeDynamic(field, in, out, .{}) catch |err| {
+                            std.debug.warn("(result) invoke = {s}\n", .{field});
+                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                            return err;
+                        };
+
+                        // Test the result
+                        for (expected) |result, i| {
+                            const value_type = try valueTypeFromString(result.@"type");
+                            if (mem.startsWith(u8, result.value, "nan:")) {
+                                if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                    continue;
+                                }
+                                if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                    continue;
+                                }
+
+                                std.debug.warn("(result) invoke = {s}\n", .{field});
+                                std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                                return error.TestsuiteTestFailureTrapResult;
+                            }
+
+                            // Otherwise
+                            errdefer {
+                                std.debug.warn("(result) invoke = {s}\n", .{field});
+                                std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, result.value, out[i], out[i] });
+                            }
+                            const result_value = try fmt.parseInt(u64, result.value, 10);
+                            if (result_value != out[i]) {
+                                return error.TestsuiteTestFailureTrapResult;
+                            }
+                        }
+                    },
+                    .get => {
+                        const field = action.get.field;
+                        std.debug.warn("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
+                        std.debug.warn("(result) get \"{s}\"\n", .{field});
+                        for (inst.module.exports.list.items) |exprt, i| {
+                            if (mem.eql(u8, exprt.name, field)) {
+                                const global = try inst.global(i);
+
+                                for (expected) |result, j| {
+                                    if (j > 0) return error.ExpectedOneResult;
+                                    const result_value = try fmt.parseInt(u64, result.value, 10);
+                                    if (global != result_value) {
+                                        return error.GlobalUnexpectedValue;
+                                    }
+                                }
+                            }
+                        }
+                    },
                 }
             },
             .assert_trap => {
                 const action = command.assert_trap.action;
                 const expected = command.assert_trap.expected;
-                const field = action.field;
                 const trap = command.assert_trap.text;
-                std.debug.warn("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
-                errdefer {
-                    std.debug.warn("(trap) invoke = {s}\n", .{field});
-                }
+                switch (action) {
+                    .invoke => {
+                        const field = action.invoke.field;
+                        std.debug.warn("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
-                // Allocate input parameters and output results
-                var in = try arena.allocator.alloc(u64, action.args.len);
-                var out = try arena.allocator.alloc(u64, expected.len);
+                        errdefer {
+                            std.debug.warn("(trap) invoke = {s}\n", .{field});
+                        }
 
-                // Initialise input parameters
-                for (action.args) |value, i| {
-                    const arg = try fmt.parseInt(u64, value.value, 10);
-                    in[i] = arg;
-                }
+                        // Allocate input parameters and output results
+                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
+                        var out = try arena.allocator.alloc(u64, expected.len);
 
-                // Test the result
-                if (mem.eql(u8, trap, "integer divide by zero")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.DivisionByZero => continue,
-                        else => return error.TestsuiteExpectedDivideByZero,
-                    }
-                }
+                        // Initialise input parameters
+                        for (action.invoke.args) |value, i| {
+                            const arg = try fmt.parseInt(u64, value.value, 10);
+                            in[i] = arg;
+                        }
 
-                if (mem.eql(u8, trap, "integer overflow")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.Overflow => continue,
-                        else => return error.TestsuiteExpectedOverflow,
-                    }
-                }
+                        // Test the result
+                        if (mem.eql(u8, trap, "integer divide by zero")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.DivisionByZero => continue,
+                                else => return error.TestsuiteExpectedDivideByZero,
+                            }
+                        }
 
-                if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.InvalidConversion => continue,
-                        else => return error.TestsuiteExpectedInvalidConversion,
-                    }
-                }
+                        if (mem.eql(u8, trap, "integer overflow")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.Overflow => continue,
+                                else => return error.TestsuiteExpectedOverflow,
+                            }
+                        }
 
-                if (mem.eql(u8, trap, "out of bounds memory access")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.OutOfBoundsMemoryAccess => continue,
-                        else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
-                    }
-                }
+                        if (mem.eql(u8, trap, "invalid conversion to integer")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.InvalidConversion => continue,
+                                else => return error.TestsuiteExpectedInvalidConversion,
+                            }
+                        }
 
-                if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.IndirectCallTypeMismatch => continue,
-                        else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
-                    }
-                }
+                        if (mem.eql(u8, trap, "out of bounds memory access")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.OutOfBoundsMemoryAccess => continue,
+                                else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                            }
+                        }
 
-                if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                    if (inst.invokeDynamic(field, in, out, .{})) |x| {
-                        return error.TestsuiteExpectedTrap;
-                    } else |err| switch (err) {
-                        error.UndefinedElement => continue,
-                        error.OutOfBoundsMemoryAccess => continue,
-                        else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
-                            return error.TestsuiteExpectedUndefinedElement;
-                        },
-                    }
+                        if (mem.eql(u8, trap, "indirect call type mismatch")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.IndirectCallTypeMismatch => continue,
+                                else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                            }
+                        }
+
+                        if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
+                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.UndefinedElement => continue,
+                                error.OutOfBoundsMemoryAccess => continue,
+                                else => {
+                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    return error.TestsuiteExpectedUndefinedElement;
+                                },
+                            }
+                        }
+                    },
+                    .get => {
+                        std.debug.warn("(trap) get\n", .{});
+                        return error.TrapGetNotImplemented;
+                    },
                 }
 
                 return error.ExpectedTrapDidntOccur;
@@ -445,30 +476,38 @@ pub fn main() anyerror!void {
             .action => {
                 const action = command.action.action;
                 const expected = command.action.expected;
-                const field = action.field;
-                std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
+                switch (action) {
+                    .invoke => {
+                        const field = action.invoke.field;
+                        std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
 
-                if (expected.len > 1) {
-                    std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
-                    continue;
+                        if (expected.len > 1) {
+                            std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
+                            continue;
+                        }
+
+                        // Allocate input parameters and output results
+                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
+                        var out = try arena.allocator.alloc(u64, expected.len);
+
+                        // Initialise input parameters
+                        for (action.invoke.args) |value, i| {
+                            const arg = try fmt.parseInt(u64, value.value, 10);
+                            in[i] = arg;
+                        }
+
+                        // Invoke the function
+                        inst.invokeDynamic(field, in, out, .{}) catch |err| {
+                            std.debug.warn("(result) invoke = {s}\n", .{field});
+                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
+                            return err;
+                        };
+                    },
+                    .get => {
+                        std.debug.warn("(action) get\n", .{});
+                        return error.ActionGetNotImplemented;
+                    },
                 }
-
-                // Allocate input parameters and output results
-                var in = try arena.allocator.alloc(u64, action.args.len);
-                var out = try arena.allocator.alloc(u64, expected.len);
-
-                // Initialise input parameters
-                for (action.args) |value, i| {
-                    const arg = try fmt.parseInt(u64, value.value, 10);
-                    in[i] = arg;
-                }
-
-                // Invoke the function
-                inst.invokeDynamic(field, in, out, .{}) catch |err| {
-                    std.debug.warn("(result) invoke = {s}\n", .{field});
-                    std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
-                    return err;
-                };
             },
             .assert_unlinkable => {
                 wasm_filename = command.assert_unlinkable.filename;
@@ -586,12 +625,21 @@ const Command = union(enum) {
     }
 };
 
-const Action = struct {
-    comptime @"type": []const u8 = "invoke",
-    field: []const u8,
-    module: ?[]const u8 = null,
-    args: []const Value,
+const Action = union(enum) {
+    invoke: struct {
+        comptime @"type": []const u8 = "invoke",
+        field: []const u8,
+        module: ?[]const u8 = null,
+        args: []const Value,
+    },
+    get: struct {
+        comptime @"type": []const u8 = "get",
+        field: []const u8,
+        module: ?[]const u8 = null,
+    },
 };
+
+// const Action = ;
 
 const Value = struct {
     @"type": []const u8,

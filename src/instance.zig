@@ -59,6 +59,12 @@ pub const Instance = struct {
         return try self.store.table(handle);
     }
 
+    pub fn global(self: *Instance, index: usize) !u64 {
+        if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
+        const handle = self.globaladdrs.items[index];
+        return try self.store.global(handle);
+    }
+
     // invoke:
     //  1. Lookup our function by name with getExport
     //  2. Get the function type signature
@@ -231,6 +237,9 @@ pub const Instance = struct {
 
         try interp.invoke(expr);
 
-        return try interp.popOperand(Result);
+        switch (Result) {
+            u64 => return try interp.popAnyOperand(),
+            else => return try interp.popOperand(Result),
+        }
     }
 };
