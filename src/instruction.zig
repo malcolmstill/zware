@@ -25,6 +25,8 @@ pub const InstructionIterator = struct {
         switch (instr) {
             .I32Const => _ = try readILEB128Mem(i32, &self.code),
             .I64Const => _ = try readILEB128Mem(i64, &self.code),
+            .GlobalGet,
+            .GlobalSet,
             .LocalGet,
             .LocalSet,
             .LocalTee,

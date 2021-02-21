@@ -170,13 +170,13 @@ pub fn main() anyerror!void {
                                 return error.TestsuiteTestFailureTrapResult;
                             }
 
+                            const result_value = try fmt.parseInt(u64, result.value, 10);
                             // Otherwise
                             errdefer {
                                 std.debug.warn("(result) invoke = {s}\n", .{field});
                                 std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, result.value, out[i], out[i] });
+                                std.debug.warn("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
                             }
-                            const result_value = try fmt.parseInt(u64, result.value, 10);
                             if (result_value != out[i]) {
                                 return error.TestsuiteTestFailureTrapResult;
                             }
@@ -193,7 +193,7 @@ pub fn main() anyerror!void {
                                 for (expected) |result, j| {
                                     if (j > 0) return error.ExpectedOneResult;
                                     const result_value = try fmt.parseInt(u64, result.value, 10);
-                                    if (global != result_value) {
+                                    if (global.* != result_value) {
                                         return error.GlobalUnexpectedValue;
                                     }
                                 }
@@ -464,6 +464,18 @@ pub fn main() anyerror!void {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.MultipleStartSections => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.ExpectedError;
+                        },
+                    }
+                }
+
+                if (mem.eql(u8, trap, "malformed mutability")) {
+                    if (module.decode()) |x| {
+                        return error.ExpectedError;
+                    } else |err| switch (err) {
+                        error.InvalidValue => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;

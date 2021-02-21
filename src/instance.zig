@@ -59,7 +59,7 @@ pub const Instance = struct {
         return try self.store.table(handle);
     }
 
-    pub fn global(self: *Instance, index: usize) !u64 {
+    pub fn global(self: *Instance, index: usize) !*u64 {
         if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
         const handle = self.globaladdrs.items[index];
         return try self.store.global(handle);

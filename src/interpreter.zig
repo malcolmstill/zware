@@ -360,8 +360,8 @@ pub const Interpreter = struct {
                 // 2. Look up address of global using index. (we don't need to do this because the
                 //    the global_index is also the address of the actual global in our store)
                 // 3. Get value
-                const value = self.inst.store.globals.items[global_index];
-                try self.pushAnyOperand(value);
+                const value = try self.inst.global(global_index);
+                try self.pushAnyOperand(value.*);
             },
             .GlobalSet => {
                 // 1. Get index of global from immediate
@@ -370,7 +370,8 @@ pub const Interpreter = struct {
                 //    the global_index is also the address of the actual global in our store)
                 // 3. Get value
                 const value = try self.popAnyOperand();
-                self.inst.store.globals.items[global_index] = value;
+                const global = try self.inst.global(global_index);
+                global.* = value;
             },
             .I32Load => {
                 const frame = try self.peekNthFrame(0);
@@ -1089,7 +1090,6 @@ pub const Interpreter = struct {
             .F32Div => {
                 const c2 = try self.popOperand(f32);
                 const c1 = try self.popOperand(f32);
-                std.debug.warn("c1 / c2 = {} / {} = {}\n", .{ c1, c2, c1 / c2 });
                 try self.pushOperand(f32, c1 / c2);
             },
             .F32Min => {
