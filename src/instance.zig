@@ -1,6 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
-const Code = common.Code;
+const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
@@ -33,10 +33,15 @@ pub const Instance = struct {
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
 
-    pub fn func(self: *Instance, index: usize) !*Code {
+    pub fn func(self: *Instance, index: usize) !*Function {
         if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
         const handle = self.funcaddrs.items[index];
         return try self.store.function(handle);
+    }
+
+    pub fn funcHandle(self: *Instance, index: usize) !usize {
+        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        return self.funcaddrs.items[index];
     }
 
     // Lookup a memory in store via the modules index
