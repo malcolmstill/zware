@@ -2,11 +2,12 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
-const Code = @import("common.zig").Code;
+const Function = @import("function.zig").Function;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
+const ValueType = @import("common.zig").ValueType;
 
 // - Stores provide the runtime memory shared between modules
 // - For different applications you may want to use a store that
@@ -24,7 +25,7 @@ pub const ImportExport = struct {
 
 pub const ArrayListStore = struct {
     alloc: *mem.Allocator,
-    functions: ArrayList(Code),
+    functions: ArrayList(Function),
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(u64),
@@ -33,7 +34,7 @@ pub const ArrayListStore = struct {
     pub fn init(alloc: *mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
             .alloc = alloc,
-            .functions = ArrayList(Code).init(alloc),
+            .functions = ArrayList(Function).init(alloc),
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(u64).init(alloc),
@@ -69,13 +70,20 @@ pub const ArrayListStore = struct {
         });
     }
 
-    pub fn function(self: *ArrayListStore, handle: usize) !*Code {
+    pub fn function(self: *ArrayListStore, handle: usize) !*Function {
         if (handle >= self.functions.items.len) return error.BadFunctionIndex;
         return &self.functions.items[handle];
     }
 
-    pub fn addFunction(self: *ArrayListStore) !usize {
+    pub fn addFunction(self: *ArrayListStore, code: []const u8, locals: []const u8, locals_count: usize, params: []ValueType, results: []ValueType) !usize {
         const fun_ptr = try self.functions.addOne();
+        fun_ptr.* = Function{
+            .code = code,
+            .locals = locals,
+            .locals_count = locals_count,
+            .params = params,
+            .results = results,
+        };
         return self.functions.items.len - 1;
     }
 
