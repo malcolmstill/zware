@@ -87,9 +87,10 @@ pub const ArrayListStore = struct {
         return &self.memories.items[handle];
     }
 
-    pub fn addMemory(self: *ArrayListStore) !usize {
+    pub fn addMemory(self: *ArrayListStore, min: u32, max: ?u32) !usize {
         const mem_ptr = try self.memories.addOne();
-        mem_ptr.* = Memory.init(self.alloc);
+        mem_ptr.* = Memory.init(self.alloc, min, max);
+        _ = try mem_ptr.grow(min);
         return self.memories.items.len - 1;
     }
 
