@@ -3,7 +3,7 @@ const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
-const ModuleInstance = @import("module.zig").ModuleInstance;
+const Instance = @import("instance.zig").Instance;
 const Instruction = @import("instruction.zig").Instruction;
 const instruction = @import("instruction.zig");
 
@@ -30,9 +30,9 @@ pub const Interpreter = struct {
     label_stack: []Label = undefined,
 
     continuation: []const u8 = undefined,
-    mod_inst: *ModuleInstance = undefined,
+    inst: *Instance = undefined,
 
-    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, mod_inst: *ModuleInstance) Interpreter {
+    pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, inst: *Instance) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
             .op_stack = op_stack_mem[0..0],
@@ -40,7 +40,7 @@ pub const Interpreter = struct {
             .frame_stack = frame_stack_mem[0..0],
             .label_stack_mem = label_stack_mem,
             .label_stack = label_stack_mem[0..0],
-            .mod_inst = mod_inst,
+            .inst = inst,
         };
     }
 
@@ -87,7 +87,7 @@ pub const Interpreter = struct {
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
+                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
@@ -107,7 +107,7 @@ pub const Interpreter = struct {
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
+                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
@@ -131,7 +131,7 @@ pub const Interpreter = struct {
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.mod_inst.module.types.list.items[@intCast(usize, block_type)];
+                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params_count;
                     block_returns = func_type.results_count;
                 }
@@ -251,7 +251,7 @@ pub const Interpreter = struct {
 
                 // TODO: we need to verify that we're okay to lookup this function.
                 //       we can (and probably should) do that at validation time.
-                const module = self.mod_inst.module;
+                const module = self.inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
                 const function = module.functions.list.items[function_index];
                 const func_type = module.types.list.items[function.typeidx];
@@ -282,52 +282,43 @@ pub const Interpreter = struct {
                 self.continuation = func.code;
             },
             .CallIndirect => {
-                const module = self.mod_inst.module;
+                var module = self.inst.module;
 
                 const op_func_type_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const table_index = try instruction.readULEB128Mem(u32, &self.continuation);
 
                 // Read lookup index from stack
                 const lookup_index = try self.popOperand(u32);
-                // TODO: debug build check that `table` exists
-
-                // Lookup function index from table
-                const table = &self.mod_inst.store.tables.items[table_index];
-                const function_index = try table.lookup(lookup_index);
-
-                const function = module.functions.list.items[function_index];
+                const table = try self.inst.table(table_index);
+                const function_handle = try table.lookup(lookup_index);
+                const function = try self.inst.store.function(function_handle);
 
                 // Check that signatures match
-                const func_type = module.types.list.items[function.typeidx];
+                // const func_type = module.types.list.items[function.typeidx];
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                if (!module.signaturesEqual(func_type, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
-
-                // Our signatures match, let's go
-                const func = module.codes.list.items[function_index];
-                const params = module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                if (!module.signaturesEqual2(function.params, function.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                 // Make space for locals (again, params already on stack)
                 var j: usize = 0;
-                while (j < func.locals_count) : (j += 1) {
+                while (j < function.locals_count) : (j += 1) {
                     try self.pushOperand(u64, 0);
                 }
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
+                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
                     .label_stack_len = self.label_stack.len,
-                    .return_arity = results.len,
-                }, func.locals_count + params.len);
+                    .return_arity = function.results.len,
+                }, function.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = results.len,
-                    .op_stack_len = self.op_stack.len - params.len - func.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_stack.len - function.params.len - function.locals_count,
                     .continuation = self.continuation,
                 });
 
-                self.continuation = func.code;
+                self.continuation = function.code;
             },
             .Drop => _ = try self.popAnyOperand(),
             .Select => {
@@ -369,7 +360,7 @@ pub const Interpreter = struct {
                 // 2. Look up address of global using index. (we don't need to do this because the
                 //    the global_index is also the address of the actual global in our store)
                 // 3. Get value
-                const value = self.mod_inst.store.globals.items[global_index];
+                const value = self.inst.store.globals.items[global_index];
                 try self.pushAnyOperand(value);
             },
             .GlobalSet => {
@@ -379,12 +370,12 @@ pub const Interpreter = struct {
                 //    the global_index is also the address of the actual global in our store)
                 // 3. Get value
                 const value = try self.popAnyOperand();
-                self.mod_inst.store.globals.items[global_index] = value;
+                self.inst.store.globals.items[global_index] = value;
             },
             .I32Load => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -397,7 +388,7 @@ pub const Interpreter = struct {
             .I64Load => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -410,7 +401,7 @@ pub const Interpreter = struct {
             .F32Load => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -423,7 +414,7 @@ pub const Interpreter = struct {
             .F64Load => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -435,7 +426,7 @@ pub const Interpreter = struct {
             },
             .I32Load8S => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -447,7 +438,7 @@ pub const Interpreter = struct {
             },
             .I32Load8U => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -459,7 +450,7 @@ pub const Interpreter = struct {
             },
             .I32Load16S => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -471,7 +462,7 @@ pub const Interpreter = struct {
             },
             .I32Load16U => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -483,7 +474,7 @@ pub const Interpreter = struct {
             },
             .I64Load8S => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -495,7 +486,7 @@ pub const Interpreter = struct {
             },
             .I64Load8U => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -507,7 +498,7 @@ pub const Interpreter = struct {
             },
             .I64Load16S => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -519,7 +510,7 @@ pub const Interpreter = struct {
             },
             .I64Load16U => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -531,7 +522,7 @@ pub const Interpreter = struct {
             },
             .I64Load32S => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -543,7 +534,7 @@ pub const Interpreter = struct {
             },
             .I64Load32U => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -556,7 +547,7 @@ pub const Interpreter = struct {
             .I32Store => {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -568,7 +559,7 @@ pub const Interpreter = struct {
             },
             .I64Store => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -580,7 +571,7 @@ pub const Interpreter = struct {
             },
             .F32Store => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -592,7 +583,7 @@ pub const Interpreter = struct {
             },
             .F64Store => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -604,7 +595,7 @@ pub const Interpreter = struct {
             },
             .I32Store8 => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -616,7 +607,7 @@ pub const Interpreter = struct {
             },
             .I32Store16 => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -628,7 +619,7 @@ pub const Interpreter = struct {
             },
             .I64Store8 => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -640,7 +631,7 @@ pub const Interpreter = struct {
             },
             .I64Store16 => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -652,7 +643,7 @@ pub const Interpreter = struct {
             },
             .I64Store32 => {
                 const frame = try self.peekNthFrame(0);
-                var memory = self.mod_inst.store.memories.items[0];
+                const memory = try self.inst.memory(0);
 
                 const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
                 const offset = try instruction.readULEB128Mem(u32, &self.continuation);
@@ -666,16 +657,15 @@ pub const Interpreter = struct {
                 const frame = try self.peekNthFrame(0);
 
                 const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                var memory = self.mod_inst.store.memories.items[memory_index];
+                const memory = try self.inst.memory(memory_index);
 
                 try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
             },
             .MemoryGrow => {
                 const frame = try self.peekNthFrame(0);
-                // TODO: we need to check this / handle multiple memories
 
                 const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                var memory = &self.mod_inst.store.memories.items[memory_index];
+                const memory = try self.inst.memory(memory_index);
 
                 const num_pages = try self.popOperand(u32);
                 if (memory.grow(num_pages)) |old_size| {
@@ -1774,9 +1764,9 @@ test "operand push / pop test" {
     var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var mod_inst: ModuleInstance = undefined;
+    var inst: Instance = undefined;
 
-    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &mod_inst);
+    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &inst);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
@@ -1812,8 +1802,8 @@ test "simple interpret tests" {
     var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
 
-    var mod_inst: ModuleInstance = undefined;
-    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &mod_inst);
+    var inst: Instance = undefined;
+    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &inst);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);

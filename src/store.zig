@@ -2,212 +2,117 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
+const Function = @import("function.zig").Function;
+const Memory = @import("memory.zig").Memory;
+const Table = @import("table.zig").Table;
+const Import = @import("common.zig").Import;
+const Tag = @import("common.zig").Tag;
+const ValueType = @import("common.zig").ValueType;
 
-pub const MAX_PAGES = 64 * 1024;
-pub const PAGE_SIZE = 64 * 1024;
+// - Stores provide the runtime memory shared between modules
+// - For different applications you may want to use a store that
+//   that allocates individual items differently. For example,
+//   if you know ahead of time that you will only load a fixed
+//   number of modules during the lifetime of the program, then
+//   you might be quite happy with a store that uses ArrayLists
+//   with an arena allocator, i.e. you are going to deallocate
+//   everything at the same time.
 
-pub const Store = struct {
+pub const ImportExport = struct {
+    import: Import,
+    handle: usize,
+};
+
+pub const ArrayListStore = struct {
     alloc: *mem.Allocator,
+    functions: ArrayList(Function),
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(u64),
+    imports: ArrayList(ImportExport),
 
-    pub fn init(alloc: *mem.Allocator) Store {
-        var store = Store{
+    pub fn init(alloc: *mem.Allocator) ArrayListStore {
+        var store = ArrayListStore{
             .alloc = alloc,
+            .functions = ArrayList(Function).init(alloc),
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(u64).init(alloc),
+            .imports = ArrayList(ImportExport).init(alloc),
         };
 
         return store;
     }
 
-    pub fn addMemories(self: *Store, count: usize) !void {
-        try self.memories.appendNTimes(Memory.init(self.alloc), count);
+    // import
+    //
+    // import attempts to find in the store, the given module.name pair
+    // for the given type
+    pub fn import(self: *ArrayListStore, module: []const u8, name: []const u8, tag: Tag) !usize {
+        for (self.imports.items) |importexport| {
+            if (tag != importexport.import.desc_tag) continue;
+            if (!mem.eql(u8, module, importexport.import.module)) continue;
+            if (!mem.eql(u8, name, importexport.import.name)) continue;
+
+            return importexport.handle;
+        }
+        return error.ImportNotFound;
     }
 
-    pub fn addMemory(self: *Store) !*Memory {
+    pub fn @"export"(self: *ArrayListStore, module: []const u8, name: []const u8, tag: Tag, handle: usize) !void {
+        try self.imports.append(ImportExport{
+            .import = Import{
+                .module = module,
+                .name = name,
+                .desc_tag = tag,
+            },
+            .handle = handle,
+        });
+    }
+
+    pub fn function(self: *ArrayListStore, handle: usize) !*Function {
+        if (handle >= self.functions.items.len) return error.BadFunctionIndex;
+        return &self.functions.items[handle];
+    }
+
+    pub fn addFunction(self: *ArrayListStore, code: []const u8, locals: []const u8, locals_count: usize, params: []ValueType, results: []ValueType) !usize {
+        const fun_ptr = try self.functions.addOne();
+        fun_ptr.* = Function{
+            .code = code,
+            .locals = locals,
+            .locals_count = locals_count,
+            .params = params,
+            .results = results,
+        };
+        return self.functions.items.len - 1;
+    }
+
+    pub fn memory(self: *ArrayListStore, handle: usize) !*Memory {
+        if (handle >= self.memories.items.len) return error.BadMemoryIndex;
+        return &self.memories.items[handle];
+    }
+
+    pub fn addMemory(self: *ArrayListStore) !usize {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc);
-        return mem_ptr;
+        return self.memories.items.len - 1;
     }
 
-    pub fn addTable(self: *Store, entries: usize) !*Table {
+    pub fn table(self: *ArrayListStore, handle: usize) !*Table {
+        if (handle >= self.tables.items.len) return error.BadTableIndex;
+        return &self.tables.items[handle];
+    }
+
+    pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !usize {
         const tbl_ptr = try self.tables.addOne();
-        tbl_ptr.* = try Table.init(self.alloc, entries);
-        return tbl_ptr;
+        tbl_ptr.* = try Table.init(self.alloc, entries, max);
+        return self.tables.items.len - 1;
     }
 
-    pub fn allocGlobals(self: *Store, count: usize) !void {
-        _ = try self.globals.resize(count);
+    pub fn addGlobal(self: *ArrayListStore) !usize {
+        _ = try self.globals.resize(1);
         mem.set(u64, self.globals.items[0..], 0);
-    }
-};
 
-pub const Memory = struct {
-    alloc: *mem.Allocator,
-    max_size: ?u32 = null,
-    data: ArrayList([PAGE_SIZE]u8),
-
-    pub fn init(alloc: *mem.Allocator) Memory {
-        return Memory{
-            .alloc = alloc,
-            .data = ArrayList([PAGE_SIZE]u8).init(alloc),
-        };
-    }
-
-    // TODO: is usize correct here?
-    pub fn size(self: *Memory) usize {
-        return self.data.items.len;
-    }
-
-    pub fn grow(self: *Memory, num_pages: u32) !usize {
-        if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
-        }
-        const old_size = self.data.items.len;
-        _ = try self.data.resize(self.data.items.len + num_pages);
-        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * (old_size + num_pages)], 0);
-        return old_size;
-    }
-
-    pub fn copy(self: *Memory, address: u32, data: []const u8) !void {
-        if (address + data.len > PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
-
-        mem.copy(u8, self.asSlice()[address .. address + data.len], data);
-    }
-
-    pub fn read(self: *Memory, comptime T: type, offset: u32, address: u32) !T {
-        const effective_address = @as(u33, offset) + @as(u33, address);
-        if (effective_address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
-
-        const page = effective_address / PAGE_SIZE;
-        const page_offset = effective_address % PAGE_SIZE;
-
-        switch (T) {
-            u8,
-            u16,
-            u32,
-            u64,
-            i8,
-            i16,
-            i32,
-            i64,
-            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little),
-            f32 => {
-                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
-                return @bitCast(f32, x);
-            },
-            f64 => {
-                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
-                return @bitCast(f64, x);
-            },
-            else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
-        }
-    }
-
-    pub fn write(self: *Memory, comptime T: type, offset: u32, address: u32, value: T) !void {
-        const effective_address = @as(u33, offset) + @as(u33, address);
-        if (effective_address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
-
-        const page = effective_address / PAGE_SIZE;
-        const page_offset = effective_address % PAGE_SIZE;
-
-        switch (T) {
-            u8,
-            u16,
-            u32,
-            u64,
-            i8,
-            i16,
-            i32,
-            i64,
-            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][page_offset]), value, .Little),
-            f32 => {
-                const x = @bitCast(u32, value);
-                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[page][page_offset]), x, .Little);
-            },
-            f64 => {
-                const x = @bitCast(u64, value);
-                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[page][page_offset]), x, .Little);
-            },
-            else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
-        }
-    }
-
-    pub fn asSlice(self: *Memory) []u8 {
-        var slice: []u8 = undefined;
-        slice.ptr = if (self.data.items.len > 0) @ptrCast([*]u8, &self.data.items[0][0]) else undefined;
-        slice.len = PAGE_SIZE * self.data.items.len;
-        return slice;
-    }
-};
-
-const testing = std.testing;
-test "Memory test" {
-    const ArenaAllocator = std.heap.ArenaAllocator;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer _ = arena.deinit();
-
-    var store = Store.init(&arena.allocator);
-    var mem0 = try store.addMemory();
-    testing.expectEqual(@as(usize, 0), mem0.asSlice().len);
-
-    _ = try mem0.grow(1);
-    testing.expectEqual(@as(usize, 1 * PAGE_SIZE), mem0.asSlice().len);
-    testing.expectEqual(@as(usize, 1), mem0.size());
-
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0));
-    testing.expectEqual(@as(u32, 0x00000000), try mem0.read(u32, 0, 0));
-    try mem0.write(u8, 0, 0, 15);
-    testing.expectEqual(@as(u8, 15), try mem0.read(u8, 0, 0));
-    testing.expectEqual(@as(u32, 0x0000000F), try mem0.read(u32, 0, 0));
-
-    try mem0.write(u8, 0, 0xFFFF, 42);
-    testing.expectEqual(@as(u8, 42), try mem0.read(u8, 0, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u16, 0, 0xFFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0xFFFF + 1));
-
-    _ = try mem0.grow(1);
-    testing.expectEqual(@as(usize, 2 * PAGE_SIZE), mem0.asSlice().len);
-    testing.expectEqual(@as(usize, 2), mem0.size());
-
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0xFFFF + 1));
-    // Write across page boundary
-    try mem0.write(u16, 0, 0xFFFF, 0xDEAD);
-    testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0, 0xFFFF));
-    testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0, 0xFFFF + 1));
-    testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0, 0xFFFF));
-    const slice = mem0.asSlice();
-    testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
-    testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
-
-    testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0x1FFFF));
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0x1FFFF + 1));
-
-    mem0.max_size = 2;
-    testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));
-
-    mem0.max_size = null;
-    _ = try mem0.grow(1);
-    testing.expectEqual(@as(usize, 3), mem0.size());
-
-    testing.expectEqual(@as(usize, 3 * PAGE_SIZE), mem0.asSlice().len);
-}
-
-pub const Table = struct {
-    // Let's assume indices are u32
-    data: []?u32,
-
-    pub fn init(alloc: *mem.Allocator, max: usize) !Table {
-        return Table{
-            .data = try alloc.alloc(?u32, max),
-        };
-    }
-
-    pub fn lookup(self: *Table, index: usize) !u32 {
-        if (self.data.len < index + 1) return error.UndefinedElement;
-        return self.data[index] orelse return error.UndefinedElement;
+        return self.globals.items.len - 1;
     }
 };

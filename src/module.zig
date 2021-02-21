@@ -5,6 +5,7 @@ const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
+const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
 const Instruction = instruction.Instruction;
 const FuncType = common.FuncType;
@@ -21,9 +22,10 @@ const Code = common.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
-const Store = @import("store.zig").Store;
+const Store = @import("store.zig").ArrayListStore;
 
 pub const Module = struct {
+    decoded: bool = false,
     alloc: *mem.Allocator,
     module: []const u8 = undefined,
     buf: std.io.FixedBufferStream([]const u8) = undefined,
@@ -86,6 +88,7 @@ pub const Module = struct {
         }
         try self.verify();
         if (self.codes.list.items.len != self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+        self.decoded = true;
     }
 
     pub fn verify(self: *Module) !void {
@@ -248,9 +251,6 @@ pub const Module = struct {
         const count = try leb.readULEB128(u32, rd);
         self.tables.count = count;
 
-        const tag = try rd.readByte();
-        if (tag != 0x70) return error.ExpectedTable;
-
         var i: usize = 0;
         while (i < count) : (i += 1) {
             try self.decodeTable(null);
@@ -261,6 +261,9 @@ pub const Module = struct {
 
     fn decodeTable(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
+
+        const tag = try rd.readByte();
+        if (tag != 0x70) return error.ExpectedTable;
         const limit_type = try rd.readEnum(LimitType, .Little);
         switch (limit_type) {
             .Min => {
@@ -590,55 +593,110 @@ pub const Module = struct {
         return true;
     }
 
-    pub fn instantiate(self: *Module) !ModuleInstance {
-        var store = Store.init(self.alloc);
-        var inst = ModuleInstance{
-            .module = self,
+    pub fn signaturesEqual2(self: *Module, params: []ValueType, results: []ValueType, b: FuncType) bool {
+        if (params.len != b.params_count) return false;
+        if (results.len != b.results_count) return false;
+
+        const params_b = self.value_types.list.items[b.params_offset .. b.params_offset + b.params_count];
+
+        for (params) |p_a, i| {
+            if (p_a != params_b[i]) return false;
+        }
+
+        const results_b = self.value_types.list.items[b.results_offset .. b.results_offset + b.results_count];
+
+        for (results) |r_a, i| {
+            if (r_a != results_b[i]) return false;
+        }
+
+        return true;
+    }
+
+    pub fn instantiate(self: *Module, allocator: *mem.Allocator, store: *Store) !Instance {
+        if (self.decoded == false) return error.ModuleNotDecoded;
+
+        var inst = Instance{
+            .module = self.*,
             .store = store,
+            .funcaddrs = ArrayList(usize).init(allocator),
+            .memaddrs = ArrayList(usize).init(allocator),
+            .tableaddrs = ArrayList(usize).init(allocator),
+            .globaladdrs = ArrayList(usize).init(allocator),
         };
 
+        // 1. Initialise imports
+        for (self.imports.list.items) |import, i| {
+            const import_handle = try store.import(import.module, import.name, import.desc_tag);
+            switch (import.desc_tag) {
+                .Func => try inst.funcaddrs.append(import_handle),
+                .Mem => try inst.memaddrs.append(import_handle),
+                .Table => try inst.tableaddrs.append(import_handle),
+                .Global => try inst.globaladdrs.append(import_handle),
+            }
+        }
+
+        // Initialise functions
+        for (self.functions.list.items) |function_def, i| {
+            // TODO: we only add non-imported functions?
+            // TODO: clean this up
+            const code = self.codes.list.items[i];
+            const func = self.functions.list.items[i];
+            const func_type = self.types.list.items[func.typeidx];
+            const params = self.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+            const results = self.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+            const handle = try inst.store.addFunction(code.code, code.locals, code.locals_count, params, results);
+            try inst.funcaddrs.append(handle);
+        }
+
         // 2. Initialise globals
-        const globals_count = self.globals.list.items.len;
-        try inst.store.allocGlobals(globals_count);
+        for (self.globals.list.items) |global_def, i| {
+            const handle = try inst.store.addGlobal();
+            try inst.globaladdrs.append(handle);
+        }
 
         // 3. Initialise memories
-        const memories_count = self.memories.list.items.len;
-        try inst.store.addMemories(memories_count);
-
         for (self.memories.list.items) |memory_definition, i| {
-            _ = try inst.store.memories.items[i].grow(memory_definition.min);
-            inst.store.memories.items[i].max_size = memory_definition.max;
+            const handle = try inst.store.addMemory();
+            const memory = try inst.store.memory(handle);
+
+            try inst.memaddrs.append(handle);
+            _ = try memory.grow(memory_definition.min);
+            memory.max_size = memory_definition.max;
         }
 
         // 4. Initialise memories with data
         for (self.datas.list.items) |data, i| {
-            if (data.index >= inst.store.memories.items.len) return error.BadMemoryIndex;
-            const memory = &inst.store.memories.items[data.index];
-            const data_len = data.data.len;
+            const handle = inst.memaddrs.items[data.index];
+            const memory = try inst.store.memory(handle);
 
-            // TODO: execute rather than take middle byte
-            const offset = data.offset[1];
+            const offset = try inst.invokeExpression(data.offset, u32, .{});
             try memory.copy(offset, data.data);
         }
 
         // 5. Initialise tables
-        const tables_count = self.tables.list.items.len;
-        for (self.tables.list.items) |table_def, i| {
-            const table = try inst.store.addTable(table_def.max);
+        for (self.tables.list.items) |table_size, i| {
+            const handle = try inst.store.addTable(table_size.min, table_size.max);
+            try inst.tableaddrs.append(handle);
         }
 
         // 6. Initialise from elements
-        for (self.elements.list.items) |element_def, i| {
-            const table_index = element_def.index;
-            const table = inst.store.tables.items[table_index];
+        for (self.elements.list.items) |segment, i| {
+            const table = try inst.table(segment.index);
+            const offset = try inst.invokeExpression(segment.offset, u32, .{});
 
-            // TODO: execute rather than take middle byte
-            const offset = element_def.offset[1];
-            var data = element_def.data;
+            // This check let's us pass all the tests in elem.wast. I don't quite understand
+            // this. This implies that if the segment length is 0 and the offset is
+            // 0, we don't error on a zero-length table. However, still with a segment length of 0
+            // but with an offset of 1, we're now "out of bounds". I feel like 0 offset should
+            // also fail.
+            // https://github.com/WebAssembly/design/issues/897#issuecomment-267765364
+            if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
+
+            var data = segment.data;
             var j: usize = 0;
-            while (j < element_def.count) : (j += 1) {
+            while (j < segment.count) : (j += 1) {
                 const value = try instruction.readULEB128Mem(u32, &data);
-                table.data[offset + j] = value;
+                try table.set(@intCast(u32, offset + j), try inst.funcHandle(value));
             }
         }
 
@@ -646,188 +704,16 @@ pub const Module = struct {
     }
 
     pub fn print(module: *Module) void {
-        std.debug.warn("    Types: {}\n", .{module.types.items.len});
-        std.debug.warn("Functions: {}\n", .{module.functions.items.len});
-        std.debug.warn("   Tables: {}\n", .{module.tables.items.len});
-        std.debug.warn(" Memories: {}\n", .{module.memories.items.len});
-        std.debug.warn("  Globals: {}\n", .{module.globals.items.len});
-        std.debug.warn("  Exports: {}\n", .{module.exports.items.len});
-        std.debug.warn("  Imports: {}\n", .{module.imports.items.len});
-        std.debug.warn("    Codes: {}\n", .{module.codes.items.len});
-        std.debug.warn("    Datas: {}\n", .{module.datas.items.len});
-        std.debug.warn("  Customs: {}\n", .{module.customs.items.len});
-    }
-};
-
-// Default stack sizes
-const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 64 * 1024,
-    control_stack_size: comptime_int = 64 * 1024,
-    label_stack_size: comptime_int = 64 * 1024,
-};
-
-pub const ModuleInstance = struct {
-    module: *Module,
-    store: Store,
-
-    // invoke:
-    //  1. Lookup our function by name with getExport
-    //  2. Get the function type signature
-    //  3. Check that the incoming arguments in `args` match the function signature
-    //  4. Check that the return type in `Result` matches the function signature
-    //  5. Get the code for our function
-    //  6. Set up the stacks (operand stack, control stack)
-    //  7. Push a control frame and our parameters
-    //  8. Execute our function
-    //  9. Pop our result and return it
-    pub fn invoke(self: *ModuleInstance, name: []const u8, args: anytype, comptime Result: type, comptime options: InterpreterOptions) !Result {
-        // 1.
-        const index = try self.module.getExport(.Func, name);
-        if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
-
-        const function = self.module.functions.list.items[index];
-
-        // 2.
-        const func_type = self.module.types.list.items[function.typeidx];
-        const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-        const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
-
-        if (params.len != args.len) return error.ParamCountMismatch;
-
-        // 3. check the types of params
-        inline for (args) |arg, i| {
-            if (params[i] != common.toValueType(@TypeOf(arg))) return error.ParamTypeMismatch;
-        }
-
-        // 4. check the result type
-        if (results.len > 1) return error.OnlySingleReturnValueSupported;
-        if (Result != void and results.len == 1) {
-            if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
-        }
-
-        // 5. get the function bytecode
-        const func = self.module.codes.list.items[index];
-
-        // 6. set up our stacks
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
-
-        // I think everything below here should probably live in interpret
-
-        const locals_start = interp.op_stack.len;
-
-        // 7b. push params
-        inline for (args) |arg, i| {
-            try interp.pushOperand(@TypeOf(arg), arg);
-        }
-
-        // 7c. push (i.e. make space for) locals
-        var i: usize = 0;
-        while (i < func.locals_count) : (i += 1) {
-            try interp.pushOperand(u64, 0);
-        }
-
-        // 7a. push control frame
-        try interp.pushFrame(Interpreter.Frame{
-            .op_stack_len = locals_start,
-            .label_stack_len = interp.label_stack.len,
-            .return_arity = results.len,
-        }, func.locals_count + params.len);
-
-        // 7a.2. push label for our implicit function block. We know we don't have
-        // any code to execute after calling invoke, but we will need to
-        // pop a Label
-        try interp.pushLabel(Interpreter.Label{
-            .return_arity = results.len,
-            .op_stack_len = locals_start,
-            .continuation = func.code[0..0],
-        });
-
-        // 8. Execute our function
-        try interp.invoke(func.code);
-
-        // 9.
-        if (Result == void) return;
-        return try interp.popOperand(Result);
-    }
-
-    // invokeDynamic
-    //
-    // Similar to invoke, but without some type checking
-    pub fn invokeDynamic(self: *ModuleInstance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
-        // 1.
-        const index = try self.module.getExport(.Func, name);
-        if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
-
-        const function = self.module.functions.list.items[index];
-
-        // 2.
-        const func_type = self.module.types.list.items[function.typeidx];
-        const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-        const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
-
-        if (params.len != in.len) return error.ParamCountMismatch;
-
-        // 3. check the types of params
-        // for (args) |arg, i| {
-        // if (params[i] != common.toValueType(@TypeOf(arg))) return error.ParamTypeMismatch;
-        // }
-
-        // 4. check the result type
-        if (results.len > 1) return error.OnlySingleReturnValueSupported;
-        // if (Result != void and results.len == 1) {
-        // if (results[0] != common.toValueType(Result)) return error.ResultTypeMismatch;
-        // }
-
-        // 5. get the function bytecode
-        const func = self.module.codes.list.items[index];
-
-        // 6. set up our stacks
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
-
-        // I think everything below here should probably live in interpret
-
-        const locals_start = interp.op_stack.len;
-
-        // 7b. push params
-        for (in) |arg, i| {
-            try interp.pushOperand(u64, arg);
-        }
-
-        // 7c. push (i.e. make space for) locals
-        var i: usize = 0;
-        while (i < func.locals_count) : (i += 1) {
-            try interp.pushOperand(u64, 0);
-        }
-
-        // 7a. push control frame
-        try interp.pushFrame(Interpreter.Frame{
-            .op_stack_len = locals_start,
-            .label_stack_len = interp.label_stack.len,
-            .return_arity = results.len,
-        }, func.locals_count + params.len);
-
-        // 7a.2. push label for our implicit function block. We know we don't have
-        // any code to execute after calling invoke, but we will need to
-        // pop a Label
-        try interp.pushLabel(Interpreter.Label{
-            .return_arity = results.len,
-            .op_stack_len = locals_start,
-            .continuation = func.code[0..0],
-        });
-
-        // 8. Execute our function
-        try interp.invoke(func.code);
-
-        // 9.
-        for (out) |o, out_index| {
-            out[out_index] = try interp.popOperand(u64);
-        }
+        std.debug.warn("    Types: {}\n", .{module.types.list.items.len});
+        std.debug.warn("Functions: {}\n", .{module.functions.list.items.len});
+        std.debug.warn("   Tables: {}\n", .{module.tables.list.items.len});
+        std.debug.warn(" Memories: {}\n", .{module.memories.list.items.len});
+        std.debug.warn("  Globals: {}\n", .{module.globals.list.items.len});
+        std.debug.warn("  Exports: {}\n", .{module.exports.list.items.len});
+        std.debug.warn("  Imports: {}\n", .{module.imports.list.items.len});
+        std.debug.warn("    Codes: {}\n", .{module.codes.list.items.len});
+        std.debug.warn("    Datas: {}\n", .{module.datas.list.items.len});
+        std.debug.warn("  Customs: {}\n", .{module.customs.list.items.len});
     }
 };
 
@@ -879,11 +765,13 @@ test "module loading (simple add function)" {
 
     const bytes = @embedFile("../test/test.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    const result = try modinst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
+    const result = try inst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
 }
 
@@ -894,17 +782,19 @@ test "module loading (fib)" {
 
     const bytes = @embedFile("../test/fib.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try modinst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try modinst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try modinst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try modinst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try modinst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try inst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 3), try inst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 5), try inst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 8), try inst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
+    testing.expectEqual(@as(i32, 13), try inst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
 }
 
 test "module loading (fact)" {
@@ -914,13 +804,15 @@ test "module loading (fact)" {
 
     const bytes = @embedFile("../test/fact.wasm");
 
+    var store: Store = Store.init(&arena.allocator);
+
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var modinst = try module.instantiate();
+    var inst = try module.instantiate(&arena.allocator, &store);
 
-    testing.expectEqual(@as(i32, 1), try modinst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try modinst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try modinst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try modinst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try modinst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
+    testing.expectEqual(@as(i32, 1), try inst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
+    testing.expectEqual(@as(i32, 2), try inst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
+    testing.expectEqual(@as(i32, 6), try inst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
+    testing.expectEqual(@as(i32, 24), try inst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
+    testing.expectEqual(@as(i32, 479001600), try inst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
 }
