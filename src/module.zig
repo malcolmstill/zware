@@ -647,21 +647,21 @@ pub const Module = struct {
         }
 
         // 6. Initialise from elements
-        for (self.elements.list.items) |element_def, i| {
-            if (element_def.count == 0) continue; // Zero-length is allowed and shouldn't error
-            const table = try inst.table(element_def.index);
+        for (self.elements.list.items) |segment, i| {
+            const table = try inst.table(segment.index);
+            const offset = try inst.invokeExpression(segment.offset, u32, .{});
 
-            const offset = try inst.invokeExpression(element_def.offset, u32, .{});
+            // This check let's us pass all the tests in elem.wast. I don't quite understand
+            // this. This implies that if the segment length is 0 and the offset is
+            // 0, we don't error on a zero-length table. However, still with a segment length of 0
+            // but with an offset of 1, we're now "out of bounds". I feel like 0 offset should
+            // also fail.
+            // https://github.com/WebAssembly/design/issues/897#issuecomment-267765364
+            if (try math.add(u32, offset, segment.count) > table.size()) return error.OutOfBoundsMemoryAccess;
 
-            // Test that offset is in bounds
-            _ = table.lookup(offset) catch |err| switch (err) {
-                error.UndefinedElement => {},
-                else => return err,
-            };
-
-            var data = element_def.data;
+            var data = segment.data;
             var j: usize = 0;
-            while (j < element_def.count) : (j += 1) {
+            while (j < segment.count) : (j += 1) {
                 const value = try instruction.readULEB128Mem(u32, &data);
                 try table.set(@intCast(u32, offset + j), value);
             }
