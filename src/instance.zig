@@ -33,7 +33,7 @@ pub const Instance = struct {
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
 
-    pub fn func(self: *Instance, index: usize) !*Function {
+    pub fn func(self: *Instance, index: usize) !Function {
         if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
         const handle = self.funcaddrs.items[index];
         return try self.store.function(handle);
@@ -156,62 +156,64 @@ pub const Instance = struct {
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function = self.module.functions.list.items[index];
+        // const function = self.module.functions.list.items[index];
+        const function = try self.func(index);
 
-        // 2.
-        const func_type = self.module.types.list.items[function.typeidx];
-        const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-        const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+        switch (function) {
+            .function => |f| {
+                // const func_type = self.module.types.list.items[function.typeidx];
+                // const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
+                // const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
+                if (f.params.len != in.len) return error.ParamCountMismatch;
+                if (f.results.len > 1) return error.OnlySingleReturnValueSupported;
 
-        if (params.len != in.len) return error.ParamCountMismatch;
-        if (results.len > 1) return error.OnlySingleReturnValueSupported;
+                // 6. set up our stacks
+                var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+                var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+                var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
 
-        // 5. get the function bytecode
-        const code = self.module.codes.list.items[index];
+                const locals_start = interp.op_stack.len;
 
-        // 6. set up our stacks
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+                // 7b. push params
+                for (in) |arg, i| {
+                    try interp.pushOperand(u64, arg);
+                }
 
-        // I think everything below here should probably live in interpret
+                // 7c. push (i.e. make space for) locals
+                var i: usize = 0;
+                while (i < f.locals_count) : (i += 1) {
+                    try interp.pushOperand(u64, 0);
+                }
 
-        const locals_start = interp.op_stack.len;
+                // 7a. push control frame
+                try interp.pushFrame(Interpreter.Frame{
+                    .op_stack_len = locals_start,
+                    .label_stack_len = interp.label_stack.len,
+                    .return_arity = f.results.len,
+                }, f.locals_count + f.params.len);
 
-        // 7b. push params
-        for (in) |arg, i| {
-            try interp.pushOperand(u64, arg);
-        }
+                // 7a.2. push label for our implicit function block. We know we don't have
+                // any code to execute after calling invoke, but we will need to
+                // pop a Label
+                try interp.pushLabel(Interpreter.Label{
+                    .return_arity = f.results.len,
+                    .op_stack_len = locals_start,
+                    .continuation = f.code[0..0],
+                });
 
-        // 7c. push (i.e. make space for) locals
-        var i: usize = 0;
-        while (i < code.locals_count) : (i += 1) {
-            try interp.pushOperand(u64, 0);
-        }
+                // 8. Execute our function
+                try interp.invoke(f.code);
 
-        // 7a. push control frame
-        try interp.pushFrame(Interpreter.Frame{
-            .op_stack_len = locals_start,
-            .label_stack_len = interp.label_stack.len,
-            .return_arity = results.len,
-        }, code.locals_count + params.len);
-
-        // 7a.2. push label for our implicit function block. We know we don't have
-        // any code to execute after calling invoke, but we will need to
-        // pop a Label
-        try interp.pushLabel(Interpreter.Label{
-            .return_arity = results.len,
-            .op_stack_len = locals_start,
-            .continuation = code.code[0..0],
-        });
-
-        // 8. Execute our function
-        try interp.invoke(code.code);
-
-        // 9.
-        for (out) |o, out_index| {
-            out[out_index] = try interp.popOperand(u64);
+                // 9.
+                for (out) |o, out_index| {
+                    out[out_index] = try interp.popOperand(u64);
+                }
+            },
+            .host_function => |host_func| {
+                // std.debug.warn()
+                return error.InvokeDynamicHostFunctionNotImplemented;
+            },
         }
     }
 
