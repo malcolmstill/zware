@@ -11,6 +11,8 @@ const Module = foxwren.Module;
 const Instance = foxwren.Instance;
 const Store = foxwren.Store;
 const Memory = foxwren.Memory;
+const Function = foxwren.Function;
+const Interpreter = foxwren.Interpreter;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.hash_map.StringHashMap;
@@ -29,6 +31,38 @@ const ArrayList = std.ArrayList;
 // for information on the format of the .wast files.
 
 var gpa = GeneralPurposeAllocator(.{}){};
+
+fn print_i32(interp: *Interpreter) !void {
+    const value = try interp.popOperand(i32);
+    std.debug.warn("print_i32: {}\n", .{value});
+}
+
+fn print_i64(interp: *Interpreter) !void {
+    const value = try interp.popOperand(i64);
+    std.debug.warn("print_i64: {}\n", .{value});
+}
+
+fn print_f32(interp: *Interpreter) !void {
+    const value = try interp.popOperand(f32);
+    std.debug.warn("print_f32: {}\n", .{value});
+}
+
+fn print_f64(interp: *Interpreter) !void {
+    const value = try interp.popOperand(f64);
+    std.debug.warn("print_f64: {}\n", .{value});
+}
+
+fn print_i32_f32(interp: *Interpreter) !void {
+    const value_i32 = try interp.popOperand(i32);
+    const value_f32 = try interp.popOperand(f32);
+    std.debug.warn("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
+}
+
+fn print_f64_f64(interp: *Interpreter) !void {
+    const value_f64_1 = try interp.popOperand(f64);
+    const value_f64_2 = try interp.popOperand(f64);
+    std.debug.warn("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
+}
 
 pub fn main() anyerror!void {
     defer _ = gpa.deinit();
@@ -87,6 +121,83 @@ pub fn main() anyerror!void {
     const f64_handle = try store.addGlobal(0);
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
+
+    var print_i32_params = [_]ValueType{.I32} ** 1;
+    var print_i32_results = [_]ValueType{.I32} ** 0;
+    const print_i32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i32,
+            .params = print_i32_params[0..],
+            .results = print_i32_results[0..],
+        },
+    });
+    const print_i32_name = "print_i32";
+    try store.@"export"(spectest_module[0..], print_i32_name[0..], .Func, print_i32_handle);
+
+    // print_i64
+    var print_i64_params = [_]ValueType{.I64} ** 1;
+    var print_i64_results = [_]ValueType{.I64} ** 0;
+    const print_i64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i64,
+            .params = print_i64_params[0..],
+            .results = print_i64_results[0..],
+        },
+    });
+    const print_i64_name = "print_i64";
+    try store.@"export"(spectest_module[0..], print_i64_name[0..], .Func, print_i64_handle);
+
+    // export print_f32
+    var print_f32_params = [_]ValueType{.F32} ** 1;
+    var print_f32_results = [_]ValueType{.F32} ** 0;
+    const print_f32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f32,
+            .params = print_f32_params[0..],
+            .results = print_f32_results[0..],
+        },
+    });
+    const print_f32_name = "print_f32";
+    try store.@"export"(spectest_module[0..], print_f32_name[0..], .Func, print_f32_handle);
+
+    // export print_f64
+    var print_f64_params = [_]ValueType{.F64} ** 1;
+    var print_f64_results = [_]ValueType{.F64} ** 0;
+    const print_f64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f64,
+            .params = print_f64_params[0..],
+            .results = print_f64_results[0..],
+        },
+    });
+    const print_f64_name = "print_f64";
+    try store.@"export"(spectest_module[0..], print_f64_name[0..], .Func, print_f64_handle);
+
+    // export print_i32_f32
+    var print_i32_f32_params: [2]ValueType = [_]ValueType{ .I32, .F32 };
+    var print_i32_f32_results = [_]ValueType{.F32} ** 0;
+    const print_i32_f32_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_i32_f32,
+            .params = print_i32_f32_params[0..],
+            .results = print_i32_f32_results[0..],
+        },
+    });
+    const print_i32_f32_name = "print_i32_f32";
+    try store.@"export"(spectest_module[0..], print_i32_f32_name[0..], .Func, print_i32_f32_handle);
+
+    // export print_i64_f64
+    var print_f64_f64_params: [2]ValueType = [_]ValueType{ .F64, .F64 };
+    var print_f64_f64_results: [0]ValueType = [_]ValueType{};
+    const print_f64_f64_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print_f64_f64,
+            .params = print_f64_f64_params[0..],
+            .results = print_f64_f64_results[0..],
+        },
+    });
+    const print_f64_f64_name = "print_f64_f64";
+    try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
 
     var inst: Instance = undefined;
 
