@@ -122,6 +122,9 @@ bin/testrunner int_literals.json || exit 1
 wast2json test/testsuite/labels.wast || exit 1
 bin/testrunner labels.json || exit 1
 
+wast2json test/testsuite/left-to-right.wast || exit 1
+bin/testrunner left-to-right.json || exit 1
+
 wast2json test/testsuite/local_get.wast || exit 1
 bin/testrunner local_get.json || exit 1
 
