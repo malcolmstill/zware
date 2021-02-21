@@ -56,6 +56,7 @@ pub const ArrayListStore = struct {
 
             return importexport.handle;
         }
+        std.log.err("Import not found: {s}.{s}\n", .{ module, name });
         return error.ImportNotFound;
     }
 
@@ -70,20 +71,14 @@ pub const ArrayListStore = struct {
         });
     }
 
-    pub fn function(self: *ArrayListStore, handle: usize) !*Function {
+    pub fn function(self: *ArrayListStore, handle: usize) !Function {
         if (handle >= self.functions.items.len) return error.BadFunctionIndex;
-        return &self.functions.items[handle];
+        return self.functions.items[handle];
     }
 
-    pub fn addFunction(self: *ArrayListStore, code: []const u8, locals: []const u8, locals_count: usize, params: []ValueType, results: []ValueType) !usize {
+    pub fn addFunction(self: *ArrayListStore, func: Function) !usize {
         const fun_ptr = try self.functions.addOne();
-        fun_ptr.* = Function{
-            .code = code,
-            .locals = locals,
-            .locals_count = locals_count,
-            .params = params,
-            .results = results,
-        };
+        fun_ptr.* = func;
         return self.functions.items.len - 1;
     }
 
