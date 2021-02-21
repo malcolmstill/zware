@@ -110,7 +110,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn global(self: *ArrayListStore, handle: usize) !*u64 {
-        if (handle >= self.functions.items.len) return error.BadFunctionIndex;
+        if (handle >= self.globals.items.len) return error.BadGlobalIndex;
         return &self.globals.items[handle];
     }
 
