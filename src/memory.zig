@@ -8,13 +8,16 @@ pub const PAGE_SIZE = 64 * 1024;
 
 pub const Memory = struct {
     alloc: *mem.Allocator,
-    max_size: ?u32 = null,
+    min: u32,
+    max: ?u32 = null,
     data: ArrayList([PAGE_SIZE]u8),
 
-    pub fn init(alloc: *mem.Allocator) Memory {
+    pub fn init(alloc: *mem.Allocator, min: u32, max: ?u32) Memory {
         return Memory{
             .alloc = alloc,
             .data = ArrayList([PAGE_SIZE]u8).init(alloc),
+            .min = min,
+            .max = max,
         };
     }
 
@@ -24,8 +27,8 @@ pub const Memory = struct {
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
-        if (self.max_size) |max_size| {
-            if (self.data.items.len + num_pages > math.min(max_size, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
+        if (self.max) |max| {
+            if (self.data.items.len + num_pages > math.min(max, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
         }
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
@@ -149,10 +152,10 @@ test "Memory test" {
     testing.expectEqual(@as(u8, 0x00), try mem0.read(u8, 0, 0x1FFFF));
     testing.expectError(error.OutOfBoundsMemoryAccess, mem0.read(u8, 0, 0x1FFFF + 1));
 
-    mem0.max_size = 2;
+    mem0.max = 2;
     testing.expectError(error.OutOfBoundsMemoryAccess, mem0.grow(1));
 
-    mem0.max_size = null;
+    mem0.max = null;
     _ = try mem0.grow(1);
     testing.expectEqual(@as(usize, 3), mem0.size());
 
