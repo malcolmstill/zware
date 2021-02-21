@@ -53,6 +53,9 @@ bin/testrunner elem.json || exit 1
 wast2json test/testsuite/endianness.wast || exit 1
 bin/testrunner endianness.json || exit 1
 
+wast2json test/testsuite/exports.wast || exit 1
+bin/testrunner exports.json || exit 1
+
 wast2json test/testsuite/f32_bitwise.wast || exit 1
 bin/testrunner f32_bitwise.json || exit 1
 
