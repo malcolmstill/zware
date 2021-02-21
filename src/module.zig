@@ -657,7 +657,7 @@ pub const Module = struct {
             // but with an offset of 1, we're now "out of bounds". I feel like 0 offset should
             // also fail.
             // https://github.com/WebAssembly/design/issues/897#issuecomment-267765364
-            if (try math.add(u32, offset, segment.count) > table.size()) return error.OutOfBoundsMemoryAccess;
+            if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
 
             var data = segment.data;
             var j: usize = 0;
