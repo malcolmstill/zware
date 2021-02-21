@@ -1,5 +1,6 @@
 const std = @import("std");
 const common = @import("common.zig");
+const Code = common.Code;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
@@ -27,9 +28,16 @@ const InterpreterOptions = struct {
 pub const Instance = struct {
     module: Module,
     store: *Store,
+    funcaddrs: ArrayList(usize),
     memaddrs: ArrayList(usize),
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
+
+    pub fn func(self: *Instance, index: usize) !*Code {
+        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        const handle = self.funcaddrs.items[index];
+        return try self.store.function(handle);
+    }
 
     // Lookup a memory in store via the modules index
     pub fn memory(self: *Instance, index: usize) !*Memory {
@@ -82,7 +90,7 @@ pub const Instance = struct {
         }
 
         // 5. get the function bytecode
-        const func = self.module.codes.list.items[index];
+        const code = self.module.codes.list.items[index];
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
@@ -101,7 +109,7 @@ pub const Instance = struct {
 
         // 7c. push (i.e. make space for) locals
         var i: usize = 0;
-        while (i < func.locals_count) : (i += 1) {
+        while (i < code.locals_count) : (i += 1) {
             try interp.pushOperand(u64, 0);
         }
 
@@ -110,7 +118,7 @@ pub const Instance = struct {
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,
-        }, func.locals_count + params.len);
+        }, code.locals_count + params.len);
 
         // 7a.2. push label for our implicit function block. We know we don't have
         // any code to execute after calling invoke, but we will need to
@@ -118,11 +126,11 @@ pub const Instance = struct {
         try interp.pushLabel(Interpreter.Label{
             .return_arity = results.len,
             .op_stack_len = locals_start,
-            .continuation = func.code[0..0],
+            .continuation = code.code[0..0],
         });
 
         // 8. Execute our function
-        try interp.invoke(func.code);
+        try interp.invoke(code.code);
 
         // 9.
         if (Result == void) return;
@@ -148,7 +156,7 @@ pub const Instance = struct {
         if (results.len > 1) return error.OnlySingleReturnValueSupported;
 
         // 5. get the function bytecode
-        const func = self.module.codes.list.items[index];
+        const code = self.module.codes.list.items[index];
 
         // 6. set up our stacks
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
@@ -167,7 +175,7 @@ pub const Instance = struct {
 
         // 7c. push (i.e. make space for) locals
         var i: usize = 0;
-        while (i < func.locals_count) : (i += 1) {
+        while (i < code.locals_count) : (i += 1) {
             try interp.pushOperand(u64, 0);
         }
 
@@ -176,7 +184,7 @@ pub const Instance = struct {
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,
-        }, func.locals_count + params.len);
+        }, code.locals_count + params.len);
 
         // 7a.2. push label for our implicit function block. We know we don't have
         // any code to execute after calling invoke, but we will need to
@@ -184,11 +192,11 @@ pub const Instance = struct {
         try interp.pushLabel(Interpreter.Label{
             .return_arity = results.len,
             .op_stack_len = locals_start,
-            .continuation = func.code[0..0],
+            .continuation = code.code[0..0],
         });
 
         // 8. Execute our function
-        try interp.invoke(func.code);
+        try interp.invoke(code.code);
 
         // 9.
         for (out) |o, out_index| {
