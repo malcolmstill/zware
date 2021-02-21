@@ -80,6 +80,9 @@ bin/testrunner fac.json || exit 1
 wast2json test/testsuite/float_exprs.wast || exit 1
 bin/testrunner float_exprs.json || exit 1
 
+wast2json test/testsuite/float_literals.wast || exit 1
+bin/testrunner float_literals.json || exit 1
+
 wast2json test/testsuite/float_memory.wast || exit 1
 bin/testrunner float_memory.json || exit 1
 
