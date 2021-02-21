@@ -8,11 +8,13 @@ const json = std.json;
 const foxwren = @import("foxwren");
 const ValueType = foxwren.ValueType;
 const Module = foxwren.Module;
-const ModuleInstance = foxwren.ModuleInstance;
+const Instance = foxwren.Instance;
 const Store = foxwren.Store;
 const Memory = foxwren.Memory;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
+const StringHashMap = std.hash_map.StringHashMap;
+const ArrayList = std.ArrayList;
 
 // testrunner
 //
@@ -49,31 +51,83 @@ pub fn main() anyerror!void {
     var wasm_filename: []const u8 = undefined;
     var program: []const u8 = undefined;
     var module: Module = undefined;
-    var store: Store = undefined;
-    var mem0: *Memory = undefined;
-    var modinst: ?ModuleInstance = null;
+    var module_name: ?[]const u8 = null;
+
+    // Initialise a store
+    var store: Store = Store.init(&arena.allocator);
+    const spectest_module = "spectest";
+
+    // Init spectest memory
+    const mem_handle = try store.addMemory();
+    const memory = try store.memory(mem_handle);
+    memory.max_size = 2;
+    _ = try memory.grow(1);
+    const spectest_memory_name = "memory";
+    try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
+
+    // Init spec test table
+    const table_handle = try store.addTable(10, 20);
+    const spectest_table_name = "table";
+
+    try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
+
+    // Initiliase spectest globals
+    const i32_handle = try store.addGlobal();
+    const i32_name = "global_i32";
+    try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
+
+    const i64_handle = try store.addGlobal();
+    const i64_name = "global_i64";
+    try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
+
+    const f32_handle = try store.addGlobal();
+    const f32_name = "global_f32";
+    try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
+
+    const f64_handle = try store.addGlobal();
+    const f64_name = "global_f64";
+    try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
+
+    var inst: Instance = undefined;
+
+    // var modules = StringHashMap(Module)./init(&arena.allocator);
+    const NamedInstance = struct {
+        name: ?[]const u8,
+        inst: Instance,
+    };
+
+    var registered_names = StringHashMap(Instance).init(&arena.allocator);
+    // var module_instances = ArrayList(NamedInstance).init(&arena.allocator);
 
     for (r.commands) |command| {
         switch (command) {
             .module => {
                 wasm_filename = command.module.filename;
 
-                std.debug.warn("(module): {s}, {s}:{}\n", .{ wasm_filename, r.source_filename, command.module.line });
+                std.debug.warn("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
-                modinst = null;
+                inst = try module.instantiate(&arena.allocator, &store);
+
+                if (command.module.name) |name| {
+                    try registered_names.put(name, inst);
+                }
             },
             .assert_return => {
-                if (modinst == null) modinst = try module.instantiate();
-                var inst = modinst orelse return error.NoInstance;
-
                 const action = command.assert_return.action;
                 const expected = command.assert_return.expected;
                 const field = action.field;
                 std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
+
+                var instance = inst;
+                if (command.assert_return.action.module) |name| {
+                    if (registered_names.get(name)) |instptr| {
+                        instance = instptr;
+                    }
+                }
 
                 if (expected.len > 1) {
                     std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
@@ -91,7 +145,7 @@ pub fn main() anyerror!void {
                 }
 
                 // Invoke the function
-                inst.invokeDynamic(field, in, out, .{}) catch |err| {
+                instance.invokeDynamic(field, in, out, .{}) catch |err| {
                     std.debug.warn("(result) invoke = {s}\n", .{field});
                     std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                     return err;
@@ -127,9 +181,6 @@ pub fn main() anyerror!void {
                 }
             },
             .assert_trap => {
-                if (modinst == null) modinst = try module.instantiate();
-                var inst = modinst orelse return error.NoInstance;
-
                 const action = command.assert_trap.action;
                 const expected = command.assert_trap.expected;
                 const field = action.field;
@@ -196,12 +247,16 @@ pub fn main() anyerror!void {
                     }
                 }
 
-                if (mem.eql(u8, trap, "undefined element")) {
+                if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
                     if (inst.invokeDynamic(field, in, out, .{})) |x| {
                         return error.TestsuiteExpectedTrap;
                     } else |err| switch (err) {
                         error.UndefinedElement => continue,
-                        else => return error.TestsuiteExpectedUndefinedElement,
+                        error.OutOfBoundsMemoryAccess => continue,
+                        else => {
+                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            return error.TestsuiteExpectedUndefinedElement;
+                        },
                     }
                 }
 
@@ -209,8 +264,8 @@ pub fn main() anyerror!void {
             },
             .assert_malformed => {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
-                std.debug.warn("(malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
                 wasm_filename = command.assert_malformed.filename;
+                std.debug.warn("(malformed): {s}:{} ({s})\n", .{ r.source_filename, command.assert_malformed.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
                 module = Module.init(&arena.allocator, program);
 
@@ -388,9 +443,6 @@ pub fn main() anyerror!void {
                 return error.ExpectedError;
             },
             .action => {
-                if (modinst == null) modinst = try module.instantiate();
-                var inst = modinst orelse return error.NoInstance;
-
                 const action = command.action.action;
                 const expected = command.action.expected;
                 const field = action.field;
@@ -419,21 +471,47 @@ pub fn main() anyerror!void {
                 };
             },
             .assert_unlinkable => {
-                std.debug.warn("(unlinkable): {s}:{}\n", .{ r.source_filename, command.assert_unlinkable.line });
                 wasm_filename = command.assert_unlinkable.filename;
+                std.debug.warn("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
-
+                // std.debug.warn("filename = {s}\n", .{wasm_filename});
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                if (module.instantiate()) |x| {
+                if (module.instantiate(&arena.allocator, &store)) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
+                    error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     else => {
                         std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
                     },
+                }
+            },
+            .register => {
+                std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
+                const registered_inst = registered_names.get(command.register.name) orelse return error.NotRegistered;
+
+                for (registered_inst.module.exports.list.items) |exprt, i| {
+                    switch (exprt.tag) {
+                        .Table => {
+                            const handle = registered_inst.tableaddrs.items[exprt.index];
+                            try store.@"export"(command.register.as, exprt.name, .Table, handle);
+                        },
+                        .Func => {
+                            const handle = registered_inst.funcaddrs.items[exprt.index];
+                            try store.@"export"(command.register.as, exprt.name, .Func, handle);
+                        },
+                        .Global => {
+                            const handle = registered_inst.globaladdrs.items[exprt.index];
+                            try store.@"export"(command.register.as, exprt.name, .Global, handle);
+                        },
+                        .Mem => {
+                            const handle = registered_inst.memaddrs.items[exprt.index];
+                            try store.@"export"(command.register.as, exprt.name, .Mem, handle);
+                        },
+                    }
                 }
             },
             else => continue,
