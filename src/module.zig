@@ -701,8 +701,6 @@ pub const Module = struct {
                 if (!common.limitMatch(imported_mem.min, imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
             } else {
                 const handle = try inst.store.addMemory(mem_size.min, mem_size.max);
-                // const memory = try inst.store.memory(handle);
-
                 try inst.memaddrs.append(handle);
             }
         }
