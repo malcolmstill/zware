@@ -95,8 +95,8 @@ bin/testrunner forward.json || exit 1
 # wast2json test/testsuite/func.wast || exit 1
 # bin/testrunner func.json || exit 1
 
-# wast2json test/testsuite/global.wast || exit 1
-# bin/testrunner global.json || exit 1
+wast2json test/testsuite/global.wast || exit 1
+bin/testrunner global.json || exit 1
 
 wast2json test/testsuite/i32.wast || exit 1
 bin/testrunner i32.json || exit 1
