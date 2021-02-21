@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
+const Code = @import("common.zig").Code;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Import = @import("common.zig").Import;
@@ -23,6 +24,7 @@ pub const ImportExport = struct {
 
 pub const ArrayListStore = struct {
     alloc: *mem.Allocator,
+    functions: ArrayList(Code),
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(u64),
@@ -31,6 +33,7 @@ pub const ArrayListStore = struct {
     pub fn init(alloc: *mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
             .alloc = alloc,
+            .functions = ArrayList(Code).init(alloc),
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(u64).init(alloc),
@@ -64,6 +67,16 @@ pub const ArrayListStore = struct {
             },
             .handle = handle,
         });
+    }
+
+    pub fn function(self: *ArrayListStore, handle: usize) !*Code {
+        if (handle >= self.functions.items.len) return error.BadFunctionIndex;
+        return &self.functions.items[handle];
+    }
+
+    pub fn addFunction(self: *ArrayListStore) !usize {
+        const fun_ptr = try self.functions.addOne();
+        return self.functions.items.len - 1;
     }
 
     pub fn memory(self: *ArrayListStore, handle: usize) !*Memory {
