@@ -106,19 +106,19 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
 
     // Initiliase spectest globals
-    const i32_handle = try store.addGlobal(0);
+    const i32_handle = try store.addGlobal(666);
     const i32_name = "global_i32";
     try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
 
-    const i64_handle = try store.addGlobal(0);
+    const i64_handle = try store.addGlobal(666);
     const i64_name = "global_i64";
     try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
 
-    const f32_handle = try store.addGlobal(0);
+    const f32_handle = try store.addGlobal(666);
     const f32_name = "global_f32";
     try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
 
-    const f64_handle = try store.addGlobal(0);
+    const f64_handle = try store.addGlobal(666);
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
 
