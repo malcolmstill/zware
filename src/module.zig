@@ -271,7 +271,7 @@ pub const Module = struct {
 
                 try self.tables.list.append(Limit{
                     .min = min,
-                    .max = min,
+                    .max = null,
                     .import = import,
                 });
             },
@@ -715,8 +715,23 @@ pub const Module = struct {
 
         // 5. Initialise tables
         for (self.tables.list.items) |table_size, i| {
-            const handle = try inst.store.addTable(table_size.min, table_size.max);
-            try inst.tableaddrs.append(handle);
+            if (table_size.import != null) {
+                // TODO: this is a bit confusing, clean it up
+                const imported_table = try inst.table(i);
+                if (imported_table.data.len < table_size.min) return error.ImportedTableNotBigEnough;
+                if (table_size.max) |defined_max| {
+                    if (imported_table.max) |imported_max| {
+                        if (!(imported_max <= defined_max)) {
+                            return error.ImportedTableNotBigEnough;
+                        }
+                    } else {
+                        return error.ImportedTableNotBigEnough;
+                    }
+                }
+            } else {
+                const handle = try inst.store.addTable(table_size.min, table_size.max);
+                try inst.tableaddrs.append(handle);
+            }
         }
 
         // 6. Initialise from elements
