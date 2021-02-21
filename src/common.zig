@@ -8,7 +8,7 @@ pub const LimitType = enum(u8) {
 // Table / Memory
 pub const Limit = struct {
     min: u32,
-    max: u32,
+    max: ?u32,
     import: ?u32,
 };
 
