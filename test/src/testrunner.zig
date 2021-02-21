@@ -53,14 +53,14 @@ fn print_f64(interp: *Interpreter) !void {
 }
 
 fn print_i32_f32(interp: *Interpreter) !void {
-    const value_i32 = try interp.popOperand(i32);
     const value_f32 = try interp.popOperand(f32);
+    const value_i32 = try interp.popOperand(i32);
     std.debug.warn("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
 }
 
 fn print_f64_f64(interp: *Interpreter) !void {
-    const value_f64_1 = try interp.popOperand(f64);
     const value_f64_2 = try interp.popOperand(f64);
+    const value_f64_1 = try interp.popOperand(f64);
     std.debug.warn("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
 }
 
