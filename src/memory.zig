@@ -27,9 +27,8 @@ pub const Memory = struct {
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
-        if (self.max) |max| {
-            if (self.data.items.len + num_pages > math.min(max, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
-        }
+        if (self.data.items.len + num_pages > math.min(self.max orelse MAX_PAGES, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
+
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
         mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * (old_size + num_pages)], 0);
