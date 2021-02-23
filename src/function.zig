@@ -1,5 +1,6 @@
 const ValueType = @import("common.zig").ValueType;
 const Interpreter = @import("interpreter.zig").Interpreter;
+const Instance = @import("instance.zig").Instance;
 
 pub const Function = union(enum) {
     function: struct {
@@ -8,6 +9,7 @@ pub const Function = union(enum) {
         code: []const u8,
         params: []ValueType,
         results: []ValueType,
+        instance: *Instance,
     },
     host_function: struct {
         func: fn (*Interpreter) anyerror!void,
