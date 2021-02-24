@@ -718,6 +718,27 @@ pub fn main() anyerror!void {
                     },
                 }
             },
+            .assert_uninstantiable => {
+                wasm_filename = command.assert_uninstantiable.filename;
+                std.debug.warn("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+
+                module = Module.init(&arena.allocator, program);
+                try module.decode();
+
+                inst = try instances.addOne();
+                inst.* = Instance.init(&arena.allocator, &store, module);
+
+                if (inst.instantiate()) |x| {
+                    return error.ExpectedUninstantiable;
+                } else |err| switch (err) {
+                    error.TrapUnreachable => continue,
+                    else => {
+                        std.debug.warn("(uninstantiable) Unexpected error: {}\n", .{err});
+                        return error.UnexpectedError;
+                    },
+                }
+            },
             .register => {
                 std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
                 if (command.register.name) |name| {
