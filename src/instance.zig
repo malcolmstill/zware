@@ -130,7 +130,7 @@ pub const Instance = struct {
             }
         }
 
-        // 3. Initialise memories
+        // 3a. Initialise memories
         for (self.module.memories.list.items) |mem_size, i| {
             if (mem_size.import != null) {
                 const imported_mem = try self.getMemory(i);
@@ -141,16 +141,7 @@ pub const Instance = struct {
             }
         }
 
-        // 4. Initialise memories with data
-        for (self.module.datas.list.items) |data, i| {
-            const handle = self.memaddrs.items[data.index];
-            const memory = try self.store.memory(handle);
-
-            const offset = try self.invokeExpression(data.offset, u32, .{});
-            try memory.copy(offset, data.data);
-        }
-
-        // 5. Initialise tables
+        // 3b. Initialise tables
         for (self.module.tables.list.items) |table_size, i| {
             if (table_size.import != null) {
                 const imported_table = try self.getTable(i);
@@ -161,14 +152,32 @@ pub const Instance = struct {
             }
         }
 
-        // 6. Check elements elements
+        // 4a. Check all data
+        for (self.module.datas.list.items) |data, i| {
+            const handle = self.memaddrs.items[data.index];
+            const memory = try self.store.memory(handle);
+
+            const offset = try self.invokeExpression(data.offset, u32, .{});
+            try memory.check(offset, data.data);
+        }
+
+        // 4b. Check all elements
         for (self.module.elements.list.items) |segment, i| {
             const table = try self.getTable(segment.index);
             const offset = try self.invokeExpression(segment.offset, u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
 
-        // 7. If all our elements were good, initialise them
+        // 5a. Mutate all data
+        for (self.module.datas.list.items) |data, i| {
+            const handle = self.memaddrs.items[data.index];
+            const memory = try self.store.memory(handle);
+
+            const offset = try self.invokeExpression(data.offset, u32, .{});
+            try memory.copy(offset, data.data);
+        }
+
+        // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment, i| {
             const table = try self.getTable(segment.index);
             const offset = try self.invokeExpression(segment.offset, u32, .{});
