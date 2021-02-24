@@ -109,7 +109,6 @@ pub const Instance = struct {
                     },
                 });
 
-                std.debug.warn("added function {}\n", .{handle});
                 // Need to do this regardless of if import or internal
                 try self.funcaddrs.append(handle);
             }
@@ -120,7 +119,6 @@ pub const Instance = struct {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
-                std.debug.warn("global_def = {}, imported_global = {}\n", .{ global_def, imported_global.* });
             } else {
                 const value = if (global_def.code) |code| try self.invokeExpression(code, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
@@ -308,16 +306,10 @@ pub const Instance = struct {
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        // const function = self.module.functions.list.items[index];
-        // const handle = try self.funcHandle(index);
         const function = try self.getFunc(index);
-        std.debug.warn("function = {}\n", .{function});
 
         switch (function) {
             .function => |f| {
-                // const func_type = self.module.types.list.items[function.typeidx];
-                // const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                // const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
                 if (f.params.len != in.len) return error.ParamCountMismatch;
                 if (f.results.len > 1) return error.OnlySingleReturnValueSupported;
 
