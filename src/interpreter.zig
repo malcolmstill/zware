@@ -253,6 +253,7 @@ pub const Interpreter = struct {
                 //       we can (and probably should) do that at validation time.
                 const module = self.inst.module;
                 const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
+                std.debug.warn("function index = {}\n", .{function_index});
                 const function = try self.inst.getFunc(function_index);
 
                 switch (function) {

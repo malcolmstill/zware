@@ -109,6 +109,7 @@ pub const Instance = struct {
                     },
                 });
 
+                std.debug.warn("added function {}\n", .{handle});
                 // Need to do this regardless of if import or internal
                 try self.funcaddrs.append(handle);
             }
@@ -308,8 +309,9 @@ pub const Instance = struct {
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
         // const function = self.module.functions.list.items[index];
-        const handle = try self.funcHandle(index);
+        // const handle = try self.funcHandle(index);
         const function = try self.getFunc(index);
+        std.debug.warn("function = {}\n", .{function});
 
         switch (function) {
             .function => |f| {
