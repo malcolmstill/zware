@@ -33,6 +33,10 @@ const ArrayList = std.ArrayList;
 
 var gpa = GeneralPurposeAllocator(.{}){};
 
+fn print(interp: *Interpreter) !void {
+    std.debug.warn("print\n", .{});
+}
+
 fn print_i32(interp: *Interpreter) !void {
     const value = try interp.popOperand(i32);
     std.debug.warn("print_i32: {}\n", .{value});
@@ -137,6 +141,18 @@ pub fn main() anyerror!void {
     });
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
+
+    var print_params = [_]ValueType{.I32} ** 0;
+    var print_results = [_]ValueType{.I32} ** 0;
+    const print_handle = try store.addFunction(Function{
+        .host_function = .{
+            .func = print,
+            .params = print_params[0..],
+            .results = print_results[0..],
+        },
+    });
+    const print_name = "print";
+    try store.@"export"(spectest_module[0..], print_name[0..], .Func, print_handle);
 
     var print_i32_params = [_]ValueType{.I32} ** 1;
     var print_i32_results = [_]ValueType{.I32} ** 0;
