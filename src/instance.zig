@@ -189,6 +189,10 @@ pub const Instance = struct {
                 try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
             }
         }
+
+        if (self.module.start) |start_function| {
+            try self.invokeStart(start_function, .{});
+        }
     }
 
     pub fn getFunc(self: *Instance, index: usize) !Function {
@@ -365,6 +369,44 @@ pub const Instance = struct {
                 for (out) |o, out_index| {
                     out[out_index] = try interp.popOperand(u64);
                 }
+            },
+            .host_function => |host_func| {
+                return error.InvokeDynamicHostFunctionNotImplemented;
+            },
+        }
+    }
+
+    pub fn invokeStart(self: *Instance, index: u32, comptime options: InterpreterOptions) !void {
+        const function = try self.getFunc(index);
+
+        switch (function) {
+            .function => |f| {
+                var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+                var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+                var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
+
+                const locals_start = interp.op_stack.len;
+
+                var i: usize = 0;
+                while (i < f.locals_count) : (i += 1) {
+                    try interp.pushOperand(u64, 0);
+                }
+
+                try interp.pushFrame(Interpreter.Frame{
+                    .op_stack_len = locals_start,
+                    .label_stack_len = interp.label_stack.len,
+                    .return_arity = 0,
+                    .inst = self,
+                }, f.locals_count);
+
+                try interp.pushLabel(Interpreter.Label{
+                    .return_arity = 0,
+                    .op_stack_len = locals_start,
+                    .continuation = f.code[0..0],
+                });
+
+                try interp.invoke(f.code);
             },
             .host_function => |host_func| {
                 return error.InvokeDynamicHostFunctionNotImplemented;
