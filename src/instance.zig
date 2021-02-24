@@ -337,6 +337,7 @@ pub const Instance = struct {
                     .op_stack_len = locals_start,
                     .label_stack_len = interp.label_stack.len,
                     .return_arity = f.results.len,
+                    .inst = self,
                 }, f.locals_count + f.params.len);
 
                 // 7a.2. push label for our implicit function block. We know we don't have
@@ -358,7 +359,6 @@ pub const Instance = struct {
                 }
             },
             .host_function => |host_func| {
-                // std.debug.warn()
                 return error.InvokeDynamicHostFunctionNotImplemented;
             },
         }
@@ -376,6 +376,7 @@ pub const Instance = struct {
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = 1,
+            .inst = self,
         }, 0);
 
         try interp.pushLabel(Interpreter.Label{

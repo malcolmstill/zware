@@ -190,6 +190,7 @@ pub const Interpreter = struct {
                     self.label_stack = self.label_stack[0..frame.label_stack_len];
                     self.continuation = label.continuation;
                     _ = try self.popFrame();
+                    self.inst = frame.inst;
                 }
             },
             .Br => {
@@ -243,6 +244,7 @@ pub const Interpreter = struct {
                 self.label_stack = self.label_stack[0..frame.label_stack_len];
 
                 _ = try self.popFrame();
+                self.inst = frame.inst;
             },
             .Call => {
                 // The spec says:
@@ -268,6 +270,7 @@ pub const Interpreter = struct {
                             .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
                             .label_stack_len = self.label_stack.len,
                             .return_arity = f.results.len,
+                            .inst = self.inst,
                         }, f.locals_count + f.params.len);
 
                         // Our continuation is the code after call
@@ -315,6 +318,7 @@ pub const Interpreter = struct {
                             .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
                             .label_stack_len = self.label_stack.len,
                             .return_arity = func.results.len,
+                            .inst = self.inst,
                         }, func.locals_count + func.params.len);
 
                         // Our continuation is the code after call
@@ -1758,6 +1762,7 @@ pub const Interpreter = struct {
         return_arity: usize = 0,
         op_stack_len: usize,
         label_stack_len: usize,
+        inst: *Instance,
     };
 
     // Label
