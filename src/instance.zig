@@ -8,6 +8,7 @@ const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
+const Global = @import("global.zig").Global;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const ArrayList = std.ArrayList;
 
@@ -52,7 +53,6 @@ pub const Instance = struct {
 
         // 1. Initialise imports
         for (self.module.imports.list.items) |import, i| {
-            // std.debug.warn("import = {}\n", .{import});
             const import_handle = try self.store.import(import.module, import.name, import.desc_tag);
             switch (import.desc_tag) {
                 .Func => try self.funcaddrs.append(import_handle),
@@ -92,7 +92,6 @@ pub const Instance = struct {
                     },
                 }
             } else {
-                // if (function_def.import != null) continue;
                 // TODO: clean this up
                 const code = self.module.codes.list.items[i - imported_function_count];
                 const func = self.module.functions.list.items[i];
@@ -117,10 +116,19 @@ pub const Instance = struct {
 
         // 2. Initialise globals
         for (self.module.globals.list.items) |global_def, i| {
-            if (global_def.import != null) continue;
-            const value = if (global_def.code) |code| try self.invokeExpression(code, u64, .{}) else 0;
-            const handle = try self.store.addGlobal(value);
-            try self.globaladdrs.append(handle);
+            if (global_def.import != null) {
+                const imported_global = try self.getGlobal(i);
+                if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
+                std.debug.warn("global_def = {}, imported_global = {}\n", .{ global_def, imported_global.* });
+            } else {
+                const value = if (global_def.code) |code| try self.invokeExpression(code, u64, .{}) else 0;
+                const handle = try self.store.addGlobal(Global{
+                    .value = value,
+                    .mutability = global_def.mutability,
+                    .value_type = global_def.value_type,
+                });
+                try self.globaladdrs.append(handle);
+            }
         }
 
         // 3. Initialise memories
@@ -202,7 +210,7 @@ pub const Instance = struct {
         return try self.store.table(handle);
     }
 
-    pub fn getGlobal(self: *Instance, index: usize) !*u64 {
+    pub fn getGlobal(self: *Instance, index: usize) !*Global {
         if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
         const handle = self.globaladdrs.items[index];
         return try self.store.global(handle);

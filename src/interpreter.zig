@@ -374,8 +374,8 @@ pub const Interpreter = struct {
                 // 2. Look up address of global using index. (we don't need to do this because the
                 //    the global_index is also the address of the actual global in our store)
                 // 3. Get value
-                const value = try self.inst.getGlobal(global_index);
-                try self.pushAnyOperand(value.*);
+                const global = try self.inst.getGlobal(global_index);
+                try self.pushAnyOperand(global.value);
             },
             .GlobalSet => {
                 // 1. Get index of global from immediate
@@ -385,7 +385,7 @@ pub const Interpreter = struct {
                 // 3. Get value
                 const value = try self.popAnyOperand();
                 const global = try self.inst.getGlobal(global_index);
-                global.* = value;
+                global.value = value;
             },
             .I32Load => {
                 const frame = try self.peekNthFrame(0);
