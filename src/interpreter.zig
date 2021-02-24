@@ -278,6 +278,7 @@ pub const Interpreter = struct {
                         });
 
                         self.continuation = f.code;
+                        self.inst = f.instance;
                     },
                     .host_function => |hf| {
                         try hf.func(self);
