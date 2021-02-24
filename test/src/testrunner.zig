@@ -454,6 +454,18 @@ pub fn main() anyerror!void {
                                 },
                             }
                         }
+
+                        if (mem.eql(u8, trap, "unreachable")) {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedUnreachable;
+                            } else |err| switch (err) {
+                                error.TrapUnreachable => continue,
+                                else => {
+                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    return error.TestsuiteExpectedUnreachable;
+                                },
+                            }
+                        }
                     },
                     .get => {
                         std.debug.warn("(trap) get\n", .{});
