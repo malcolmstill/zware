@@ -128,6 +128,9 @@ bin/testrunner left-to-right.json || exit 1
 wast2json test/testsuite/linking.wast || exit 1
 bin/testrunner linking.json || exit 1
 
+wast2json test/testsuite/load.wast || exit 1
+bin/testrunner load.json || exit 1
+
 wast2json test/testsuite/local_get.wast || exit 1
 bin/testrunner local_get.json || exit 1
 
@@ -143,14 +146,29 @@ bin/testrunner loop.json || exit 1
 wast2json test/testsuite/memory_grow.wast || exit 1
 bin/testrunner memory_grow.json || exit 1
 
+wast2json test/testsuite/memory_redundancy.wast || exit 1
+bin/testrunner memory_redundancy.json || exit 1
+
 wast2json test/testsuite/memory_size.wast || exit 1
 bin/testrunner memory_size.json || exit 1
+
+wast2json test/testsuite/memory_trap.wast || exit 1
+bin/testrunner memory_trap.json || exit 1
 
 wast2json test/testsuite/memory.wast || exit 1
 bin/testrunner memory.json || exit 1
 
+wast2json test/testsuite/names.wast || exit 1
+bin/testrunner names.json || exit 1
+
+wast2json test/testsuite/nop.wast || exit 1
+bin/testrunner nop.json || exit 1
+
 wast2json test/testsuite/return.wast || exit 1
 bin/testrunner return.json || exit 1
+
+wast2json test/testsuite/select.wast || exit 1
+bin/testrunner select.json || exit 1
 
 wast2json test/testsuite/stack.wast || exit 1
 bin/testrunner stack.json || exit 1
