@@ -197,10 +197,12 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             const module_name_length = try leb.readULEB128(u32, rd);
             const module_name = self.module[rd.context.pos .. rd.context.pos + module_name_length];
+            if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
             try rd.skipBytes(module_name_length, .{});
 
             const name_length = try leb.readULEB128(u32, rd);
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
+            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
             try rd.skipBytes(name_length, .{});
 
             const desc_tag = try rd.readEnum(Tag, .Little);
@@ -383,6 +385,7 @@ pub const Module = struct {
             const name_length = try leb.readULEB128(u32, rd);
             if (rd.context.pos + name_length > self.module.len) return error.UnexpectedEndOfSection;
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
+            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
             try rd.skipBytes(name_length, .{});
 
             const tag = try rd.readEnum(Tag, .Little);

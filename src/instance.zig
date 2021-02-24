@@ -13,9 +13,9 @@ const Interpreter = @import("interpreter.zig").Interpreter;
 const ArrayList = std.ArrayList;
 
 const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 64 * 1024,
-    control_stack_size: comptime_int = 64 * 1024,
-    label_stack_size: comptime_int = 64 * 1024,
+    operand_stack_size: comptime_int = 1024,
+    control_stack_size: comptime_int = 1024,
+    label_stack_size: comptime_int = 1024,
 };
 
 // Instance
@@ -321,15 +321,16 @@ pub const Instance = struct {
 
         const function = try self.getFunc(index);
 
+        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+
         switch (function) {
             .function => |f| {
                 if (f.params.len != in.len) return error.ParamCountMismatch;
                 if (f.results.len > 1) return error.OnlySingleReturnValueSupported;
 
                 // 6. set up our stacks
-                var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-                var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-                var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
 
                 const locals_start = interp.op_stack.len;
@@ -372,7 +373,8 @@ pub const Instance = struct {
                 }
             },
             .host_function => |host_func| {
-                return error.InvokeDynamicHostFunctionNotImplemented;
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+                try host_func.func(&interp);
             },
         }
     }
@@ -380,11 +382,12 @@ pub const Instance = struct {
     pub fn invokeStart(self: *Instance, index: u32, comptime options: InterpreterOptions) !void {
         const function = try self.getFunc(index);
 
+        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
+        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+
         switch (function) {
             .function => |f| {
-                var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-                var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-                var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
 
                 const locals_start = interp.op_stack.len;
@@ -410,7 +413,8 @@ pub const Instance = struct {
                 try interp.invoke(f.code);
             },
             .host_function => |host_func| {
-                return error.InvokeDynamicHostFunctionNotImplemented;
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+                try host_func.func(&interp);
             },
         }
     }
