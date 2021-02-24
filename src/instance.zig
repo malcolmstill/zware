@@ -291,6 +291,7 @@ pub const Instance = struct {
             .op_stack_len = locals_start,
             .label_stack_len = interp.label_stack.len,
             .return_arity = results.len,
+            .inst = self,
         }, code.locals_count + params.len);
 
         // 7a.2. push label for our implicit function block. We know we don't have

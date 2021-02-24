@@ -678,7 +678,9 @@ test "module loading (simple add function)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var inst = try module.instantiate(&arena.allocator, &store);
+
+    var inst = Instance.init(&arena.allocator, &store, module);
+    try inst.instantiate();
 
     const result = try inst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
     testing.expectEqual(@as(i32, 45), result);
@@ -695,7 +697,9 @@ test "module loading (fib)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var inst = try module.instantiate(&arena.allocator, &store);
+
+    var inst = Instance.init(&arena.allocator, &store, module);
+    try inst.instantiate();
 
     testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
     testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
@@ -717,7 +721,9 @@ test "module loading (fact)" {
 
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
-    var inst = try module.instantiate(&arena.allocator, &store);
+
+    var inst = Instance.init(&arena.allocator, &store, module);
+    try inst.instantiate();
 
     testing.expectEqual(@as(i32, 1), try inst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
     testing.expectEqual(@as(i32, 2), try inst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
