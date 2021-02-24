@@ -170,8 +170,14 @@ bin/testrunner return.json || exit 1
 wast2json test/testsuite/select.wast || exit 1
 bin/testrunner select.json || exit 1
 
+wast2json test/testsuite/skip-stack-guard-page.wast || exit 1
+bin/testrunner skip-stack-guard-page.json || exit 1
+
 wast2json test/testsuite/stack.wast || exit 1
 bin/testrunner stack.json || exit 1
+
+wast2json test/testsuite/start.wast || exit 1
+bin/testrunner start.json || exit 1
 
 wast2json test/testsuite/store.wast || exit 1
 bin/testrunner store.json || exit 1
@@ -179,8 +185,35 @@ bin/testrunner store.json || exit 1
 wast2json test/testsuite/switch.wast || exit 1
 bin/testrunner switch.json || exit 1
 
+wast2json test/testsuite/table.wast || exit 1
+bin/testrunner table.json || exit 1
+
+wast2json test/testsuite/token.wast || exit 1
+bin/testrunner token.json || exit 1
+
 wast2json test/testsuite/traps.wast || exit 1
 bin/testrunner traps.json || exit 1
 
 wast2json test/testsuite/type.wast || exit 1
 bin/testrunner type.json || exit 1
+
+wast2json test/testsuite/unreachable.wast || exit 1
+bin/testrunner unreachable.json || exit 1
+
+wast2json test/testsuite/unreached-invalid.wast || exit 1
+bin/testrunner unreached-invalid.json || exit 1
+
+wast2json test/testsuite/unwind.wast || exit 1
+bin/testrunner unwind.json || exit 1
+
+wast2json test/testsuite/utf8-custom-section-id.wast || exit 1
+bin/testrunner utf8-custom-section-id.json || exit 1
+
+wast2json test/testsuite/utf8-import-field.wast || exit 1
+bin/testrunner utf8-import-field.json || exit 1
+
+wast2json test/testsuite/utf8-import-module.wast || exit 1
+bin/testrunner utf8-import-module.json || exit 1
+
+wast2json test/testsuite/utf8-invalid-encoding.wast || exit 1
+bin/testrunner utf8-invalid-encoding.json || exit 1
