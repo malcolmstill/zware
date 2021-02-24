@@ -41,6 +41,11 @@ pub const Memory = struct {
         mem.copy(u8, self.asSlice()[address .. address + data.len], data);
     }
 
+    // as per copy but don't actually mutate
+    pub fn check(self: *Memory, address: u32, data: []const u8) !void {
+        if (address + data.len > PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;
+    }
+
     pub fn read(self: *Memory, comptime T: type, offset: u32, address: u32) !T {
         const effective_address = @as(u33, offset) + @as(u33, address);
         if (effective_address + @sizeOf(T) - 1 >= PAGE_SIZE * self.data.items.len) return error.OutOfBoundsMemoryAccess;

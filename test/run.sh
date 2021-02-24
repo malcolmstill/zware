@@ -125,6 +125,9 @@ bin/testrunner labels.json || exit 1
 wast2json test/testsuite/left-to-right.wast || exit 1
 bin/testrunner left-to-right.json || exit 1
 
+wast2json test/testsuite/linking.wast || exit 1
+bin/testrunner linking.json || exit 1
+
 wast2json test/testsuite/local_get.wast || exit 1
 bin/testrunner local_get.json || exit 1
 

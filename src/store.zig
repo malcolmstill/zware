@@ -5,6 +5,7 @@ const ArrayList = std.ArrayList;
 const Function = @import("function.zig").Function;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
+const Global = @import("global.zig").Global;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
 const ValueType = @import("common.zig").ValueType;
@@ -28,7 +29,7 @@ pub const ArrayListStore = struct {
     functions: ArrayList(Function),
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
-    globals: ArrayList(u64),
+    globals: ArrayList(Global),
     imports: ArrayList(ImportExport),
 
     pub fn init(alloc: *mem.Allocator) ArrayListStore {
@@ -37,7 +38,7 @@ pub const ArrayListStore = struct {
             .functions = ArrayList(Function).init(alloc),
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
-            .globals = ArrayList(u64).init(alloc),
+            .globals = ArrayList(Global).init(alloc),
             .imports = ArrayList(ImportExport).init(alloc),
         };
 
@@ -105,13 +106,12 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
-    // TODO: supply a setGlobal function instead?
-    pub fn global(self: *ArrayListStore, handle: usize) !*u64 {
+    pub fn global(self: *ArrayListStore, handle: usize) !*Global {
         if (handle >= self.globals.items.len) return error.BadGlobalIndex;
         return &self.globals.items[handle];
     }
 
-    pub fn addGlobal(self: *ArrayListStore, value: u64) !usize {
+    pub fn addGlobal(self: *ArrayListStore, value: Global) !usize {
         const glbl_ptr = try self.globals.addOne();
         glbl_ptr.* = value;
 

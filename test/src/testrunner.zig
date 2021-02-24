@@ -12,6 +12,7 @@ const Instance = foxwren.Instance;
 const Store = foxwren.Store;
 const Memory = foxwren.Memory;
 const Function = foxwren.Function;
+const Global = foxwren.Global;
 const Interpreter = foxwren.Interpreter;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
@@ -105,19 +106,35 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
 
     // Initiliase spectest globals
-    const i32_handle = try store.addGlobal(666);
+    const i32_handle = try store.addGlobal(Global{
+        .value = 666,
+        .value_type = .I32,
+        .mutability = .Immutable,
+    });
     const i32_name = "global_i32";
     try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
 
-    const i64_handle = try store.addGlobal(666);
+    const i64_handle = try store.addGlobal(Global{
+        .value = 666,
+        .value_type = .I64,
+        .mutability = .Immutable,
+    });
     const i64_name = "global_i64";
     try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
 
-    const f32_handle = try store.addGlobal(666);
+    const f32_handle = try store.addGlobal(Global{
+        .value = 666,
+        .value_type = .F32,
+        .mutability = .Immutable,
+    });
     const f32_name = "global_f32";
     try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
 
-    const f64_handle = try store.addGlobal(666);
+    const f64_handle = try store.addGlobal(Global{
+        .value = 666,
+        .value_type = .F64,
+        .mutability = .Immutable,
+    });
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
 
@@ -198,16 +215,15 @@ pub fn main() anyerror!void {
     const print_f64_f64_name = "print_f64_f64";
     try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
 
-    var inst: Instance = undefined;
+    var inst: *Instance = undefined;
+    var instances = ArrayList(Instance).init(&arena.allocator);
 
-    // var modules = StringHashMap(Module)./init(&arena.allocator);
     const NamedInstance = struct {
         name: ?[]const u8,
         inst: Instance,
     };
 
-    var registered_names = StringHashMap(Instance).init(&arena.allocator);
-    // var module_instances = ArrayList(NamedInstance).init(&arena.allocator);
+    var registered_names = StringHashMap(*Instance).init(&arena.allocator);
 
     for (r.commands) |command| {
         switch (command) {
@@ -220,7 +236,11 @@ pub fn main() anyerror!void {
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
-                inst = try module.instantiate(&arena.allocator, &store);
+
+                inst = try instances.addOne();
+                inst.* = Instance.init(&arena.allocator, &store, module);
+
+                try inst.instantiate();
 
                 if (command.module.name) |name| {
                     try registered_names.put(name, inst);
@@ -296,15 +316,34 @@ pub fn main() anyerror!void {
                         const field = action.get.field;
                         std.debug.warn("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
                         std.debug.warn("(result) get \"{s}\"\n", .{field});
-                        for (inst.module.exports.list.items) |exprt, i| {
-                            if (mem.eql(u8, exprt.name, field)) {
-                                const global = try inst.global(i);
+                        if (action.get.module) |m| {
+                            const registered_inst = registered_names.get(m) orelse return error.NotRegistered;
+                            var global_i: usize = 0;
+                            for (registered_inst.module.exports.list.items) |exprt, i| {
+                                if (mem.eql(u8, exprt.name, field)) {
+                                    const global = try registered_inst.getGlobal(exprt.index);
 
-                                for (expected) |result, j| {
-                                    if (j > 0) return error.ExpectedOneResult;
-                                    const result_value = try fmt.parseInt(u64, result.value, 10);
-                                    if (global.* != result_value) {
-                                        return error.GlobalUnexpectedValue;
+                                    for (expected) |result, j| {
+                                        if (j > 0) return error.ExpectedOneResult;
+                                        const result_value = try fmt.parseInt(u64, result.value, 10);
+
+                                        if (global.value != result_value) {
+                                            return error.GlobalUnexpectedValue;
+                                        }
+                                    }
+                                }
+                            }
+                        } else {
+                            for (inst.module.exports.list.items) |exprt, i| {
+                                if (mem.eql(u8, exprt.name, field)) {
+                                    const global = try inst.getGlobal(i);
+
+                                    for (expected) |result, j| {
+                                        if (j > 0) return error.ExpectedOneResult;
+                                        const result_value = try fmt.parseInt(u64, result.value, 10);
+                                        if (global.value != result_value) {
+                                            return error.GlobalUnexpectedValue;
+                                        }
                                     }
                                 }
                             }
@@ -323,7 +362,14 @@ pub fn main() anyerror!void {
                         std.debug.warn("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
                         errdefer {
-                            std.debug.warn("(trap) invoke = {s}\n", .{field});
+                            std.debug.warn("(trap) invoke = {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_trap.line });
+                        }
+
+                        var instance = inst;
+                        if (command.assert_trap.action.invoke.module) |name| {
+                            if (registered_names.get(name)) |instptr| {
+                                instance = instptr;
+                            }
                         }
 
                         // Allocate input parameters and output results
@@ -338,7 +384,7 @@ pub fn main() anyerror!void {
 
                         // Test the result
                         if (mem.eql(u8, trap, "integer divide by zero")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.DivisionByZero => continue,
@@ -347,7 +393,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "integer overflow")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.Overflow => continue,
@@ -356,7 +402,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.InvalidConversion => continue,
@@ -365,7 +411,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "out of bounds memory access")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.OutOfBoundsMemoryAccess => continue,
@@ -374,7 +420,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.IndirectCallTypeMismatch => continue,
@@ -383,7 +429,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                            if (inst.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.UndefinedElement => continue,
@@ -391,6 +437,20 @@ pub fn main() anyerror!void {
                                 else => {
                                     std.debug.warn("Unexpected error: {}\n", .{err});
                                     return error.TestsuiteExpectedUndefinedElement;
+                                },
+                            }
+                        }
+
+                        if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
+                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                                return error.TestsuiteExpectedTrap;
+                            } else |err| switch (err) {
+                                error.UndefinedElement => continue,
+                                error.OutOfBoundsMemoryAccess => continue,
+                                error.IndirectCallTypeMismatch => continue,
+                                else => {
+                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    return error.TestsuiteExpectedUnitialized;
                                 },
                             }
                         }
@@ -635,11 +695,14 @@ pub fn main() anyerror!void {
                 wasm_filename = command.assert_unlinkable.filename;
                 std.debug.warn("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
-                // std.debug.warn("filename = {s}\n", .{wasm_filename});
+
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                if (module.instantiate(&arena.allocator, &store)) |x| {
+                inst = try instances.addOne();
+                inst.* = Instance.init(&arena.allocator, &store, module);
+
+                if (inst.instantiate()) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
                     error.ImportedMemoryNotBigEnough => continue,
@@ -648,8 +711,30 @@ pub fn main() anyerror!void {
                     error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
+                    error.MismatchedMutability => continue,
                     else => {
                         std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
+                        return error.UnexpectedError;
+                    },
+                }
+            },
+            .assert_uninstantiable => {
+                wasm_filename = command.assert_uninstantiable.filename;
+                std.debug.warn("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+
+                module = Module.init(&arena.allocator, program);
+                try module.decode();
+
+                inst = try instances.addOne();
+                inst.* = Instance.init(&arena.allocator, &store, module);
+
+                if (inst.instantiate()) |x| {
+                    return error.ExpectedUninstantiable;
+                } else |err| switch (err) {
+                    error.TrapUnreachable => continue,
+                    else => {
+                        std.debug.warn("(uninstantiable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
                     },
                 }
@@ -757,6 +842,12 @@ const Command = union(enum) {
         expected: []const ValueTrap,
     }, assert_unlinkable: struct {
         comptime @"type": []const u8 = "assert_unlinkable",
+        line: usize,
+        filename: []const u8,
+        text: []const u8,
+        module_type: []const u8,
+    }, assert_uninstantiable: struct {
+        comptime @"type": []const u8 = "assert_uninstantiable",
         line: usize,
         filename: []const u8,
         text: []const u8,
