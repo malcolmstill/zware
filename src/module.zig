@@ -426,7 +426,11 @@ pub const Module = struct {
 
     fn decodeGlobalSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.globals.count = count;
 
         var i: usize = 0;
