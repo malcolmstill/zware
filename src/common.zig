@@ -51,10 +51,8 @@ pub fn toValueType(comptime t: type) ValueType {
 }
 
 pub const FuncType = struct {
-    params_offset: usize,
-    params_count: usize,
-    results_offset: usize,
-    results_count: usize,
+    params: []const ValueType,
+    results: []const ValueType,
 };
 
 pub const Function = struct {

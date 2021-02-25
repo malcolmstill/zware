@@ -32,7 +32,6 @@ pub const Module = struct {
     version: u32 = 0,
     customs: Section(Custom),
     types: Section(FuncType),
-    value_types: Section(ValueType), // Not really a section
     imports: Section(Import),
     functions: Section(common.Function),
     tables: Section(Limit),
@@ -51,7 +50,6 @@ pub const Module = struct {
             .buf = std.io.fixedBufferStream(module),
             .customs = Section(Custom).init(alloc),
             .types = Section(FuncType).init(alloc),
-            .value_types = Section(ValueType).init(alloc),
             .imports = Section(Import).init(alloc),
             .functions = Section(common.Function).init(alloc),
             .tables = Section(Limit).init(alloc),
@@ -167,8 +165,8 @@ pub const Module = struct {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
-            const param_offset = self.value_types.list.items.len;
 
+            const params_start = rd.context.pos;
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
@@ -176,16 +174,16 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-                    try self.value_types.list.append(v);
                 }
             }
+            const params_end = rd.context.pos;
 
             const results_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
-            const results_offset = self.value_types.list.items.len;
 
+            const results_start = rd.context.pos;
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
@@ -193,17 +191,24 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-                    try self.value_types.list.append(r);
                 }
             }
+            const results_end = rd.context.pos;
 
-            // TODO: rather than count we could store the first element / last element + 1
-            // TODO: should we just index into the existing module data?
+            var params = self.module[params_start..params_end];
+            var results = self.module[results_start..results_end];
+
+            var params_value_type: []const ValueType = undefined;
+            params_value_type.ptr = @ptrCast([*]const ValueType, params.ptr);
+            params_value_type.len = params.len;
+
+            var results_value_type: []const ValueType = undefined;
+            results_value_type.ptr = @ptrCast([*]const ValueType, results.ptr);
+            results_value_type.len = results.len;
+
             try self.types.list.append(FuncType{
-                .params_offset = param_offset,
-                .params_count = param_count,
-                .results_offset = results_offset,
-                .results_count = results_count,
+                .params = params_value_type,
+                .results = results_value_type,
             });
         }
 
@@ -768,41 +773,16 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn signaturesEqual(self: *Module, a: FuncType, b: FuncType) bool {
-        if (a.params_count != b.params_count) return false;
-        if (a.results_count != b.results_count) return false;
-
-        const params_a = self.value_types.list.items[a.params_offset .. a.params_offset + a.params_count];
-        const params_b = self.value_types.list.items[b.params_offset .. b.params_offset + b.params_count];
-
-        for (params_a) |p_a, i| {
-            if (p_a != params_b[i]) return false;
-        }
-
-        const results_a = self.value_types.list.items[a.results_offset .. a.results_offset + a.results_count];
-        const results_b = self.value_types.list.items[b.results_offset .. b.results_offset + b.results_count];
-
-        for (results_a) |r_a, i| {
-            if (r_a != results_b[i]) return false;
-        }
-
-        return true;
-    }
-
-    pub fn signaturesEqual2(self: *Module, params: []ValueType, results: []ValueType, b: FuncType) bool {
-        if (params.len != b.params_count) return false;
-        if (results.len != b.results_count) return false;
-
-        const params_b = self.value_types.list.items[b.params_offset .. b.params_offset + b.params_count];
+    pub fn signaturesEqual(self: *Module, params: []const ValueType, results: []const ValueType, b: FuncType) bool {
+        if (params.len != b.params.len) return false;
+        if (results.len != b.results.len) return false;
 
         for (params) |p_a, i| {
-            if (p_a != params_b[i]) return false;
+            if (p_a != b.params[i]) return false;
         }
 
-        const results_b = self.value_types.list.items[b.results_offset .. b.results_offset + b.results_count];
-
         for (results) |r_a, i| {
-            if (r_a != results_b[i]) return false;
+            if (r_a != b.results[i]) return false;
         }
 
         return true;

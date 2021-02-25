@@ -7,13 +7,13 @@ pub const Function = union(enum) {
         locals: []const u8,
         locals_count: usize,
         code: []const u8,
-        params: []ValueType,
-        results: []ValueType,
+        params: []const ValueType,
+        results: []const ValueType,
         instance: *Instance,
     },
     host_function: struct {
         func: fn (*Interpreter) anyerror!void,
-        params: []ValueType,
-        results: []ValueType,
+        params: []const ValueType,
+        results: []const ValueType,
     },
 };
