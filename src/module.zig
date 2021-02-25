@@ -306,7 +306,10 @@ pub const Module = struct {
 
     fn decodeTableSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.tables.count = count;
 
         var i: usize = 0;
