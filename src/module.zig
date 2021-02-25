@@ -123,7 +123,10 @@ pub const Module = struct {
             else => return err,
         };
 
-        const size = try leb.readULEB128(u32, rd);
+        const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
 
         _ = switch (id) {
             .Custom => try self.decodeCustomSection(size),
@@ -524,9 +527,6 @@ pub const Module = struct {
             });
         }
 
-        // const remaining_data = size - (rd.context.pos - section_offset);
-        // try rd.skipBytes(remaining_data, .{});
-
         return count;
     }
 
@@ -534,18 +534,29 @@ pub const Module = struct {
         const rd = self.buf.reader();
         const offset = rd.context.pos;
 
-        const name_length = try leb.readULEB128(u32, rd);
-        if (rd.context.pos + name_length > self.module.len) return error.UnexpectedEndOfSection;
-        const name = self.module[rd.context.pos .. rd.context.pos + name_length];
-        try rd.skipBytes(name_length, .{});
+        const name_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        const name_start = rd.context.pos;
+        rd.skipBytes(name_length, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        const name = self.module[name_start .. name_start + name_length];
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-        const remaining_size = size - (rd.context.pos - offset);
+        const data_start = rd.context.pos;
+        const data_size = try math.sub(usize, size, (rd.context.pos - offset));
+        rd.skipBytes(data_size, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
 
-        if (rd.context.pos + remaining_size > self.module.len) return error.UnexpectedEndOfSection;
-        const data = self.module[rd.context.pos .. rd.context.pos + remaining_size];
-        try rd.skipBytes(remaining_size, .{});
+        const data = self.module[data_start .. data_start + data_size];
 
         try self.customs.list.append(Custom{
             .name = name,
