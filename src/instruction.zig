@@ -23,70 +23,70 @@ pub const InstructionIterator = struct {
         // 2. Find the start of the next instruction
         // TODO: complete this for all opcodes
         switch (instr) {
-            .I32Const => _ = try readILEB128Mem(i32, &self.code),
-            .I64Const => _ = try readILEB128Mem(i64, &self.code),
-            .GlobalGet,
-            .GlobalSet,
-            .LocalGet,
-            .LocalSet,
-            .LocalTee,
-            .If,
-            .Call,
-            .Br,
-            .BrIf,
-            .Block,
-            .Loop,
+            .@"i32.const" => _ = try readILEB128Mem(i32, &self.code),
+            .@"i64.const" => _ = try readILEB128Mem(i64, &self.code),
+            .@"global.get",
+            .@"global.set",
+            .@"local.get",
+            .@"local.set",
+            .@"local.tee",
+            .@"if",
+            .call,
+            .br,
+            .br_if,
+            .block,
+            .loop,
             => _ = try readULEB128Mem(u32, &self.code),
-            .MemorySize, .MemoryGrow => {
+            .@"memory.size", .@"memory.grow" => {
                 const reserved = try readByte(&self.code);
                 if (check) {
                     if (reserved != 0) return error.MalformedMemoryReserved;
                 }
             },
-            .BrTable => {
+            .br_table => {
                 const label_count = try readULEB128Mem(u32, &self.code);
                 var j: usize = 0;
                 while (j < label_count + 1) : (j += 1) {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
-            .CallIndirect => {
+            .call_indirect => {
                 _ = try readULEB128Mem(u32, &self.code);
                 const reserved = try readByte(&self.code);
                 if (check) {
                     if (reserved != 0) return error.MalformedCallIndirectReserved;
                 }
             },
-            .I32Load,
-            .I64Load,
-            .F32Load,
-            .F64Load,
-            .I32Load8S,
-            .I32Load8U,
-            .I32Load16S,
-            .I32Load16U,
-            .I64Load8S,
-            .I64Load8U,
-            .I64Load16S,
-            .I64Load16U,
-            .I64Load32S,
-            .I64Load32U,
-            .I32Store,
-            .I64Store,
-            .F32Store,
-            .F64Store,
-            .I32Store8,
-            .I32Store16,
-            .I64Store8,
-            .I64Store16,
-            .I64Store32,
+            .@"i32.load",
+            .@"i64.load",
+            .@"f32.load",
+            .@"f64.load",
+            .@"i32.load8_s",
+            .@"i32.load8_u",
+            .@"i32.load16_s",
+            .@"i32.load16_u",
+            .@"i64.load8_s",
+            .@"i64.load8_u",
+            .@"i64.load16_s",
+            .@"i64.load16_u",
+            .@"i64.load32_s",
+            .@"i64.load32_u",
+            .@"i32.store",
+            .@"i64.store",
+            .@"f32.store",
+            .@"f64.store",
+            .@"i32.store8",
+            .@"i32.store16",
+            .@"i64.store8",
+            .@"i64.store16",
+            .@"i64.store32",
             => {
                 _ = try readULEB128Mem(u32, &self.code);
                 _ = try readULEB128Mem(u32, &self.code);
             },
-            .F32Const => self.code = self.code[4..],
-            .F64Const => self.code = self.code[8..],
-            .TruncSat => self.code = self.code[1..],
+            .@"f32.const" => self.code = self.code[4..],
+            .@"f64.const" => self.code = self.code[8..],
+            .trunc_sat => self.code = self.code[1..],
             else => {},
         }
 
@@ -111,14 +111,14 @@ pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
-                .Block, .Loop, .If => continue,
+                .block, .loop, .@"if" => continue,
                 else => return error.NotBranchTarget,
             }
         }
 
         switch (meta.instruction) {
-            .Block, .Loop, .If => i += 1,
-            .End => i -= 1,
+            .block, .loop, .@"if" => i += 1,
+            .end => i -= 1,
             else => {},
         }
         if (i == 0) return meta;
@@ -135,12 +135,12 @@ pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta 
     var it = InstructionIterator.init(code);
     var i: usize = 1;
     while (try it.next(check)) |meta| {
-        if (meta.offset == 0 and meta.instruction == .End) return meta;
+        if (meta.offset == 0 and meta.instruction == .end) return meta;
         if (meta.offset == 0) continue;
 
         switch (meta.instruction) {
-            .Block, .Loop, .If => i += 1,
-            .End => i -= 1,
+            .block, .loop, .@"if" => i += 1,
+            .end => i -= 1,
             else => {},
         }
         if (i == 0) return meta;
@@ -153,7 +153,7 @@ pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var i: usize = 1;
     while (try it.next(check)) |meta| {
         switch (meta.instruction) {
-            .End => i -= 1,
+            .end => i -= 1,
             else => {},
         }
         if (i == 0) return meta;
@@ -171,20 +171,20 @@ pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
     while (try it.next(check)) |meta| {
         if (meta.offset == 0) {
             switch (meta.instruction) {
-                .If => continue,
+                .@"if" => continue,
                 else => return error.NotBranchTarget,
             }
         }
 
         switch (meta.instruction) {
-            .If, .Block => i += 1,
-            .Else => {
+            .@"if", .block => i += 1,
+            .@"else" => {
                 if (i < 2) i -= 1;
             },
-            .End => i -= 1,
+            .end => i -= 1,
             else => {},
         }
-        if (i == 0 and meta.instruction == .End) return null;
+        if (i == 0 and meta.instruction == .end) return null;
         if (i == 0) return meta;
     }
     return null;
@@ -211,28 +211,28 @@ test "instruction iterator" {
     const func = module.codes.list.items[0];
 
     var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 0 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 2 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32LtS, .offset = 4 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.If, .offset = 5 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 0 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 2 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.lt_s", .offset = 4 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"if", .offset = 5 });
 
     const if_end_meta = try findEnd(false, func.code[5..]);
     testing.expectEqual(if_end_meta.offset + 1, 6);
 
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 7 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 9 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 10 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 11 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 13 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 15 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 16 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.LocalGet, .offset = 18 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Const, .offset = 20 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Sub, .offset = 22 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Call, .offset = 23 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.I32Add, .offset = 25 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.Return, .offset = 26 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = Instruction.End, .offset = 27 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 7 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 9 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 10 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 11 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 13 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 15 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 16 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 18 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 20 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 22 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 23 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.add", .offset = 25 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 26 });
+    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 27 });
 
     testing.expectEqual(try it.next(false), null);
 }
@@ -284,183 +284,182 @@ pub fn readByte(ptr: *[]const u8) !u8 {
 }
 
 pub const Instruction = enum(u8) {
-    Unreachable = 0x0,
-    Nop = 0x01,
-    Block = 0x02, // bt
-    Loop = 0x03, // bt
-    If = 0x04, // bt
-    Else = 0x05,
-    End = 0x0b,
-    Br = 0x0c,
-    BrIf = 0x0d,
-    BrTable = 0x0e,
-    Return = 0x0f,
-    Call = 0x10,
-    CallIndirect = 0x11,
-    Drop = 0x1a,
-    Select = 0x1b,
-    LocalGet = 0x20,
-    LocalSet = 0x21,
-    LocalTee = 0x22,
-    GlobalGet = 0x23,
-    GlobalSet = 0x24,
-    I32Load = 0x28,
-    I64Load = 0x29,
-    F32Load = 0x2a,
-    F64Load = 0x2b,
-    I32Load8S = 0x2c,
-    I32Load8U = 0x2d,
-    I32Load16S = 0x2e,
-    I32Load16U = 0x2f,
-    I64Load8S = 0x30,
-    I64Load8U = 0x31,
-    I64Load16S = 0x32,
-    I64Load16U = 0x33,
-    I64Load32S = 0x34,
-    I64Load32U = 0x35,
-    I32Store = 0x36,
-    I64Store = 0x37,
-    F32Store = 0x38,
-    F64Store = 0x39,
-    I32Store8 = 0x3a,
-    I32Store16 = 0x3b,
-    I64Store8 = 0x3c,
-    I64Store16 = 0x3d,
-    I64Store32 = 0x3e,
-    MemorySize = 0x3f,
-    MemoryGrow = 0x40,
-    I32Const = 0x41,
-    I64Const = 0x42,
-    F32Const = 0x43,
-    F64Const = 0x44,
-    I32Eqz = 0x45,
-    I32Eq = 0x46,
-    I32Ne = 0x47,
-    I32LtS = 0x48,
-    I32LtU = 0x49,
-    I32GtS = 0x4a,
-    I32GtU = 0x4b,
-    I32LeS = 0x4c,
-    I32LeU = 0x4d,
-    I32GeS = 0x4e,
-    I32GeU = 0x4f,
-    I64Eqz = 0x50,
-    I64Eq = 0x51,
-    I64Ne = 0x52,
-    I64LtS = 0x53,
-    I64LtU = 0x54,
-    I64GtS = 0x55,
-    I64GtU = 0x56,
-    I64LeS = 0x57,
-    I64LeU = 0x58,
-    I64GeS = 0x59,
-    I64GeU = 0x5a,
-    F32Eq = 0x5b,
-    F32Ne = 0x5c,
-    F32Lt = 0x5d,
-    F32Gt = 0x5e,
-    F32Le = 0x5f,
-    F32Ge = 0x60,
-    F64Eq = 0x61,
-    F64Ne = 0x62,
-    F64Lt = 0x63,
-    F64Gt = 0x64,
-    F64Le = 0x65,
-    F64Ge = 0x66,
-    I32Clz = 0x67,
-    I32Ctz = 0x68,
-    I32Popcnt = 0x69,
-    I32Add = 0x6a,
-    I32Sub = 0x6b,
-    I32Mul = 0x6c,
-    I32DivS = 0x6d,
-    I32DivU = 0x6e,
-    I32RemS = 0x6f,
-    I32RemU = 0x70,
-    I32And = 0x71,
-    I32Or = 0x72,
-    I32Xor = 0x73,
-    I32Shl = 0x74,
-    I32ShrS = 0x75,
-    I32ShrU = 0x76,
-    I32Rotl = 0x77,
-    I32Rotr = 0x78,
-    I64Clz = 0x79,
-    I64Ctz = 0x7a,
-    I64Popcnt = 0x7b,
-    I64Add = 0x7c,
-    I64Sub = 0x7d,
-    I64Mul = 0x7e,
-    I64DivS = 0x7f,
-    I64DivU = 0x80,
-    I64RemS = 0x81,
-    I64RemU = 0x82,
-    I64And = 0x83,
-    I64Or = 0x84,
-    I64Xor = 0x85,
-    I64Shl = 0x86,
-    I64ShrS = 0x87,
-    I64ShrU = 0x88,
-    I64Rotl = 0x89,
-    I64Rotr = 0x8a,
-    F32Abs = 0x8b,
-    F32Neg = 0x8c,
-    F32Ceil = 0x8d,
-    F32Floor = 0x8e,
-    F32Trunc = 0x8f,
-    F32Nearest = 0x90,
-    F32Sqrt = 0x91,
-    F32Add = 0x92,
-    F32Sub = 0x93,
-    F32Mul = 0x94,
-    F32Div = 0x95,
-    F32Min = 0x96,
-    F32Max = 0x97,
-    F32CopySign = 0x98,
-    F64Abs = 0x99,
-    F64Neg = 0x9a,
-    F64Ceil = 0x9b,
-    F64Floor = 0x9c,
-    F64Trunc = 0x9d,
-    F64Nearest = 0x9e,
-    F64Sqrt = 0x9f,
-    F64Add = 0xa0,
-    F64Sub = 0xa1,
-    F64Mul = 0xa2,
-    F64Div = 0xa3,
-    F64Min = 0xa4,
-    F64Max = 0xa5,
-    F64CopySign = 0xa6,
-    I32WrapI64 = 0xa7,
-    I32TruncF32S = 0xa8,
-    I32TruncF32U = 0xa9,
-    I32TruncF64S = 0xaa,
-    I32TruncF64U = 0xab,
-    I64ExtendI32S = 0xac,
-    I64ExtendI32U = 0xad,
-    I64TruncF32S = 0xae,
-    I64TruncF32U = 0xaf,
-    I64TruncF64S = 0xb0,
-    I64TruncF64U = 0xb1,
-    F32ConvertI32S = 0xb2,
-    F32ConvertI32U = 0xb3,
-    F32ConvertI64S = 0xb4,
-    F32ConvertI64U = 0xb5,
-    F32DemoteF64 = 0xb6,
-    F64ConvertI32S = 0xb7,
-    F64ConvertI32U = 0xb8,
-    F64ConvertI64S = 0xb9,
-    F64ConvertI64U = 0xba,
-    F64PromoteF32 = 0xbb,
-    I32ReinterpretF32 = 0xbc,
-    I64ReinterpretF64 = 0xbd,
-    F32ReinterpretI32 = 0xbe,
-    F64ReinterpretI64 = 0xbf,
-    I32Extend8S = 0xc0,
-    I32Extend16S = 0xc1,
-    I64Extend8S = 0xc2,
-    I64Extend16S = 0xc3,
-    I64Extend32S = 0xc4,
-    // reserved
-    TruncSat = 0xfc,
+    @"unreachable" = 0x0,
+    nop = 0x01,
+    block = 0x02,
+    loop = 0x03,
+    @"if" = 0x04,
+    @"else" = 0x05,
+    end = 0x0b,
+    br = 0x0c,
+    br_if = 0x0d,
+    br_table = 0x0e,
+    @"return" = 0x0f,
+    call = 0x10,
+    call_indirect = 0x11,
+    drop = 0x1a,
+    select = 0x1b,
+    @"local.get" = 0x20,
+    @"local.set" = 0x21,
+    @"local.tee" = 0x22,
+    @"global.get" = 0x23,
+    @"global.set" = 0x24,
+    @"i32.load" = 0x28,
+    @"i64.load" = 0x29,
+    @"f32.load" = 0x2a,
+    @"f64.load" = 0x2b,
+    @"i32.load8_s" = 0x2c,
+    @"i32.load8_u" = 0x2d,
+    @"i32.load16_s" = 0x2e,
+    @"i32.load16_u" = 0x2f,
+    @"i64.load8_s" = 0x30,
+    @"i64.load8_u" = 0x31,
+    @"i64.load16_s" = 0x32,
+    @"i64.load16_u" = 0x33,
+    @"i64.load32_s" = 0x34,
+    @"i64.load32_u" = 0x35,
+    @"i32.store" = 0x36,
+    @"i64.store" = 0x37,
+    @"f32.store" = 0x38,
+    @"f64.store" = 0x39,
+    @"i32.store8" = 0x3a,
+    @"i32.store16" = 0x3b,
+    @"i64.store8" = 0x3c,
+    @"i64.store16" = 0x3d,
+    @"i64.store32" = 0x3e,
+    @"memory.size" = 0x3f,
+    @"memory.grow" = 0x40,
+    @"i32.const" = 0x41,
+    @"i64.const" = 0x42,
+    @"f32.const" = 0x43,
+    @"f64.const" = 0x44,
+    @"i32.eqz" = 0x45,
+    @"i32.eq" = 0x46,
+    @"i32.ne" = 0x47,
+    @"i32.lt_s" = 0x48,
+    @"i32.lt_u" = 0x49,
+    @"i32.gt_s" = 0x4a,
+    @"i32.gt_u" = 0x4b,
+    @"i32.le_s" = 0x4c,
+    @"i32.le_u" = 0x4d,
+    @"i32.ge_s" = 0x4e,
+    @"i32.ge_u" = 0x4f,
+    @"i64.eqz" = 0x50,
+    @"i64.eq" = 0x51,
+    @"i64.ne" = 0x52,
+    @"i64.lt_s" = 0x53,
+    @"i64.lt_u" = 0x54,
+    @"i64.gt_s" = 0x55,
+    @"i64.gt_u" = 0x56,
+    @"i64.le_s" = 0x57,
+    @"i64.le_u" = 0x58,
+    @"i64.ge_s" = 0x59,
+    @"i64.ge_u" = 0x5a,
+    @"f32.eq" = 0x5b,
+    @"f32.ne" = 0x5c,
+    @"f32.lt" = 0x5d,
+    @"f32.gt" = 0x5e,
+    @"f32.le" = 0x5f,
+    @"f32.ge" = 0x60,
+    @"f64.eq" = 0x61,
+    @"f64.ne" = 0x62,
+    @"f64.lt" = 0x63,
+    @"f64.gt" = 0x64,
+    @"f64.le" = 0x65,
+    @"f64.ge" = 0x66,
+    @"i32.clz" = 0x67,
+    @"i32.ctz" = 0x68,
+    @"i32.popcnt" = 0x69,
+    @"i32.add" = 0x6a,
+    @"i32.sub" = 0x6b,
+    @"i32.mul" = 0x6c,
+    @"i32.div_s" = 0x6d,
+    @"i32.div_u" = 0x6e,
+    @"i32.rem_s" = 0x6f,
+    @"i32.rem_u" = 0x70,
+    @"i32.and" = 0x71,
+    @"i32.or" = 0x72,
+    @"i32.xor" = 0x73,
+    @"i32.shl" = 0x74,
+    @"i32.shr_s" = 0x75,
+    @"i32.shr_u" = 0x76,
+    @"i32.rotl" = 0x77,
+    @"i32.rotr" = 0x78,
+    @"i64.clz" = 0x79,
+    @"i64.ctz" = 0x7a,
+    @"i64.popcnt" = 0x7b,
+    @"i64.add" = 0x7c,
+    @"i64.sub" = 0x7d,
+    @"i64.mul" = 0x7e,
+    @"i64.div_s" = 0x7f,
+    @"i64.div_u" = 0x80,
+    @"i64.rem_s" = 0x81,
+    @"i64.rem_u" = 0x82,
+    @"i64.and" = 0x83,
+    @"i64.or" = 0x84,
+    @"i64.xor" = 0x85,
+    @"i64.shl" = 0x86,
+    @"i64.shr_s" = 0x87,
+    @"i64.shr_u" = 0x88,
+    @"i64.rotl" = 0x89,
+    @"i64.rotr" = 0x8a,
+    @"f32.abs" = 0x8b,
+    @"f32.neg" = 0x8c,
+    @"f32.ceil" = 0x8d,
+    @"f32.floor" = 0x8e,
+    @"f32.trunc" = 0x8f,
+    @"f32.nearest" = 0x90,
+    @"f32.sqrt" = 0x91,
+    @"f32.add" = 0x92,
+    @"f32.sub" = 0x93,
+    @"f32.mul" = 0x94,
+    @"f32.div" = 0x95,
+    @"f32.min" = 0x96,
+    @"f32.max" = 0x97,
+    @"f32.copysign" = 0x98,
+    @"f64.abs" = 0x99,
+    @"f64.neg" = 0x9a,
+    @"f64.ceil" = 0x9b,
+    @"f64.floor" = 0x9c,
+    @"f64.trunc" = 0x9d,
+    @"f64.nearest" = 0x9e,
+    @"f64.sqrt" = 0x9f,
+    @"f64.add" = 0xa0,
+    @"f64.sub" = 0xa1,
+    @"f64.mul" = 0xa2,
+    @"f64.div" = 0xa3,
+    @"f64.min" = 0xa4,
+    @"f64.max" = 0xa5,
+    @"f64.copysign" = 0xa6,
+    @"i32.wrap_i64" = 0xa7,
+    @"i32.trunc_f32_s" = 0xa8,
+    @"i32.trunc_f32_u" = 0xa9,
+    @"i32.trunc_f64_s" = 0xaa,
+    @"i32.trunc_f64_u" = 0xab,
+    @"i64.extend_i32_s" = 0xac,
+    @"i64.extend_i32_u" = 0xad,
+    @"i64.trunc_f32_s" = 0xae,
+    @"i64.trunc_f32_u" = 0xaf,
+    @"i64.trunc_f64_s" = 0xb0,
+    @"i64.trunc_f64_u" = 0xb1,
+    @"f32.convert_i32_s" = 0xb2,
+    @"f32.convert_i32_u" = 0xb3,
+    @"f32.convert_i64_s" = 0xb4,
+    @"f32.convert_i64_u" = 0xb5,
+    @"f32.demote_f64" = 0xb6,
+    @"f64.convert_i32_s" = 0xb7,
+    @"f64.convert_i32_u" = 0xb8,
+    @"f64.convert_i64_s" = 0xb9,
+    @"f64.convert_i64_u" = 0xba,
+    @"f64.promote_f32" = 0xbb,
+    @"i32.reinterpret_f32" = 0xbc,
+    @"i64.reinterpret_f64" = 0xbd,
+    @"f32.reinterpret_i32" = 0xbe,
+    @"f64.reinterpret_i64" = 0xbf,
+    @"i32.extend8_s" = 0xc0,
+    @"i32.extend16_s" = 0xc1,
+    @"i64.extend8_s" = 0xc2,
+    @"i64.extend16_s" = 0xc3,
+    @"i64.extend32_s" = 0xc4,
+    trunc_sat = 0xfc,
 };

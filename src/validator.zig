@@ -18,45 +18,45 @@ pub const Validator = struct {
 
     pub fn validate(v: *Validator, opcode: Instruction) !void {
         switch (opcode) {
-            .Unreachable => try v.setUnreachable(),
-            .Nop => {},
-            .End => {
+            .@"unreachable" => try v.setUnreachable(),
+            .nop => {},
+            .end => {
                 const frame = try v.popControlFrame();
                 _ = try v.pushOperands(frame.end_types);
             },
-            .Drop => {
+            .drop => {
                 _ = try v.popOperand();
             },
-            .I32Add => {
+            .@"i32.add" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            .I64Add => {
+            .@"i64.add" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
-            .F32Add => {
+            .@"f32.add" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
-            .F64Add => {
+            .@"f64.add" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
             },
-            .I32Const => {
+            .@"i32.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            .I64Const => {
+            .@"i64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
-            .F32Const => {
+            .@"f32.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
-            .F64Const => {
+            .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
             },
             else => unreachable,
@@ -176,13 +176,13 @@ test "validate add i32" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
-    _ = try v.validate(.I32Const);
-    _ = try v.validate(.Drop);
-    _ = try v.validate(.I32Const);
-    _ = try v.validate(.I32Const);
-    _ = try v.validate(.I32Add);
-    _ = try v.validate(.End);
+    _ = try v.pushControlFrame(.block, in[0..], out[0..]);
+    _ = try v.validate(.@"i32.const");
+    _ = try v.validate(.drop);
+    _ = try v.validate(.@"i32.const");
+    _ = try v.validate(.@"i32.const");
+    _ = try v.validate(.@"i32.add");
+    _ = try v.validate(.end);
 }
 
 test "validate add i64" {
@@ -193,11 +193,11 @@ test "validate add i64" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I64} ** 1;
-    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
-    _ = try v.validate(.I64Const);
-    _ = try v.validate(.I64Const);
-    _ = try v.validate(.I64Add);
-    _ = try v.validate(.End);
+    _ = try v.pushControlFrame(.block, in[0..], out[0..]);
+    _ = try v.validate(.@"i64.const");
+    _ = try v.validate(.@"i64.const");
+    _ = try v.validate(.@"i64.add");
+    _ = try v.validate(.end);
 }
 
 test "validate add f32" {
@@ -208,11 +208,11 @@ test "validate add f32" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F32} ** 1;
-    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
-    _ = try v.validate(.F32Const);
-    _ = try v.validate(.F32Const);
-    _ = try v.validate(.F32Add);
-    _ = try v.validate(.End);
+    _ = try v.pushControlFrame(.block, in[0..], out[0..]);
+    _ = try v.validate(.@"f32.const");
+    _ = try v.validate(.@"f32.const");
+    _ = try v.validate(.@"f32.add");
+    _ = try v.validate(.end);
 }
 
 test "validate add f64" {
@@ -223,11 +223,11 @@ test "validate add f64" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F64} ** 1;
-    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
-    _ = try v.validate(.F64Const);
-    _ = try v.validate(.F64Const);
-    _ = try v.validate(.F64Add);
-    _ = try v.validate(.End);
+    _ = try v.pushControlFrame(.block, in[0..], out[0..]);
+    _ = try v.validate(.@"f64.const");
+    _ = try v.validate(.@"f64.const");
+    _ = try v.validate(.@"f64.add");
+    _ = try v.validate(.end);
 }
 
 test "validate: add error on mismatched types" {
@@ -238,10 +238,10 @@ test "validate: add error on mismatched types" {
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-    _ = try v.pushControlFrame(.Block, in[0..], out[0..]);
-    _ = try v.validate(.I64Const);
-    _ = try v.validate(.I32Const);
-    _ = v.validate(.I32Add) catch |err| {
+    _ = try v.pushControlFrame(.block, in[0..], out[0..]);
+    _ = try v.validate(.@"i64.const");
+    _ = try v.validate(.@"i32.const");
+    _ = v.validate(.@"i32.add") catch |err| {
         if (err == error.MismatchedTypes) return;
     };
     return error.ExpectedFailure;
