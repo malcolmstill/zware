@@ -696,8 +696,10 @@ test "module loading (simple add function)" {
     var inst = Instance.init(&arena.allocator, &store, module);
     try inst.instantiate();
 
-    const result = try inst.invoke("add", .{ @as(i32, 22), @as(i32, 23) }, i32, .{});
-    testing.expectEqual(@as(i32, 45), result);
+    var in = [2]u64{ 22, 23 };
+    var out = [1]u64{0};
+    try inst.invokeDynamic("add", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 45), @bitCast(i32, @truncate(u32, out[0])));
 }
 
 test "module loading (fib)" {
@@ -715,13 +717,34 @@ test "module loading (fib)" {
     var inst = Instance.init(&arena.allocator, &store, module);
     try inst.instantiate();
 
-    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 0)}, i32, .{}));
-    testing.expectEqual(@as(i32, 1), try inst.invoke("fib", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try inst.invoke("fib", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 3), try inst.invoke("fib", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 5), try inst.invoke("fib", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 8), try inst.invoke("fib", .{@as(i32, 5)}, i32, .{}));
-    testing.expectEqual(@as(i32, 13), try inst.invoke("fib", .{@as(i32, 6)}, i32, .{}));
+    var in = [1]u64{0};
+    var out = [1]u64{0};
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 1;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 2;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 3;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 4;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 5;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 6;
+    try inst.invokeDynamic("fib", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 13), @bitCast(i32, @truncate(u32, out[0])));
 }
 
 test "module loading (fact)" {
@@ -739,9 +762,24 @@ test "module loading (fact)" {
     var inst = Instance.init(&arena.allocator, &store, module);
     try inst.instantiate();
 
-    testing.expectEqual(@as(i32, 1), try inst.invoke("fact", .{@as(i32, 1)}, i32, .{}));
-    testing.expectEqual(@as(i32, 2), try inst.invoke("fact", .{@as(i32, 2)}, i32, .{}));
-    testing.expectEqual(@as(i32, 6), try inst.invoke("fact", .{@as(i32, 3)}, i32, .{}));
-    testing.expectEqual(@as(i32, 24), try inst.invoke("fact", .{@as(i32, 4)}, i32, .{}));
-    testing.expectEqual(@as(i32, 479001600), try inst.invoke("fact", .{@as(i32, 12)}, i32, .{}));
+    var in = [1]u64{1};
+    var out = [1]u64{0};
+    try inst.invokeDynamic("fact", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 2;
+    try inst.invokeDynamic("fact", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 3;
+    try inst.invokeDynamic("fact", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 6), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 4;
+    try inst.invokeDynamic("fact", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 24), @bitCast(i32, @truncate(u32, out[0])));
+
+    in[0] = 12;
+    try inst.invokeDynamic("fact", in[0..], out[0..], .{});
+    testing.expectEqual(@as(i32, 479001600), @bitCast(i32, @truncate(u32, out[0])));
 }
