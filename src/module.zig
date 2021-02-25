@@ -443,8 +443,16 @@ pub const Module = struct {
 
     fn decodeGlobal(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
-        const global_type = try rd.readEnum(ValueType, .Little);
-        const mutability = try rd.readEnum(Mutability, .Little);
+
+        const global_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        const mutability = rd.readEnum(Mutability, .Little) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
@@ -455,7 +463,11 @@ pub const Module = struct {
             // TODO: this isn't right
             var j: usize = 0;
             while (true) : (j += 1) {
-                const byte = try rd.readByte();
+                const byte = rd.readByte() catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
+
                 if (byte == @enumToInt(Instruction.End)) break;
             }
             code = self.module[offset .. offset + j + 1];
