@@ -1828,7 +1828,7 @@ test "simple interpret tests" {
 
     const code: [0]u8 = [_]u8{0} ** 0;
 
-    try i.interpret(.I32Add, code[0..]);
+    try i.interpret(.@"i32.add", code[0..]);
 
     testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }
