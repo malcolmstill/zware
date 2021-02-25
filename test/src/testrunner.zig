@@ -288,7 +288,7 @@ pub fn main() anyerror!void {
                         }
 
                         // Invoke the function
-                        instance.invokeDynamic(field, in, out, .{}) catch |err| {
+                        instance.invoke(field, in, out, .{}) catch |err| {
                             std.debug.warn("(result) invoke = {s}\n", .{field});
                             std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                             return err;
@@ -394,7 +394,7 @@ pub fn main() anyerror!void {
 
                         // Test the result
                         if (mem.eql(u8, trap, "integer divide by zero")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.DivisionByZero => continue,
@@ -403,7 +403,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "integer overflow")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.Overflow => continue,
@@ -412,7 +412,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.InvalidConversion => continue,
@@ -421,7 +421,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "out of bounds memory access")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.OutOfBoundsMemoryAccess => continue,
@@ -430,7 +430,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.IndirectCallTypeMismatch => continue,
@@ -439,7 +439,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.UndefinedElement => continue,
@@ -452,7 +452,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.UndefinedElement => continue,
@@ -466,7 +466,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "unreachable")) {
-                            if (instance.invokeDynamic(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |x| {
                                 return error.TestsuiteExpectedUnreachable;
                             } else |err| switch (err) {
                                 error.TrapUnreachable => continue,
@@ -712,7 +712,7 @@ pub fn main() anyerror!void {
                         }
 
                         // Invoke the function
-                        inst.invokeDynamic(field, in, out, .{}) catch |err| {
+                        inst.invoke(field, in, out, .{}) catch |err| {
                             std.debug.warn("(result) invoke = {s}\n", .{field});
                             std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
                             return err;

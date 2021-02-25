@@ -227,10 +227,10 @@ pub const Instance = struct {
         return try self.store.global(handle);
     }
 
-    // invokeDynamic
+    // invoke
     //
     // Similar to invoke, but without some type checking
-    pub fn invokeDynamic(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
+    pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
         // 1.
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
@@ -279,7 +279,7 @@ pub const Instance = struct {
                     .continuation = f.code[0..0],
                 });
 
-                // std.debug.warn("invokeDynamic[{}, {}] = {x}\n", .{ index, handle, f.code });
+                // std.debug.warn("invoke[{}, {}] = {x}\n", .{ index, handle, f.code });
                 // 8. Execute our function
                 try interp.invoke(f.code);
 
