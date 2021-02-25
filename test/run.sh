@@ -38,11 +38,17 @@ bin/testrunner call_indirect.json || exit 1
 wast2json test/testsuite/call.wast || exit 1
 bin/testrunner call.json || exit 1
 
+wast2json test/testsuite/comments.wast || exit 1
+bin/testrunner comments.json || exit 1
+
 wast2json test/testsuite/const.wast || exit 1
 bin/testrunner const.json || exit 1
 
 wast2json test/testsuite/conversions.wast || exit 1
 bin/testrunner conversions.json || exit 1
+
+wast2json test/testsuite/custom.wast || exit 1
+bin/testrunner custom.json || exit 1
 
 wast2json test/testsuite/data.wast || exit 1
 bin/testrunner data.json || exit 1
