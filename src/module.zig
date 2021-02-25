@@ -226,27 +226,39 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const module_name = self.module[rd.context.pos .. rd.context.pos + module_name_length];
+            const module_name_start = rd.context.pos;
+
+            rd.skipBytes(module_name_length, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
+            const module_name = self.module[module_name_start .. module_name_start + module_name_length];
             if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
-            try rd.skipBytes(module_name_length, .{});
 
             const name_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
-            const name = self.module[rd.context.pos .. rd.context.pos + name_length];
-            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
-            try rd.skipBytes(name_length, .{});
+            const name_start = rd.context.pos;
 
-            const desc_tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
+            rd.skipBytes(name_length, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
+            const name = self.module[name_start .. name_start + name_length];
+            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
+
+            const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
             const import_index = @truncate(u32, i);
-            _ = switch (desc_tag) {
+            _ = switch (tag) {
                 .Func => try self.decodeFunction(import_index),
                 .Table => try self.decodeTable(import_index),
                 .Mem => try self.decodeMemory(import_index),
@@ -256,7 +268,7 @@ pub const Module = struct {
             try self.imports.list.append(Import{
                 .module = module_name,
                 .name = name,
-                .desc_tag = desc_tag,
+                .desc_tag = tag,
             });
         }
 
