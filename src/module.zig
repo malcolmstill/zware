@@ -148,32 +148,51 @@ pub const Module = struct {
 
     fn decodeTypeSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.types.count = count;
 
         var f: usize = 0;
         while (f < count) : (f += 1) {
-            const tag: u8 = try rd.readByte();
+            const tag: u8 = rd.readByte() catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
-            const param_count = try leb.readULEB128(u32, rd);
+            const param_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
             const param_offset = self.value_types.list.items.len;
 
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    const v = try rd.readEnum(ValueType, .Little);
+                    const v = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
                     try self.value_types.list.append(v);
                 }
             }
 
-            const results_count = try leb.readULEB128(u32, rd);
+            const results_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
             const results_offset = self.value_types.list.items.len;
 
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    const r = try rd.readEnum(ValueType, .Little);
+                    const r = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
                     try self.value_types.list.append(r);
                 }
             }
