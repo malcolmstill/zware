@@ -461,6 +461,5 @@ pub const Instruction = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
-    // reserved
     trunc_sat = 0xfc,
 };
