@@ -328,7 +328,7 @@ pub const Instance = struct {
         switch (function) {
             .function => |f| {
                 if (f.params.len != in.len) return error.ParamCountMismatch;
-                if (f.results.len > 1) return error.OnlySingleReturnValueSupported;
+                if (f.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
