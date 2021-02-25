@@ -277,11 +277,6 @@ pub fn main() anyerror!void {
                             }
                         }
 
-                        if (expected.len > 1) {
-                            std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
-                            continue;
-                        }
-
                         // Allocate input parameters and output results
                         var in = try arena.allocator.alloc(u64, action.invoke.args.len);
                         var out = try arena.allocator.alloc(u64, expected.len);
@@ -706,11 +701,6 @@ pub fn main() anyerror!void {
                     .invoke => {
                         const field = action.invoke.field;
                         std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
-
-                        if (expected.len > 1) {
-                            std.debug.warn("SKIPPING MULTI-VALUE\n", .{});
-                            continue;
-                        }
 
                         // Allocate input parameters and output results
                         var in = try arena.allocator.alloc(u64, action.invoke.args.len);
