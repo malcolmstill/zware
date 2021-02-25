@@ -293,7 +293,11 @@ pub const Module = struct {
 
     fn decodeFunction(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
-        const type_index = try leb.readULEB128(u32, rd);
+        const type_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
         try self.functions.list.append(common.Function{
             .typeidx = type_index,
             .import = import,
