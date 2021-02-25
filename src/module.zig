@@ -460,7 +460,7 @@ pub const Module = struct {
         // If we're not importing the global we will expect
         // an expression
         if (import == null) {
-            // TODO: this isn't right
+            // TODO: this isn't right because I think we might have more than one end
             var j: usize = 0;
             while (true) : (j += 1) {
                 const byte = rd.readByte() catch |err| switch (err) {
