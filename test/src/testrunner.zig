@@ -294,7 +294,6 @@ pub fn main() anyerror!void {
                             return err;
                         };
 
-                        // Test the result
                         for (expected) |result, i| {
                             const value_type = try valueTypeFromString(result.@"type");
                             if (mem.startsWith(u8, result.value, "nan:")) {
@@ -318,7 +317,7 @@ pub fn main() anyerror!void {
                                 std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                                 std.debug.warn("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
                             }
-                            if (result_value != out[i]) {
+                            if (result_value != out[expected.len - i - 1]) {
                                 return error.TestsuiteTestFailureTrapResult;
                             }
                         }
