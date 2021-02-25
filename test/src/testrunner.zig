@@ -503,7 +503,6 @@ pub fn main() anyerror!void {
                         return error.TestsuiteExpectedUnexpectedEnd;
                     } else |err| switch (err) {
                         error.Overflow => continue,
-                        error.UnexpectedEndOfSection => continue,
                         error.UnexpectedEndOfInput => continue,
                         error.FunctionCodeSectionsInconsistent => continue,
                         error.EndOfStream => continue,
@@ -620,7 +619,6 @@ pub fn main() anyerror!void {
                         error.FunctionsCountMismatch => continue,
                         error.CodesCountMismatch => continue,
                         error.DatasCountMismatch => continue,
-                        error.UnexpectedEndOfSection => continue,
                         error.InvalidValue => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});

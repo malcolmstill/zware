@@ -488,19 +488,39 @@ pub const Module = struct {
 
     fn decodeExportSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.exports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const name_length = try leb.readULEB128(u32, rd);
-            if (rd.context.pos + name_length > self.module.len) return error.UnexpectedEndOfSection;
-            const name = self.module[rd.context.pos .. rd.context.pos + name_length];
-            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
-            try rd.skipBytes(name_length, .{});
+            const name_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
-            const tag = try rd.readEnum(Tag, .Little);
-            const index = try leb.readULEB128(u32, rd);
+            const name_start = rd.context.pos;
+
+            rd.skipBytes(name_length, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
+            const name = self.module[name_start .. name_start + name_length];
+            if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
+
+            const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
+            const index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             try self.exports.list.append(Export{
                 .name = name,
