@@ -98,8 +98,11 @@ bin/testrunner float_misc.json || exit 1
 wast2json test/testsuite/forward.wast || exit 1
 bin/testrunner forward.json || exit 1
 
-# wast2json test/testsuite/func.wast || exit 1
-# bin/testrunner func.json || exit 1
+wast2json test/testsuite/func_ptrs.wast || exit 1
+bin/testrunner func_ptrs.json || exit 1
+
+wast2json test/testsuite/func.wast || exit 1
+bin/testrunner func.json || exit 1
 
 wast2json test/testsuite/global.wast || exit 1
 bin/testrunner global.json || exit 1
