@@ -88,8 +88,8 @@ pub const Interpreter = struct {
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params_count;
-                    block_returns = func_type.results_count;
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
                 }
 
                 const end = try instruction.findEnd(false, code);
@@ -108,8 +108,8 @@ pub const Interpreter = struct {
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params_count;
-                    block_returns = func_type.results_count;
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
                 }
 
                 // For loop control flow, the continuation is the loop body (including
@@ -132,8 +132,8 @@ pub const Interpreter = struct {
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params_count;
-                    block_returns = func_type.results_count;
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
                 }
 
                 // For if control flow, the continuation for our label
@@ -305,7 +305,7 @@ pub const Interpreter = struct {
                         // Check that signatures match
                         // const func_type = module.types.list.items[function.typeidx];
                         const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                        if (!module.signaturesEqual2(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+                        if (!module.signaturesEqual(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                         // Make space for locals (again, params already on stack)
                         var j: usize = 0;
@@ -332,7 +332,7 @@ pub const Interpreter = struct {
                     },
                     .host_function => |host_func| {
                         const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                        if (!module.signaturesEqual2(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+                        if (!module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                         try host_func.func(self);
                     },

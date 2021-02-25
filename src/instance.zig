@@ -81,12 +81,12 @@ pub const Instance = struct {
                 const external_function = try self.getFunc(i);
                 switch (external_function) {
                     .function => |ef| {
-                        if (!self.module.signaturesEqual2(ef.params, ef.results, func_type)) {
+                        if (!self.module.signaturesEqual(ef.params, ef.results, func_type)) {
                             return error.ImportedFunctionTypeSignatureDoesNotMatch;
                         }
                     },
                     .host_function => |hef| {
-                        if (!self.module.signaturesEqual2(hef.params, hef.results, func_type)) {
+                        if (!self.module.signaturesEqual(hef.params, hef.results, func_type)) {
                             return error.ImportedFunctionTypeSignatureDoesNotMatch;
                         }
                     },
@@ -96,15 +96,13 @@ pub const Instance = struct {
                 const code = self.module.codes.list.items[i - imported_function_count];
                 const func = self.module.functions.list.items[i];
                 const func_type = self.module.types.list.items[func.typeidx];
-                const params = self.module.value_types.list.items[func_type.params_offset .. func_type.params_offset + func_type.params_count];
-                const results = self.module.value_types.list.items[func_type.results_offset .. func_type.results_offset + func_type.results_count];
                 const handle = try self.store.addFunction(Function{
                     .function = .{
                         .code = code.code,
                         .locals = code.locals,
                         .locals_count = code.locals_count,
-                        .params = params,
-                        .results = results,
+                        .params = func_type.params,
+                        .results = func_type.results,
                         .instance = self,
                     },
                 });
