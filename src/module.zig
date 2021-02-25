@@ -468,7 +468,7 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                if (byte == @enumToInt(Instruction.End)) break;
+                if (byte == @enumToInt(Instruction.end)) break;
             }
             code = self.module[offset .. offset + j + 1];
 
