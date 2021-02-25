@@ -535,7 +535,11 @@ pub const Module = struct {
     fn decodeStartSection(self: *Module) !usize {
         if (self.start != null) return error.MultipleStartSections;
         const rd = self.buf.reader();
-        const index = try leb.readULEB128(u32, rd);
+
+        const index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
 
         self.start = index;
 
