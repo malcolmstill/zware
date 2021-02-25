@@ -1121,9 +1121,8 @@ pub const Interpreter = struct {
                     return;
                 }
 
-                // There's surely a better way of doing this
                 if (c1 == 0.0 and c2 == 0.0) {
-                    if (@bitCast(u32, c1) == 0x80000000) {
+                    if (math.signbit(c1)) {
                         try self.pushOperand(f32, c1);
                     } else {
                         try self.pushOperand(f32, c2);
@@ -1145,9 +1144,8 @@ pub const Interpreter = struct {
                     return;
                 }
 
-                // There's surely a better way of doing this
                 if (c1 == 0.0 and c2 == 0.0) {
-                    if (@bitCast(u32, c1) == 0x80000000) {
+                    if (math.signbit(c1)) {
                         try self.pushOperand(f32, c2);
                     } else {
                         try self.pushOperand(f32, c1);
@@ -1238,9 +1236,8 @@ pub const Interpreter = struct {
                     return;
                 }
 
-                // There's surely a better way of doing this
                 if (c1 == 0.0 and c2 == 0.0) {
-                    if (@bitCast(u64, c1) == 0x8000000000000000) {
+                    if (math.signbit(c1)) {
                         try self.pushOperand(f64, c1);
                     } else {
                         try self.pushOperand(f64, c2);
@@ -1262,9 +1259,8 @@ pub const Interpreter = struct {
                     return;
                 }
 
-                // There's surely a better way of doing this
                 if (c1 == 0.0 and c2 == 0.0) {
-                    if (@bitCast(u64, c1) == 0x8000000000000000) {
+                    if (math.signbit(c1)) {
                         try self.pushOperand(f64, c2);
                     } else {
                         try self.pushOperand(f64, c1);
