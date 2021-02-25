@@ -212,22 +212,37 @@ pub const Module = struct {
 
     fn decodeImportSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
         self.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const module_name_length = try leb.readULEB128(u32, rd);
+            const module_name_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
             const module_name = self.module[rd.context.pos .. rd.context.pos + module_name_length];
             if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
             try rd.skipBytes(module_name_length, .{});
 
-            const name_length = try leb.readULEB128(u32, rd);
+            const name_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
+
             const name = self.module[rd.context.pos .. rd.context.pos + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
             try rd.skipBytes(name_length, .{});
 
-            const desc_tag = try rd.readEnum(Tag, .Little);
+            const desc_tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
             const import_index = @truncate(u32, i);
