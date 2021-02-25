@@ -385,10 +385,18 @@ pub const Module = struct {
 
     fn decodeMemory(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
-        const limit_type = try rd.readEnum(LimitType, .Little);
+
+        const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
         switch (limit_type) {
             .Min => {
-                const min = try leb.readULEB128(u32, rd);
+                const min = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
 
                 try self.memories.list.append(Limit{
                     .min = min,
@@ -397,8 +405,15 @@ pub const Module = struct {
                 });
             },
             .MinMax => {
-                const min = try leb.readULEB128(u32, rd);
-                const max = try leb.readULEB128(u32, rd);
+                const min = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
+
+                const max = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
 
                 try self.memories.list.append(Limit{
                     .min = min,
