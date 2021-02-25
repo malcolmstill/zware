@@ -667,30 +667,45 @@ pub const Module = struct {
     fn decodeDataSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
-        const count = try leb.readULEB128(u32, rd);
+
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.datas.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const mem_idx = try leb.readULEB128(u32, rd);
+            const mem_idx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             const expr_start = rd.context.pos;
-            // TODO: bounds check
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(true, expr);
 
-            try rd.skipBytes(meta.offset + 1, .{});
-            const data_length = try leb.readULEB128(u32, rd);
+            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
-            const offset = rd.context.pos;
+            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
-            try rd.skipBytes(data_length, .{});
+            const data_start = rd.context.pos;
+            rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             try self.datas.list.append(Segment{
                 .index = mem_idx,
                 .offset = self.module[expr_start .. expr_start + meta.offset + 1],
                 .count = data_length,
-                .data = self.module[offset..rd.context.pos],
+                .data = self.module[data_start..rd.context.pos],
             });
         }
 
