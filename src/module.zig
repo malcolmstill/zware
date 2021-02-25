@@ -548,28 +548,44 @@ pub const Module = struct {
 
     fn decodeElementSection(self: *Module, size: u32) !usize {
         const rd = self.buf.reader();
-        const count = try leb.readULEB128(u32, rd);
+
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.elements.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const table_index = try leb.readULEB128(u32, rd);
+            const table_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(true, expr);
 
-            try rd.skipBytes(meta.offset + 1, .{});
+            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             // Number of u32's in our data (not the length in bytes!)
-            const data_length = try leb.readULEB128(u32, rd);
+            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
             const data_start = rd.context.pos;
 
             var j: usize = 0;
             while (j < data_length) : (j += 1) {
                 // When we pre-process all this data we can just store this
                 // but for the moment we're just using it to skip over
-                _ = try leb.readULEB128(u32, rd);
+                _ = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
             }
 
             try self.elements.list.append(Segment{
