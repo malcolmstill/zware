@@ -601,19 +601,26 @@ pub const Module = struct {
 
     fn decodeCodeSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        var x = rd.context.pos;
-        const count = try leb.readULEB128(u32, rd);
+
+        const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
         self.codes.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const size = try leb.readULEB128(u32, rd); // includes bytes defining locals
+            const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            }; // includes bytes defining locals
+
             const offset = rd.context.pos;
 
-            // TODO: run some verification on the code
-            //      e.g. check last value is End instruction
-            var locals_and_code = self.module[offset .. offset + size];
-            const locals_definitions_count = try leb.readULEB128(u32, rd);
+            const locals_definitions_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             const locals_start = rd.context.pos;
 
@@ -621,16 +628,29 @@ pub const Module = struct {
             var j: usize = 0;
             var locals_count: usize = 0;
             while (j < locals_definitions_count) : (j += 1) {
-                const type_count = try leb.readULEB128(u32, rd);
-                const local_type = try rd.readByte();
+                const type_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
+
+                const local_type = rd.readByte() catch |err| switch (err) {
+                    error.EndOfStream => return error.UnexpectedEndOfInput,
+                    else => return err,
+                };
                 locals_count += type_count;
             }
             if (locals_count > 0x100000000) return error.TooManyLocals;
 
             const code_start = rd.context.pos;
+            const code_length = try math.sub(usize, size, code_start - offset);
+
+            rd.skipBytes(code_length, .{}) catch |err| switch (err) {
+                error.EndOfStream => return error.UnexpectedEndOfInput,
+                else => return err,
+            };
 
             const locals = self.module[locals_start..code_start];
-            const code = self.module[code_start .. offset + size];
+            const code = self.module[code_start..rd.context.pos];
 
             try decodeCode(code);
 
@@ -639,7 +659,6 @@ pub const Module = struct {
                 .locals_count = locals_count,
                 .code = code,
             });
-            try rd.skipBytes(code.len, .{});
         }
 
         return count;
