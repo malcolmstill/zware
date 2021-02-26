@@ -5,9 +5,12 @@ const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
+const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
 const Instruction = instruction.Instruction;
+const ParseIterator = instruction.ParseIterator;
+const InstructionIterator = instruction.InstructionIterator;
 const FuncType = common.FuncType;
 const ValueType = common.ValueType;
 const Import = common.Import;
@@ -42,6 +45,8 @@ pub const Module = struct {
     elements: Section(Segment),
     codes: Section(Code),
     datas: Section(Segment),
+    parsed_code: ArrayList(RuntimeInstruction),
+    br_table_indices: ArrayList(u32),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
@@ -60,6 +65,8 @@ pub const Module = struct {
             .elements = Section(Segment).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
+            .parsed_code = ArrayList(RuntimeInstruction).init(alloc),
+            .br_table_indices = ArrayList(u32).init(alloc),
         };
     }
 
@@ -661,6 +668,7 @@ pub const Module = struct {
             const locals = self.module[locals_start..code_start];
             const code = self.module[code_start..rd.context.pos];
 
+            const parsed_code = try self.parseCode(code);
             try decodeCode(code);
 
             try self.codes.list.append(Code{
@@ -767,6 +775,18 @@ pub const Module = struct {
         }
         // 2. Make sure we can find the end of every function
         _ = try instruction.findFunctionEnd(true, code);
+    }
+
+    pub fn parseCode(self: *Module, code: []const u8) !void {
+        var it = ParseIterator.init(self, code);
+        while (try it.next(true)) |meta| {
+            // try will fail on bad code
+            // std.debug.warn("meta = {}\n", .{meta});
+            try self.parsed_code.append(meta.runtime_instruction);
+        }
+        for (self.parsed_code.items) |pc| {
+            std.debug.warn("{}\n", .{pc});
+        }
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
