@@ -1,5 +1,6 @@
 const std = @import("std");
 const leb = std.leb;
+const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 
 pub const InstructionIterator = struct {
     function: []const u8,
@@ -17,32 +18,55 @@ pub const InstructionIterator = struct {
 
         // 1. Get the instruction we're going to return and increment code
         const instr = @intToEnum(Instruction, self.code[0]);
-        const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
+        const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
+        var rt_instr: RuntimeInstruction = undefined;
+        const parsed_code: []RuntimeInstruction = undefined;
+
         // 2. Find the start of the next instruction
-        // TODO: complete this for all opcodes
         switch (instr) {
-            .@"i32.const" => _ = try readILEB128Mem(i32, &self.code),
-            .@"i64.const" => _ = try readILEB128Mem(i64, &self.code),
-            .@"global.get",
-            .@"global.set",
-            .@"local.get",
-            .@"local.set",
-            .@"local.tee",
-            .@"if",
-            .call,
-            .br,
-            .br_if,
-            .block,
-            .loop,
-            => _ = try readULEB128Mem(u32, &self.code),
-            .@"memory.size", .@"memory.grow" => {
-                const reserved = try readByte(&self.code);
-                if (check) {
-                    if (reserved != 0) return error.MalformedMemoryReserved;
-                }
+            .@"unreachable" => rt_instr = RuntimeInstruction.@"unreachable",
+            .nop => rt_instr = RuntimeInstruction.nop,
+            .block => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .block = .{
+                        .block_type = block_type,
+                        .continuation = parsed_code, // TODO: fix this
+                    },
+                };
             },
+            .loop => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .loop = .{
+                        .block_type = block_type,
+                        .continuation = parsed_code, // TODO: fix this
+                    },
+                };
+            },
+            .@"if" => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"if" = .{
+                        .block_type = block_type,
+                        .continuation = parsed_code, // TODO: fix this
+                        .else_continuation = null,
+                    },
+                };
+            },
+            .@"else" => rt_instr = RuntimeInstruction.@"else",
+            .end => rt_instr = RuntimeInstruction.end,
+            .br => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .br = immediate_u32 };
+            },
+            .br_if => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .br_if = immediate_u32 };
+            },
+            // TODO: fix this
             .br_table => {
                 const label_count = try readULEB128Mem(u32, &self.code);
                 var j: usize = 0;
@@ -50,49 +74,444 @@ pub const InstructionIterator = struct {
                     const tmp_label = try readULEB128Mem(u32, &self.code);
                 }
             },
+            .@"return" => rt_instr = RuntimeInstruction.@"return",
+            .call => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .call = immediate_u32 };
+            },
             .call_indirect => {
-                _ = try readULEB128Mem(u32, &self.code);
-                const reserved = try readByte(&self.code);
+                const type_index = try readULEB128Mem(u32, &self.code);
+                const table_reserved = try readULEB128Mem(u32, &self.code);
                 if (check) {
-                    if (reserved != 0) return error.MalformedCallIndirectReserved;
+                    if (table_reserved != 0) return error.MalformedCallIndirectReserved;
                 }
+                rt_instr = RuntimeInstruction{
+                    .call_indirect = .{
+                        .@"type" = type_index,
+                        .table = table_reserved,
+                    },
+                };
             },
-            .@"i32.load",
-            .@"i64.load",
-            .@"f32.load",
-            .@"f64.load",
-            .@"i32.load8_s",
-            .@"i32.load8_u",
-            .@"i32.load16_s",
-            .@"i32.load16_u",
-            .@"i64.load8_s",
-            .@"i64.load8_u",
-            .@"i64.load16_s",
-            .@"i64.load16_u",
-            .@"i64.load32_s",
-            .@"i64.load32_u",
-            .@"i32.store",
-            .@"i64.store",
-            .@"f32.store",
-            .@"f64.store",
-            .@"i32.store8",
-            .@"i32.store16",
-            .@"i64.store8",
-            .@"i64.store16",
-            .@"i64.store32",
-            => {
-                _ = try readULEB128Mem(u32, &self.code);
-                _ = try readULEB128Mem(u32, &self.code);
+            .drop => rt_instr = RuntimeInstruction.drop,
+            .select => rt_instr = RuntimeInstruction.select,
+            .@"global.get" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"global.get" = immediate_u32 };
             },
-            .@"f32.const" => self.code = self.code[4..],
-            .@"f64.const" => self.code = self.code[8..],
-            .trunc_sat => self.code = self.code[1..],
-            else => {},
+            .@"global.set" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"global.set" = immediate_u32 };
+            },
+            .@"local.get" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"local.get" = immediate_u32 };
+            },
+            .@"local.set" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"local.set" = immediate_u32 };
+            },
+            .@"local.tee" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"local.tee" = immediate_u32 };
+            },
+            .@"memory.size" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                if (check) {
+                    if (immediate_u32 != 0) return error.MalformedMemoryReserved;
+                }
+                rt_instr = RuntimeInstruction{ .@"memory.size" = immediate_u32 };
+            },
+            .@"memory.grow" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                if (check) {
+                    if (immediate_u32 != 0) return error.MalformedMemoryReserved;
+                }
+                rt_instr = RuntimeInstruction{ .@"memory.grow" = immediate_u32 };
+            },
+            .@"i32.const" => {
+                const i32_const = try readILEB128Mem(i32, &self.code);
+                rt_instr = RuntimeInstruction{ .@"i32.const" = i32_const };
+            },
+            .@"i64.const" => {
+                const i64_const = try readILEB128Mem(i64, &self.code);
+                rt_instr = RuntimeInstruction{ .@"i64.const" = i64_const };
+            },
+            .@"f32.const" => {
+                const float_const = @bitCast(f32, try readU32(&self.code));
+                rt_instr = RuntimeInstruction{ .@"f32.const" = float_const };
+            },
+            .@"f64.const" => {
+                const float_const = @bitCast(f64, try readU64(&self.code));
+                rt_instr = RuntimeInstruction{ .@"f64.const" = float_const };
+            },
+            .@"i32.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f32.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"f32.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f64.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"f64.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load8_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.load8_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load8_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.load8_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load16_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.load16_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load16_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.load16_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load8_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load8_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load8_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load8_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load16_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load16_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load16_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load16_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load32_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load32_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load32_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.load32_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f32.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"f32.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f64.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"f64.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store8" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.store8" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store16" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i32.store16" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store8" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.store8" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store16" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.store16" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store32" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{
+                    .@"i64.store32" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.eqz" => rt_instr = RuntimeInstruction.@"i32.eqz",
+            .@"i32.eq" => rt_instr = RuntimeInstruction.@"i32.eq",
+            .@"i32.ne" => rt_instr = RuntimeInstruction.@"i32.ne",
+            .@"i32.lt_s" => rt_instr = RuntimeInstruction.@"i32.lt_s",
+            .@"i32.lt_u" => rt_instr = RuntimeInstruction.@"i32.lt_u",
+            .@"i32.gt_s" => rt_instr = RuntimeInstruction.@"i32.gt_s",
+            .@"i32.gt_u" => rt_instr = RuntimeInstruction.@"i32.gt_u",
+            .@"i32.le_s" => rt_instr = RuntimeInstruction.@"i32.le_s",
+            .@"i32.le_u" => rt_instr = RuntimeInstruction.@"i32.le_u",
+            .@"i32.ge_s" => rt_instr = RuntimeInstruction.@"i32.ge_s",
+            .@"i32.ge_u" => rt_instr = RuntimeInstruction.@"i32.ge_u",
+            .@"i64.eqz" => rt_instr = RuntimeInstruction.@"i64.eqz",
+            .@"i64.eq" => rt_instr = RuntimeInstruction.@"i64.eq",
+            .@"i64.ne" => rt_instr = RuntimeInstruction.@"i64.ne",
+            .@"i64.lt_s" => rt_instr = RuntimeInstruction.@"i64.lt_s",
+            .@"i64.lt_u" => rt_instr = RuntimeInstruction.@"i64.lt_u",
+            .@"i64.gt_s" => rt_instr = RuntimeInstruction.@"i64.gt_s",
+            .@"i64.gt_u" => rt_instr = RuntimeInstruction.@"i64.gt_u",
+            .@"i64.le_s" => rt_instr = RuntimeInstruction.@"i64.le_s",
+            .@"i64.le_u" => rt_instr = RuntimeInstruction.@"i64.le_u",
+            .@"i64.ge_s" => rt_instr = RuntimeInstruction.@"i64.ge_s",
+            .@"i64.ge_u" => rt_instr = RuntimeInstruction.@"i64.ge_u",
+            .@"f32.eq" => rt_instr = RuntimeInstruction.@"f32.eq",
+            .@"f32.ne" => rt_instr = RuntimeInstruction.@"f32.ne",
+            .@"f32.lt" => rt_instr = RuntimeInstruction.@"f32.lt",
+            .@"f32.gt" => rt_instr = RuntimeInstruction.@"f32.gt",
+            .@"f32.le" => rt_instr = RuntimeInstruction.@"f32.le",
+            .@"f32.ge" => rt_instr = RuntimeInstruction.@"f32.ge",
+            .@"f64.eq" => rt_instr = RuntimeInstruction.@"f64.eq",
+            .@"f64.ne" => rt_instr = RuntimeInstruction.@"f64.ne",
+            .@"f64.lt" => rt_instr = RuntimeInstruction.@"f64.lt",
+            .@"f64.gt" => rt_instr = RuntimeInstruction.@"f64.gt",
+            .@"f64.le" => rt_instr = RuntimeInstruction.@"f64.le",
+            .@"f64.ge" => rt_instr = RuntimeInstruction.@"f64.ge",
+            .@"i32.clz" => rt_instr = RuntimeInstruction.@"i32.clz",
+            .@"i32.ctz" => rt_instr = RuntimeInstruction.@"i32.ctz",
+            .@"i32.popcnt" => rt_instr = RuntimeInstruction.@"i32.popcnt",
+            .@"i32.add" => rt_instr = RuntimeInstruction.@"i32.add",
+            .@"i32.sub" => rt_instr = RuntimeInstruction.@"i32.sub",
+            .@"i32.mul" => rt_instr = RuntimeInstruction.@"i32.mul",
+            .@"i32.div_s" => rt_instr = RuntimeInstruction.@"i32.div_s",
+            .@"i32.div_u" => rt_instr = RuntimeInstruction.@"i32.div_u",
+            .@"i32.rem_s" => rt_instr = RuntimeInstruction.@"i32.rem_s",
+            .@"i32.rem_u" => rt_instr = RuntimeInstruction.@"i32.rem_u",
+            .@"i32.and" => rt_instr = RuntimeInstruction.@"i32.and",
+            .@"i32.or" => rt_instr = RuntimeInstruction.@"i32.or",
+            .@"i32.xor" => rt_instr = RuntimeInstruction.@"i32.xor",
+            .@"i32.shl" => rt_instr = RuntimeInstruction.@"i32.shl",
+            .@"i32.shr_s" => rt_instr = RuntimeInstruction.@"i32.shr_s",
+            .@"i32.shr_u" => rt_instr = RuntimeInstruction.@"i32.shr_u",
+            .@"i32.rotl" => rt_instr = RuntimeInstruction.@"i32.rotl",
+            .@"i32.rotr" => rt_instr = RuntimeInstruction.@"i32.rotr",
+            .@"i64.clz" => rt_instr = RuntimeInstruction.@"i64.clz",
+            .@"i64.ctz" => rt_instr = RuntimeInstruction.@"i64.ctz",
+            .@"i64.popcnt" => rt_instr = RuntimeInstruction.@"i64.popcnt",
+            .@"i64.add" => rt_instr = RuntimeInstruction.@"i64.add",
+            .@"i64.sub" => rt_instr = RuntimeInstruction.@"i64.sub",
+            .@"i64.mul" => rt_instr = RuntimeInstruction.@"i64.mul",
+            .@"i64.div_s" => rt_instr = RuntimeInstruction.@"i64.div_s",
+            .@"i64.div_u" => rt_instr = RuntimeInstruction.@"i64.div_u",
+            .@"i64.rem_s" => rt_instr = RuntimeInstruction.@"i64.rem_s",
+            .@"i64.rem_u" => rt_instr = RuntimeInstruction.@"i64.rem_u",
+            .@"i64.and" => rt_instr = RuntimeInstruction.@"i64.and",
+            .@"i64.or" => rt_instr = RuntimeInstruction.@"i64.or",
+            .@"i64.xor" => rt_instr = RuntimeInstruction.@"i64.xor",
+            .@"i64.shl" => rt_instr = RuntimeInstruction.@"i64.shl",
+            .@"i64.shr_s" => rt_instr = RuntimeInstruction.@"i64.shr_s",
+            .@"i64.shr_u" => rt_instr = RuntimeInstruction.@"i64.shr_u",
+            .@"i64.rotl" => rt_instr = RuntimeInstruction.@"i64.rotl",
+            .@"i64.rotr" => rt_instr = RuntimeInstruction.@"i64.rotr",
+            .@"f32.abs" => rt_instr = RuntimeInstruction.@"f32.abs",
+            .@"f32.neg" => rt_instr = RuntimeInstruction.@"f32.neg",
+            .@"f32.ceil" => rt_instr = RuntimeInstruction.@"f32.ceil",
+            .@"f32.floor" => rt_instr = RuntimeInstruction.@"f32.floor",
+            .@"f32.trunc" => rt_instr = RuntimeInstruction.@"f32.trunc",
+            .@"f32.nearest" => rt_instr = RuntimeInstruction.@"f32.nearest",
+            .@"f32.sqrt" => rt_instr = RuntimeInstruction.@"f32.sqrt",
+            .@"f32.add" => rt_instr = RuntimeInstruction.@"f32.add",
+            .@"f32.sub" => rt_instr = RuntimeInstruction.@"f32.sub",
+            .@"f32.mul" => rt_instr = RuntimeInstruction.@"f32.mul",
+            .@"f32.div" => rt_instr = RuntimeInstruction.@"f32.div",
+            .@"f32.min" => rt_instr = RuntimeInstruction.@"f32.min",
+            .@"f32.max" => rt_instr = RuntimeInstruction.@"f32.max",
+            .@"f32.copysign" => rt_instr = RuntimeInstruction.@"f32.copysign",
+            .@"f64.abs" => rt_instr = RuntimeInstruction.@"f64.abs",
+            .@"f64.neg" => rt_instr = RuntimeInstruction.@"f64.neg",
+            .@"f64.ceil" => rt_instr = RuntimeInstruction.@"f64.ceil",
+            .@"f64.floor" => rt_instr = RuntimeInstruction.@"f64.floor",
+            .@"f64.trunc" => rt_instr = RuntimeInstruction.@"f64.trunc",
+            .@"f64.nearest" => rt_instr = RuntimeInstruction.@"f64.nearest",
+            .@"f64.sqrt" => rt_instr = RuntimeInstruction.@"f64.sqrt",
+            .@"f64.add" => rt_instr = RuntimeInstruction.@"f64.add",
+            .@"f64.sub" => rt_instr = RuntimeInstruction.@"f64.sub",
+            .@"f64.mul" => rt_instr = RuntimeInstruction.@"f64.mul",
+            .@"f64.div" => rt_instr = RuntimeInstruction.@"f64.div",
+            .@"f64.min" => rt_instr = RuntimeInstruction.@"f64.min",
+            .@"f64.max" => rt_instr = RuntimeInstruction.@"f64.max",
+            .@"f64.copysign" => rt_instr = RuntimeInstruction.@"f64.copysign",
+            .@"i32.wrap_i64" => rt_instr = RuntimeInstruction.@"i32.wrap_i64",
+            .@"i32.trunc_f32_s" => rt_instr = RuntimeInstruction.@"i32.trunc_f32_s",
+            .@"i32.trunc_f32_u" => rt_instr = RuntimeInstruction.@"i32.trunc_f32_u",
+            .@"i32.trunc_f64_s" => rt_instr = RuntimeInstruction.@"i32.trunc_f64_s",
+            .@"i32.trunc_f64_u" => rt_instr = RuntimeInstruction.@"i32.trunc_f64_u",
+            .@"i64.extend_i32_s" => rt_instr = RuntimeInstruction.@"i64.extend_i32_s",
+            .@"i64.extend_i32_u" => rt_instr = RuntimeInstruction.@"i64.extend_i32_u",
+            .@"i64.trunc_f32_s" => rt_instr = RuntimeInstruction.@"i64.trunc_f32_s",
+            .@"i64.trunc_f32_u" => rt_instr = RuntimeInstruction.@"i64.trunc_f32_u",
+            .@"i64.trunc_f64_s" => rt_instr = RuntimeInstruction.@"i64.trunc_f64_s",
+            .@"i64.trunc_f64_u" => rt_instr = RuntimeInstruction.@"i64.trunc_f64_u",
+            .@"f32.convert_i32_s" => rt_instr = RuntimeInstruction.@"f32.convert_i32_s",
+            .@"f32.convert_i32_u" => rt_instr = RuntimeInstruction.@"f32.convert_i32_u",
+            .@"f32.convert_i64_s" => rt_instr = RuntimeInstruction.@"f32.convert_i64_s",
+            .@"f32.convert_i64_u" => rt_instr = RuntimeInstruction.@"f32.convert_i64_u",
+            .@"f32.demote_f64" => rt_instr = RuntimeInstruction.@"f32.demote_f64",
+            .@"f64.convert_i32_s" => rt_instr = RuntimeInstruction.@"f64.convert_i32_s",
+            .@"f64.convert_i32_u" => rt_instr = RuntimeInstruction.@"f64.convert_i32_u",
+            .@"f64.convert_i64_s" => rt_instr = RuntimeInstruction.@"f64.convert_i64_s",
+            .@"f64.convert_i64_u" => rt_instr = RuntimeInstruction.@"f64.convert_i64_u",
+            .@"f64.promote_f32" => rt_instr = RuntimeInstruction.@"f64.promote_f32",
+            .@"i32.reinterpret_f32" => rt_instr = RuntimeInstruction.@"i32.reinterpret_f32",
+            .@"i64.reinterpret_f64" => rt_instr = RuntimeInstruction.@"i64.reinterpret_f64",
+            .@"f32.reinterpret_i32" => rt_instr = RuntimeInstruction.@"f32.reinterpret_i32",
+            .@"f64.reinterpret_i64" => rt_instr = RuntimeInstruction.@"f64.reinterpret_i64",
+            .@"i32.extend8_s" => rt_instr = RuntimeInstruction.@"i32.extend8_s",
+            .@"i32.extend16_s" => rt_instr = RuntimeInstruction.@"i32.extend16_s",
+            .@"i64.extend8_s" => rt_instr = RuntimeInstruction.@"i64.extend8_s",
+            .@"i64.extend16_s" => rt_instr = RuntimeInstruction.@"i64.extend16_s",
+            .@"i64.extend32_s" => rt_instr = RuntimeInstruction.@"i64.extend32_s",
+            .trunc_sat => {
+                const version = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .trunc_sat = version };
+            },
         }
 
         return InstructionMeta{
             .instruction = instr,
-            .offset = offset,
+            .offset = instr_offset,
+            .runtime_instruction = rt_instr,
         };
     }
 };
@@ -193,6 +612,7 @@ pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
 const InstructionMeta = struct {
     instruction: Instruction,
     offset: usize, // offset from start of function
+    runtime_instruction: RuntimeInstruction,
 };
 
 const testing = std.testing;
