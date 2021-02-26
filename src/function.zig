@@ -8,6 +8,7 @@ pub const Function = union(enum) {
         locals: []const u8,
         locals_count: usize,
         code: []const u8,
+        // code: []const RuntimeInstruction,
         params: []const ValueType,
         results: []const ValueType,
         instance: *Instance,
@@ -19,12 +20,12 @@ pub const Function = union(enum) {
     },
 };
 
-const RuntimeInstruction = union(Instruction) {
+pub const RuntimeInstruction = union(Instruction) {
     @"unreachable": void,
     nop: void,
     block: struct {
         block_type: i32,
-        continuatin: []RuntimeInstruction,
+        continuation: []RuntimeInstruction,
     },
     loop: struct {
         block_type: i32,
@@ -36,7 +37,7 @@ const RuntimeInstruction = union(Instruction) {
         else_continuation: ?[]RuntimeInstruction,
     },
     @"else": void,
-    @"end": void,
+    end: void,
     br: u32,
     br_if: u32,
     br_table: struct {
