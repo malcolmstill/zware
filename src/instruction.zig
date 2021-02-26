@@ -1,5 +1,6 @@
 const std = @import("std");
 const leb = std.leb;
+const Module = @import("module.zig").Module;
 const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 
 pub const InstructionIterator = struct {
@@ -18,11 +19,110 @@ pub const InstructionIterator = struct {
 
         // 1. Get the instruction we're going to return and increment code
         const instr = @intToEnum(Instruction, self.code[0]);
+        const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
+        self.code = self.code[1..];
+
+        // 2. Find the start of the next instruction
+        // TODO: complete this for all opcodes
+        switch (instr) {
+            .@"i32.const" => _ = try readILEB128Mem(i32, &self.code),
+            .@"i64.const" => _ = try readILEB128Mem(i64, &self.code),
+            .@"global.get",
+            .@"global.set",
+            .@"local.get",
+            .@"local.set",
+            .@"local.tee",
+            .@"if",
+            .call,
+            .br,
+            .br_if,
+            .block,
+            .loop,
+            => _ = try readULEB128Mem(u32, &self.code),
+            .@"memory.size", .@"memory.grow" => {
+                const reserved = try readByte(&self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedMemoryReserved;
+                }
+            },
+            .br_table => {
+                const label_count = try readULEB128Mem(u32, &self.code);
+                var j: usize = 0;
+                while (j < label_count + 1) : (j += 1) {
+                    const tmp_label = try readULEB128Mem(u32, &self.code);
+                }
+            },
+            .call_indirect => {
+                _ = try readULEB128Mem(u32, &self.code);
+                const reserved = try readByte(&self.code);
+                if (check) {
+                    if (reserved != 0) return error.MalformedCallIndirectReserved;
+                }
+            },
+            .@"i32.load",
+            .@"i64.load",
+            .@"f32.load",
+            .@"f64.load",
+            .@"i32.load8_s",
+            .@"i32.load8_u",
+            .@"i32.load16_s",
+            .@"i32.load16_u",
+            .@"i64.load8_s",
+            .@"i64.load8_u",
+            .@"i64.load16_s",
+            .@"i64.load16_u",
+            .@"i64.load32_s",
+            .@"i64.load32_u",
+            .@"i32.store",
+            .@"i64.store",
+            .@"f32.store",
+            .@"f64.store",
+            .@"i32.store8",
+            .@"i32.store16",
+            .@"i64.store8",
+            .@"i64.store16",
+            .@"i64.store32",
+            => {
+                _ = try readULEB128Mem(u32, &self.code);
+                _ = try readULEB128Mem(u32, &self.code);
+            },
+            .@"f32.const" => self.code = self.code[4..],
+            .@"f64.const" => self.code = self.code[8..],
+            .trunc_sat => self.code = self.code[1..],
+            else => {},
+        }
+
+        return InstructionMeta{
+            .instruction = instr,
+            .offset = offset,
+        };
+    }
+};
+
+pub const ParseIterator = struct {
+    function: []const u8,
+    code: []const u8,
+    parsed: []RuntimeInstruction,
+    module: *Module,
+
+    pub fn init(module: *Module, function: []const u8) ParseIterator {
+        return ParseIterator{
+            .code = function,
+            .function = function,
+            .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
+            .module = module,
+        };
+    }
+
+    pub fn next(self: *ParseIterator, comptime check: bool) !?ParseMeta {
+        if (self.code.len == 0) return null;
+
+        // 1. Get the instruction we're going to return and increment code
+        const instr = @intToEnum(Instruction, self.code[0]);
         const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
         var rt_instr: RuntimeInstruction = undefined;
-        const parsed_code: []RuntimeInstruction = undefined;
 
         // 2. Find the start of the next instruction
         switch (instr) {
@@ -33,7 +133,7 @@ pub const InstructionIterator = struct {
                 rt_instr = RuntimeInstruction{
                     .block = .{
                         .block_type = block_type,
-                        .continuation = parsed_code, // TODO: fix this
+                        .continuation = self.parsed, // TODO: fix this
                     },
                 };
             },
@@ -42,7 +142,7 @@ pub const InstructionIterator = struct {
                 rt_instr = RuntimeInstruction{
                     .loop = .{
                         .block_type = block_type,
-                        .continuation = parsed_code, // TODO: fix this
+                        .continuation = self.parsed, // TODO: fix this
                     },
                 };
             },
@@ -51,7 +151,7 @@ pub const InstructionIterator = struct {
                 rt_instr = RuntimeInstruction{
                     .@"if" = .{
                         .block_type = block_type,
-                        .continuation = parsed_code, // TODO: fix this
+                        .continuation = self.parsed, // TODO: fix this
                         .else_continuation = null,
                     },
                 };
@@ -508,7 +608,7 @@ pub const InstructionIterator = struct {
             },
         }
 
-        return InstructionMeta{
+        return ParseMeta{
             .instruction = instr,
             .offset = instr_offset,
             .runtime_instruction = rt_instr,
@@ -610,6 +710,11 @@ pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
 }
 
 const InstructionMeta = struct {
+    instruction: Instruction,
+    offset: usize, // offset from start of function
+};
+
+const ParseMeta = struct {
     instruction: Instruction,
     offset: usize, // offset from start of function
     runtime_instruction: RuntimeInstruction,
