@@ -311,7 +311,7 @@ pub fn calculateContinuations(code: []RuntimeInstruction) !void {
 
                 if_instr.continuation = code[offset + end_offset + 1 ..];
                 if (optional_else_offset) |else_offset| {
-                    if_instr.else_continuation = code[offset + else_offset ..];
+                    if_instr.else_continuation = code[offset + else_offset + 1 ..];
                 }
             },
             .loop => |*loop_instr| {
