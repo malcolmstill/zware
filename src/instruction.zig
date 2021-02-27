@@ -114,7 +114,7 @@ pub const ParseIterator = struct {
         };
     }
 
-    pub fn next(self: *ParseIterator, comptime check: bool) !?ParseMeta {
+    pub fn next(self: *ParseIterator, comptime check: bool) !?RuntimeInstruction {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -638,11 +638,7 @@ pub const ParseIterator = struct {
             },
         }
 
-        return ParseMeta{
-            .instruction = instr,
-            .offset = instr_offset,
-            .runtime_instruction = rt_instr,
-        };
+        return rt_instr;
     }
 };
 

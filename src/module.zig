@@ -775,8 +775,8 @@ pub const Module = struct {
         const code_start = self.parsed_code.items.len;
 
         // 1. Make a first pass allocating all of our RuntimeInstructions
-        while (try it.next(true)) |meta| {
-            try self.parsed_code.append(meta.runtime_instruction);
+        while (try it.next(true)) |instr| {
+            try self.parsed_code.append(instr);
         }
 
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
