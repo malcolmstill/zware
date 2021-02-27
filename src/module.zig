@@ -20,7 +20,7 @@ const LimitType = common.LimitType;
 const Mutability = common.Mutability;
 const Global = common.Global;
 const Element = common.Element;
-const Code = common.Code;
+const Code = function.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
@@ -670,12 +670,11 @@ pub const Module = struct {
             const code = self.module[code_start..rd.context.pos];
 
             const parsed_code = try self.parseCode(code);
-            try decodeCode(code);
 
             try self.codes.list.append(Code{
                 .locals = locals,
                 .locals_count = locals_count,
-                .code = code,
+                .code = parsed_code,
             });
         }
 
