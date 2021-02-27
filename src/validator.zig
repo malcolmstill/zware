@@ -3,7 +3,7 @@ const mem = std.mem;
 const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
 const ValueType = @import("common.zig").ValueType;
-const Instruction = @import("instruction.zig").Instruction;
+const Opcode = @import("instruction.zig").Opcode;
 
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
@@ -16,7 +16,7 @@ pub const Validator = struct {
         };
     }
 
-    pub fn validate(v: *Validator, opcode: Instruction) !void {
+    pub fn validate(v: *Validator, opcode: Opcode) !void {
         switch (opcode) {
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
@@ -107,7 +107,7 @@ pub const Validator = struct {
         }
     }
 
-    fn pushControlFrame(v: *Validator, opcode: Instruction, in: []ValueType, out: []ValueType) !void {
+    fn pushControlFrame(v: *Validator, opcode: Opcode, in: []ValueType, out: []ValueType) !void {
         const frame = ControlFrame{
             .opcode = opcode,
             .start_types = in,
@@ -130,7 +130,7 @@ pub const Validator = struct {
     }
 
     fn labelTypes(v: *Validator, frame: ControlFrame) []ValueTypes {
-        if (frame.opcode == Instruction.Loop) {
+        if (frame.opcode == Opcode.loop) {
             return frame.start_types;
         } else {
             return frame.end_types;
@@ -160,7 +160,7 @@ const OperandStack = ArrayList(ValueTypeUnknown);
 const ControlStack = ArrayList(ControlFrame);
 
 const ControlFrame = struct {
-    opcode: Instruction = undefined,
+    opcode: Opcode = undefined,
     start_types: []const ValueType,
     end_types: []const ValueType,
     height: usize = 0,

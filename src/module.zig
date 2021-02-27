@@ -5,9 +5,12 @@ const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
+const Instruction = @import("function.zig").Instruction;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
-const Instruction = instruction.Instruction;
+const Opcode = instruction.Opcode;
+const ParseIterator = instruction.ParseIterator;
+const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
 const ValueType = common.ValueType;
 const Import = common.Import;
@@ -17,12 +20,13 @@ const LimitType = common.LimitType;
 const Mutability = common.Mutability;
 const Global = common.Global;
 const Element = common.Element;
-const Code = common.Code;
+const Code = function.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
+const function = @import("function.zig");
 
 pub const Module = struct {
     decoded: bool = false,
@@ -42,6 +46,8 @@ pub const Module = struct {
     elements: Section(Segment),
     codes: Section(Code),
     datas: Section(Segment),
+    parsed_code: ArrayList(Instruction),
+    br_table_indices: ArrayList(u32),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
@@ -60,6 +66,8 @@ pub const Module = struct {
             .elements = Section(Segment).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
+            .parsed_code = ArrayList(Instruction).init(alloc),
+            .br_table_indices = ArrayList(u32).init(alloc),
         };
     }
 
@@ -465,6 +473,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
+        var parsed_code: ?[]Instruction = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -477,11 +486,11 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                if (byte == @enumToInt(Instruction.end)) break;
+                if (byte == @enumToInt(Opcode.end)) break;
             }
             code = self.module[offset .. offset + j + 1];
 
-            try decodeCode(code orelse return error.ExpectedCode);
+            parsed_code = try self.parseCode(code orelse return error.NoCode);
         }
 
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
@@ -490,7 +499,7 @@ pub const Module = struct {
         try self.globals.list.append(Global{
             .value_type = global_type,
             .mutability = mutability,
-            .code = code,
+            .code = parsed_code,
             .import = import,
         });
     }
@@ -573,7 +582,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(true, expr);
+            const meta = try instruction.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -597,9 +606,11 @@ pub const Module = struct {
                 };
             }
 
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+
             try self.elements.list.append(Segment{
                 .index = table_index,
-                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
+                .offset = parsed_code,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -661,12 +672,12 @@ pub const Module = struct {
             const locals = self.module[locals_start..code_start];
             const code = self.module[code_start..rd.context.pos];
 
-            try decodeCode(code);
+            const parsed_code = try self.parseCode(code);
 
             try self.codes.list.append(Code{
                 .locals = locals,
                 .locals_count = locals_count,
-                .code = code,
+                .code = parsed_code,
             });
         }
 
@@ -692,7 +703,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(true, expr);
+            const meta = try instruction.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -710,9 +721,11 @@ pub const Module = struct {
                 else => return err,
             };
 
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+
             try self.datas.list.append(Segment{
                 .index = mem_idx,
-                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
+                .offset = parsed_code,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -757,16 +770,24 @@ pub const Module = struct {
         return 1;
     }
 
-    // decodeCode
-    //
-    // Checks the binary representation of a function is well formed
-    pub fn decodeCode(code: []const u8) !void {
-        var it = instruction.InstructionIterator.init(code);
-        while (try it.next(true)) |meta| {
-            // try will fail on bad code
+    pub fn parseCode(self: *Module, code: []const u8) ![]Instruction {
+        _ = try instruction.findFunctionEnd(code);
+
+        var it = ParseIterator.init(self, code);
+        const code_start = self.parsed_code.items.len;
+
+        // 1. Make a first pass allocating all of our Instructions
+        while (try it.next()) |instr| {
+            try self.parsed_code.append(instr);
         }
-        // 2. Make sure we can find the end of every function
-        _ = try instruction.findFunctionEnd(true, code);
+
+        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
+
+        // 2. Make a second pass where we fix up the continuations for
+        //    blocks, loops and ifs
+        try function.calculateContinuations(parsed_code);
+
+        return parsed_code;
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
@@ -886,7 +907,7 @@ test "module loading (fib)" {
     var in = [1]u64{0};
     var out = [1]u64{0};
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 0), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 1;
     try inst.invoke("fib", in[0..], out[0..], .{});
@@ -894,23 +915,23 @@ test "module loading (fib)" {
 
     in[0] = 2;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 3;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 4;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 5;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 6;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 13), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
 }
 
 test "module loading (fact)" {

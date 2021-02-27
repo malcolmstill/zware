@@ -1,27 +1,28 @@
 const std = @import("std");
 const leb = std.leb;
+const Module = @import("module.zig").Module;
+const Instruction = @import("function.zig").Instruction;
 
-pub const InstructionIterator = struct {
+pub const OpcodeIterator = struct {
     function: []const u8,
     code: []const u8,
 
-    pub fn init(function: []const u8) InstructionIterator {
-        return InstructionIterator{
+    pub fn init(function: []const u8) OpcodeIterator {
+        return OpcodeIterator{
             .code = function,
             .function = function,
         };
     }
 
-    pub fn next(self: *InstructionIterator, comptime check: bool) !?InstructionMeta {
+    pub fn next(self: *OpcodeIterator) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
-        const instr = @intToEnum(Instruction, self.code[0]);
+        const instr = @intToEnum(Opcode, self.code[0]);
         const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
         // 2. Find the start of the next instruction
-        // TODO: complete this for all opcodes
         switch (instr) {
             .@"i32.const" => _ = try readILEB128Mem(i32, &self.code),
             .@"i64.const" => _ = try readILEB128Mem(i64, &self.code),
@@ -39,9 +40,7 @@ pub const InstructionIterator = struct {
             => _ = try readULEB128Mem(u32, &self.code),
             .@"memory.size", .@"memory.grow" => {
                 const reserved = try readByte(&self.code);
-                if (check) {
-                    if (reserved != 0) return error.MalformedMemoryReserved;
-                }
+                if (reserved != 0) return error.MalformedMemoryReserved;
             },
             .br_table => {
                 const label_count = try readULEB128Mem(u32, &self.code);
@@ -53,9 +52,7 @@ pub const InstructionIterator = struct {
             .call_indirect => {
                 _ = try readULEB128Mem(u32, &self.code);
                 const reserved = try readByte(&self.code);
-                if (check) {
-                    if (reserved != 0) return error.MalformedCallIndirectReserved;
-                }
+                if (reserved != 0) return error.MalformedCallIndirectReserved;
             },
             .@"i32.load",
             .@"i64.load",
@@ -97,44 +94,561 @@ pub const InstructionIterator = struct {
     }
 };
 
-// findEnd
-//
-// Finds the end instruction corresponding to the instruction at index 0
-// of `code`. The offset is relative to `code[0]` (not the start of the function)
-//
-// Errors:
-// - CouldntFindEnd if we run out of elements in `code`
-// - NotBranchTarget if the instruction at `code[0]` isn't branch target
-pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
-    var i: usize = 1;
-    while (try it.next(check)) |meta| {
-        if (meta.offset == 0) {
-            switch (meta.instruction) {
-                .block, .loop, .@"if" => continue,
-                else => return error.NotBranchTarget,
-            }
-        }
+pub const ParseIterator = struct {
+    function: []const u8,
+    code: []const u8,
+    parsed: []Instruction,
+    module: *Module,
 
-        switch (meta.instruction) {
-            .block, .loop, .@"if" => i += 1,
-            .end => i -= 1,
-            else => {},
-        }
-        if (i == 0) return meta;
+    pub fn init(module: *Module, function: []const u8) ParseIterator {
+        return ParseIterator{
+            .code = function,
+            .function = function,
+            .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
+            .module = module,
+        };
     }
-    return error.CouldntFindEnd;
-}
 
-// findFunctionEnd
-//
-// Similar to findEnd. findEnd however, is looking to match the end of
-// block, loop or if. This function simply takes what should be a valid
-// function and attempts to find its end. If it can't, we have an error
-pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
+    pub fn next(self: *ParseIterator) !?Instruction {
+        if (self.code.len == 0) return null;
+
+        // 1. Get the instruction we're going to return and increment code
+        const instr = @intToEnum(Opcode, self.code[0]);
+        const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
+        self.code = self.code[1..];
+
+        var rt_instr: Instruction = undefined;
+
+        // 2. Find the start of the next instruction
+        switch (instr) {
+            .@"unreachable" => rt_instr = Instruction.@"unreachable",
+            .nop => rt_instr = Instruction.nop,
+            .block => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
+                rt_instr = Instruction{
+                    .block = .{
+                        .param_arity = block_params,
+                        .return_arity = block_returns,
+                        .continuation = self.parsed, // TODO: fix this
+                    },
+                };
+            },
+            .loop => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
+                rt_instr = Instruction{
+                    .loop = .{
+                        .param_arity = block_params,
+                        .return_arity = block_params,
+                        .continuation = self.parsed, // TODO: fix this
+                    },
+                };
+            },
+            .@"if" => {
+                const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
+                rt_instr = Instruction{
+                    .@"if" = .{
+                        .param_arity = block_params,
+                        .return_arity = block_returns,
+                        .continuation = self.parsed, // TODO: fix this
+                        .else_continuation = null,
+                    },
+                };
+            },
+            .@"else" => rt_instr = Instruction.@"else",
+            .end => rt_instr = Instruction.end,
+            .br => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .br = immediate_u32 };
+            },
+            .br_if => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .br_if = immediate_u32 };
+            },
+            .br_table => {
+                const label_start = self.module.br_table_indices.items.len;
+                const label_count = try readULEB128Mem(u32, &self.code);
+
+                var j: usize = 0;
+                while (j < label_count) : (j += 1) {
+                    const tmp_label = try readULEB128Mem(u32, &self.code);
+                    try self.module.br_table_indices.append(tmp_label);
+                }
+                const ln = try readULEB128Mem(u32, &self.code);
+
+                rt_instr = Instruction{
+                    .br_table = .{
+                        .ls = self.module.br_table_indices.items[label_start .. label_start + label_count],
+                        .ln = ln,
+                    },
+                };
+            },
+            .@"return" => rt_instr = Instruction.@"return",
+            .call => {
+                const function_index = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .call = function_index };
+            },
+            .call_indirect => {
+                const type_index = try readULEB128Mem(u32, &self.code);
+                const table_reserved = try readByte(&self.code);
+
+                if (table_reserved != 0) return error.MalformedCallIndirectReserved;
+
+                rt_instr = Instruction{
+                    .call_indirect = .{
+                        .@"type" = type_index,
+                        .table = table_reserved,
+                    },
+                };
+            },
+            .drop => rt_instr = Instruction.drop,
+            .select => rt_instr = Instruction.select,
+            .@"global.get" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .@"global.get" = immediate_u32 };
+            },
+            .@"global.set" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .@"global.set" = immediate_u32 };
+            },
+            .@"local.get" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .@"local.get" = immediate_u32 };
+            },
+            .@"local.set" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .@"local.set" = immediate_u32 };
+            },
+            .@"local.tee" => {
+                const immediate_u32 = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .@"local.tee" = immediate_u32 };
+            },
+            .@"memory.size" => {
+                const memory_index = try readByte(&self.code);
+                if (memory_index != 0) return error.MalformedMemoryReserved;
+
+                rt_instr = Instruction{ .@"memory.size" = memory_index };
+            },
+            .@"memory.grow" => {
+                const memory_index = try readByte(&self.code);
+                if (memory_index != 0) return error.MalformedMemoryReserved;
+
+                rt_instr = Instruction{ .@"memory.grow" = memory_index };
+            },
+            .@"i32.const" => {
+                const i32_const = try readILEB128Mem(i32, &self.code);
+                rt_instr = Instruction{ .@"i32.const" = i32_const };
+            },
+            .@"i64.const" => {
+                const i64_const = try readILEB128Mem(i64, &self.code);
+                rt_instr = Instruction{ .@"i64.const" = i64_const };
+            },
+            .@"f32.const" => {
+                const float_const = @bitCast(f32, try readU32(&self.code));
+                rt_instr = Instruction{ .@"f32.const" = float_const };
+            },
+            .@"f64.const" => {
+                const float_const = @bitCast(f64, try readU64(&self.code));
+                rt_instr = Instruction{ .@"f64.const" = float_const };
+            },
+            .@"i32.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f32.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"f32.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f64.load" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"f64.load" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load8_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.load8_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load8_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.load8_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load16_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.load16_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.load16_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.load16_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load8_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load8_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load8_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load8_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load16_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load16_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load16_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load16_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load32_s" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load32_s" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.load32_u" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.load32_u" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f32.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"f32.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"f64.store" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"f64.store" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store8" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.store8" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.store16" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i32.store16" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store8" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.store8" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store16" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.store16" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i64.store32" => {
+                const alignment = try readULEB128Mem(u32, &self.code);
+                const offset = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{
+                    .@"i64.store32" = .{
+                        .alignment = alignment,
+                        .offset = offset,
+                    },
+                };
+            },
+            .@"i32.eqz" => rt_instr = Instruction.@"i32.eqz",
+            .@"i32.eq" => rt_instr = Instruction.@"i32.eq",
+            .@"i32.ne" => rt_instr = Instruction.@"i32.ne",
+            .@"i32.lt_s" => rt_instr = Instruction.@"i32.lt_s",
+            .@"i32.lt_u" => rt_instr = Instruction.@"i32.lt_u",
+            .@"i32.gt_s" => rt_instr = Instruction.@"i32.gt_s",
+            .@"i32.gt_u" => rt_instr = Instruction.@"i32.gt_u",
+            .@"i32.le_s" => rt_instr = Instruction.@"i32.le_s",
+            .@"i32.le_u" => rt_instr = Instruction.@"i32.le_u",
+            .@"i32.ge_s" => rt_instr = Instruction.@"i32.ge_s",
+            .@"i32.ge_u" => rt_instr = Instruction.@"i32.ge_u",
+            .@"i64.eqz" => rt_instr = Instruction.@"i64.eqz",
+            .@"i64.eq" => rt_instr = Instruction.@"i64.eq",
+            .@"i64.ne" => rt_instr = Instruction.@"i64.ne",
+            .@"i64.lt_s" => rt_instr = Instruction.@"i64.lt_s",
+            .@"i64.lt_u" => rt_instr = Instruction.@"i64.lt_u",
+            .@"i64.gt_s" => rt_instr = Instruction.@"i64.gt_s",
+            .@"i64.gt_u" => rt_instr = Instruction.@"i64.gt_u",
+            .@"i64.le_s" => rt_instr = Instruction.@"i64.le_s",
+            .@"i64.le_u" => rt_instr = Instruction.@"i64.le_u",
+            .@"i64.ge_s" => rt_instr = Instruction.@"i64.ge_s",
+            .@"i64.ge_u" => rt_instr = Instruction.@"i64.ge_u",
+            .@"f32.eq" => rt_instr = Instruction.@"f32.eq",
+            .@"f32.ne" => rt_instr = Instruction.@"f32.ne",
+            .@"f32.lt" => rt_instr = Instruction.@"f32.lt",
+            .@"f32.gt" => rt_instr = Instruction.@"f32.gt",
+            .@"f32.le" => rt_instr = Instruction.@"f32.le",
+            .@"f32.ge" => rt_instr = Instruction.@"f32.ge",
+            .@"f64.eq" => rt_instr = Instruction.@"f64.eq",
+            .@"f64.ne" => rt_instr = Instruction.@"f64.ne",
+            .@"f64.lt" => rt_instr = Instruction.@"f64.lt",
+            .@"f64.gt" => rt_instr = Instruction.@"f64.gt",
+            .@"f64.le" => rt_instr = Instruction.@"f64.le",
+            .@"f64.ge" => rt_instr = Instruction.@"f64.ge",
+            .@"i32.clz" => rt_instr = Instruction.@"i32.clz",
+            .@"i32.ctz" => rt_instr = Instruction.@"i32.ctz",
+            .@"i32.popcnt" => rt_instr = Instruction.@"i32.popcnt",
+            .@"i32.add" => rt_instr = Instruction.@"i32.add",
+            .@"i32.sub" => rt_instr = Instruction.@"i32.sub",
+            .@"i32.mul" => rt_instr = Instruction.@"i32.mul",
+            .@"i32.div_s" => rt_instr = Instruction.@"i32.div_s",
+            .@"i32.div_u" => rt_instr = Instruction.@"i32.div_u",
+            .@"i32.rem_s" => rt_instr = Instruction.@"i32.rem_s",
+            .@"i32.rem_u" => rt_instr = Instruction.@"i32.rem_u",
+            .@"i32.and" => rt_instr = Instruction.@"i32.and",
+            .@"i32.or" => rt_instr = Instruction.@"i32.or",
+            .@"i32.xor" => rt_instr = Instruction.@"i32.xor",
+            .@"i32.shl" => rt_instr = Instruction.@"i32.shl",
+            .@"i32.shr_s" => rt_instr = Instruction.@"i32.shr_s",
+            .@"i32.shr_u" => rt_instr = Instruction.@"i32.shr_u",
+            .@"i32.rotl" => rt_instr = Instruction.@"i32.rotl",
+            .@"i32.rotr" => rt_instr = Instruction.@"i32.rotr",
+            .@"i64.clz" => rt_instr = Instruction.@"i64.clz",
+            .@"i64.ctz" => rt_instr = Instruction.@"i64.ctz",
+            .@"i64.popcnt" => rt_instr = Instruction.@"i64.popcnt",
+            .@"i64.add" => rt_instr = Instruction.@"i64.add",
+            .@"i64.sub" => rt_instr = Instruction.@"i64.sub",
+            .@"i64.mul" => rt_instr = Instruction.@"i64.mul",
+            .@"i64.div_s" => rt_instr = Instruction.@"i64.div_s",
+            .@"i64.div_u" => rt_instr = Instruction.@"i64.div_u",
+            .@"i64.rem_s" => rt_instr = Instruction.@"i64.rem_s",
+            .@"i64.rem_u" => rt_instr = Instruction.@"i64.rem_u",
+            .@"i64.and" => rt_instr = Instruction.@"i64.and",
+            .@"i64.or" => rt_instr = Instruction.@"i64.or",
+            .@"i64.xor" => rt_instr = Instruction.@"i64.xor",
+            .@"i64.shl" => rt_instr = Instruction.@"i64.shl",
+            .@"i64.shr_s" => rt_instr = Instruction.@"i64.shr_s",
+            .@"i64.shr_u" => rt_instr = Instruction.@"i64.shr_u",
+            .@"i64.rotl" => rt_instr = Instruction.@"i64.rotl",
+            .@"i64.rotr" => rt_instr = Instruction.@"i64.rotr",
+            .@"f32.abs" => rt_instr = Instruction.@"f32.abs",
+            .@"f32.neg" => rt_instr = Instruction.@"f32.neg",
+            .@"f32.ceil" => rt_instr = Instruction.@"f32.ceil",
+            .@"f32.floor" => rt_instr = Instruction.@"f32.floor",
+            .@"f32.trunc" => rt_instr = Instruction.@"f32.trunc",
+            .@"f32.nearest" => rt_instr = Instruction.@"f32.nearest",
+            .@"f32.sqrt" => rt_instr = Instruction.@"f32.sqrt",
+            .@"f32.add" => rt_instr = Instruction.@"f32.add",
+            .@"f32.sub" => rt_instr = Instruction.@"f32.sub",
+            .@"f32.mul" => rt_instr = Instruction.@"f32.mul",
+            .@"f32.div" => rt_instr = Instruction.@"f32.div",
+            .@"f32.min" => rt_instr = Instruction.@"f32.min",
+            .@"f32.max" => rt_instr = Instruction.@"f32.max",
+            .@"f32.copysign" => rt_instr = Instruction.@"f32.copysign",
+            .@"f64.abs" => rt_instr = Instruction.@"f64.abs",
+            .@"f64.neg" => rt_instr = Instruction.@"f64.neg",
+            .@"f64.ceil" => rt_instr = Instruction.@"f64.ceil",
+            .@"f64.floor" => rt_instr = Instruction.@"f64.floor",
+            .@"f64.trunc" => rt_instr = Instruction.@"f64.trunc",
+            .@"f64.nearest" => rt_instr = Instruction.@"f64.nearest",
+            .@"f64.sqrt" => rt_instr = Instruction.@"f64.sqrt",
+            .@"f64.add" => rt_instr = Instruction.@"f64.add",
+            .@"f64.sub" => rt_instr = Instruction.@"f64.sub",
+            .@"f64.mul" => rt_instr = Instruction.@"f64.mul",
+            .@"f64.div" => rt_instr = Instruction.@"f64.div",
+            .@"f64.min" => rt_instr = Instruction.@"f64.min",
+            .@"f64.max" => rt_instr = Instruction.@"f64.max",
+            .@"f64.copysign" => rt_instr = Instruction.@"f64.copysign",
+            .@"i32.wrap_i64" => rt_instr = Instruction.@"i32.wrap_i64",
+            .@"i32.trunc_f32_s" => rt_instr = Instruction.@"i32.trunc_f32_s",
+            .@"i32.trunc_f32_u" => rt_instr = Instruction.@"i32.trunc_f32_u",
+            .@"i32.trunc_f64_s" => rt_instr = Instruction.@"i32.trunc_f64_s",
+            .@"i32.trunc_f64_u" => rt_instr = Instruction.@"i32.trunc_f64_u",
+            .@"i64.extend_i32_s" => rt_instr = Instruction.@"i64.extend_i32_s",
+            .@"i64.extend_i32_u" => rt_instr = Instruction.@"i64.extend_i32_u",
+            .@"i64.trunc_f32_s" => rt_instr = Instruction.@"i64.trunc_f32_s",
+            .@"i64.trunc_f32_u" => rt_instr = Instruction.@"i64.trunc_f32_u",
+            .@"i64.trunc_f64_s" => rt_instr = Instruction.@"i64.trunc_f64_s",
+            .@"i64.trunc_f64_u" => rt_instr = Instruction.@"i64.trunc_f64_u",
+            .@"f32.convert_i32_s" => rt_instr = Instruction.@"f32.convert_i32_s",
+            .@"f32.convert_i32_u" => rt_instr = Instruction.@"f32.convert_i32_u",
+            .@"f32.convert_i64_s" => rt_instr = Instruction.@"f32.convert_i64_s",
+            .@"f32.convert_i64_u" => rt_instr = Instruction.@"f32.convert_i64_u",
+            .@"f32.demote_f64" => rt_instr = Instruction.@"f32.demote_f64",
+            .@"f64.convert_i32_s" => rt_instr = Instruction.@"f64.convert_i32_s",
+            .@"f64.convert_i32_u" => rt_instr = Instruction.@"f64.convert_i32_u",
+            .@"f64.convert_i64_s" => rt_instr = Instruction.@"f64.convert_i64_s",
+            .@"f64.convert_i64_u" => rt_instr = Instruction.@"f64.convert_i64_u",
+            .@"f64.promote_f32" => rt_instr = Instruction.@"f64.promote_f32",
+            .@"i32.reinterpret_f32" => rt_instr = Instruction.@"i32.reinterpret_f32",
+            .@"i64.reinterpret_f64" => rt_instr = Instruction.@"i64.reinterpret_f64",
+            .@"f32.reinterpret_i32" => rt_instr = Instruction.@"f32.reinterpret_i32",
+            .@"f64.reinterpret_i64" => rt_instr = Instruction.@"f64.reinterpret_i64",
+            .@"i32.extend8_s" => rt_instr = Instruction.@"i32.extend8_s",
+            .@"i32.extend16_s" => rt_instr = Instruction.@"i32.extend16_s",
+            .@"i64.extend8_s" => rt_instr = Instruction.@"i64.extend8_s",
+            .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
+            .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
+            .trunc_sat => {
+                const version = try readULEB128Mem(u32, &self.code);
+                rt_instr = Instruction{ .trunc_sat = version };
+            },
+        }
+
+        return rt_instr;
+    }
+};
+
+pub fn findFunctionEnd(code: []const u8) !InstructionMeta {
+    var it = OpcodeIterator.init(code);
     var i: usize = 1;
-    while (try it.next(check)) |meta| {
+    while (try it.next()) |meta| {
         if (meta.offset == 0 and meta.instruction == .end) return meta;
         if (meta.offset == 0) continue;
 
@@ -148,10 +662,10 @@ pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta 
     return error.CouldntFindEnd;
 }
 
-pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
+pub fn findExprEnd(code: []const u8) !InstructionMeta {
+    var it = OpcodeIterator.init(code);
     var i: usize = 1;
-    while (try it.next(check)) |meta| {
+    while (try it.next()) |meta| {
         switch (meta.instruction) {
             .end => i -= 1,
             else => {},
@@ -161,81 +675,12 @@ pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     return error.CouldntFindExprEnd;
 }
 
-// findElse
-//
-// Similar to findEnd but finds the match else branch, if
-// one exists
-pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
-    var it = InstructionIterator.init(code);
-    var i: usize = 1;
-    while (try it.next(check)) |meta| {
-        if (meta.offset == 0) {
-            switch (meta.instruction) {
-                .@"if" => continue,
-                else => return error.NotBranchTarget,
-            }
-        }
-
-        switch (meta.instruction) {
-            .@"if", .block => i += 1,
-            .@"else" => {
-                if (i < 2) i -= 1;
-            },
-            .end => i -= 1,
-            else => {},
-        }
-        if (i == 0 and meta.instruction == .end) return null;
-        if (i == 0) return meta;
-    }
-    return null;
-}
-
 const InstructionMeta = struct {
-    instruction: Instruction,
+    instruction: Opcode,
     offset: usize, // offset from start of function
 };
 
 const testing = std.testing;
-
-test "instruction iterator" {
-    const ArenaAllocator = std.heap.ArenaAllocator;
-    const Module = @import("module.zig").Module;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer _ = arena.deinit();
-
-    const bytes = @embedFile("../test/fib.wasm");
-
-    var module = Module.init(&arena.allocator, bytes);
-    try module.decode();
-
-    const func = module.codes.list.items[0];
-
-    var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 0 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 2 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.lt_s", .offset = 4 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"if", .offset = 5 });
-
-    const if_end_meta = try findEnd(false, func.code[5..]);
-    testing.expectEqual(if_end_meta.offset + 1, 6);
-
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 7 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 9 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 10 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 11 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 13 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 15 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 16 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 18 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 20 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 22 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 23 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.add", .offset = 25 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 26 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 27 });
-
-    testing.expectEqual(try it.next(false), null);
-}
 
 pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     var buf = std.io.fixedBufferStream(ptr.*);
@@ -283,7 +728,7 @@ pub fn readByte(ptr: *[]const u8) !u8 {
     return value;
 }
 
-pub const Instruction = enum(u8) {
+pub const Opcode = enum(u8) {
     @"unreachable" = 0x0,
     nop = 0x01,
     block = 0x02,

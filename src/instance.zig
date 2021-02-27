@@ -11,6 +11,7 @@ const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const ArrayList = std.ArrayList;
+const Instruction = @import("function.zig").Instruction;
 
 const InterpreterOptions = struct {
     operand_stack_size: comptime_int = 1024,
@@ -333,7 +334,7 @@ pub const Instance = struct {
         }
     }
 
-    pub fn invokeExpression(self: *Instance, expr: []const u8, comptime Result: type, comptime options: InterpreterOptions) !Result {
+    pub fn invokeExpression(self: *Instance, expr: []Instruction, comptime Result: type, comptime options: InterpreterOptions) !Result {
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
         var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
         var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;

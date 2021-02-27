@@ -1,4 +1,5 @@
-const Instruction = @import("instruction.zig").Instruction;
+const Opcode = @import("instruction.zig").Opcode;
+const Instruction = @import("function.zig").Instruction;
 
 pub const LimitType = enum(u8) {
     Min,
@@ -63,7 +64,7 @@ pub const Function = struct {
 pub const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
-    code: ?[]const u8,
+    code: ?[]Instruction,
     import: ?u32,
 };
 
@@ -82,21 +83,9 @@ pub const Export = struct {
 
 pub const Element = struct {};
 
-// Code
-//
-// - locals: slice of locals definition [count type]*
-// - locals_count: the total number of locals (this does not include params)
-// - code: []u8 byte slice of wasm code (index 0 is immediately after
-//         the locals definitions)
-pub const Code = struct {
-    locals: []const u8,
-    locals_count: usize,
-    code: []const u8,
-};
-
 pub const Segment = struct {
     index: u32,
-    offset: []const u8,
+    offset: []Instruction,
     count: u32, // Number of elements in data (useful when data is not []u8)
     data: []const u8,
 };
