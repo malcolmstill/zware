@@ -45,13 +45,13 @@ pub const InstructionIterator = struct {
                     if (reserved != 0) return error.MalformedMemoryReserved;
                 }
             },
-            .br_table => {
-                const label_count = try readULEB128Mem(u32, &self.code);
-                var j: usize = 0;
-                while (j < label_count + 1) : (j += 1) {
-                    const tmp_label = try readULEB128Mem(u32, &self.code);
-                }
-            },
+            // .br_table => {
+            //     const label_count = try readULEB128Mem(u32, &self.code);
+            //     var j: usize = 0;
+            //     while (j < label_count + 1) : (j += 1) {
+            //         const tmp_label = try readULEB128Mem(u32, &self.code);
+            //     }
+            // },
             .call_indirect => {
                 _ = try readULEB128Mem(u32, &self.code);
                 const reserved = try readByte(&self.code);
@@ -167,13 +167,13 @@ pub const ParseIterator = struct {
                 rt_instr = RuntimeInstruction{ .br_if = immediate_u32 };
             },
             // TODO: fix this
-            .br_table => {
-                const label_count = try readULEB128Mem(u32, &self.code);
-                var j: usize = 0;
-                while (j < label_count + 1) : (j += 1) {
-                    const tmp_label = try readULEB128Mem(u32, &self.code);
-                }
-            },
+            // .br_table => {
+            //     const label_count = try readULEB128Mem(u32, &self.code);
+            //     var j: usize = 0;
+            //     while (j < label_count + 1) : (j += 1) {
+            //         const tmp_label = try readULEB128Mem(u32, &self.code);
+            //     }
+            // },
             .@"return" => rt_instr = RuntimeInstruction.@"return",
             .call => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
@@ -818,7 +818,7 @@ pub const Instruction = enum(u8) {
     end = 0x0b,
     br = 0x0c,
     br_if = 0x0d,
-    br_table = 0x0e,
+    // br_table = 0x0e,
     @"return" = 0x0f,
     call = 0x10,
     call_indirect = 0x11,
