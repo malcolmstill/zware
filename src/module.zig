@@ -905,7 +905,7 @@ test "module loading (fib)" {
     var in = [1]u64{0};
     var out = [1]u64{0};
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 0), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 1;
     try inst.invoke("fib", in[0..], out[0..], .{});
@@ -913,23 +913,23 @@ test "module loading (fib)" {
 
     in[0] = 2;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 3;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 4;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 5;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
 
     in[0] = 6;
     try inst.invoke("fib", in[0..], out[0..], .{});
-    testing.expectEqual(@as(i32, 13), @bitCast(i32, @truncate(u32, out[0])));
+    testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
 }
 
 test "module loading (fact)" {
