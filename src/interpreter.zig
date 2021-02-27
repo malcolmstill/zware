@@ -30,7 +30,7 @@ pub const Interpreter = struct {
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
 
-    continuation: []const u8 = undefined,
+    continuation: []RuntimeInstruction = undefined,
     inst: *Instance = undefined,
 
     pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, inst: *Instance) Interpreter {
@@ -45,13 +45,13 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn invoke(self: *Interpreter, code: []const u8) !void {
+    pub fn invoke(self: *Interpreter, code: []RuntimeInstruction) !void {
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
             const instr_code = self.continuation;
             self.continuation = self.continuation[1..];
-            try self.interpret(@intToEnum(Instruction, instr), instr_code);
+            try self.interpret(instr, instr_code);
         }
     }
 
@@ -77,13 +77,13 @@ pub const Interpreter = struct {
         std.debug.warn("=====================================================\n", .{});
     }
 
-    pub fn interpret(self: *Interpreter, opcode: Instruction, code: []const u8) !void {
+    pub fn interpret(self: *Interpreter, opcode: RuntimeInstruction, code: []RuntimeInstruction) !void {
         // defer self.debug(opcode);
         switch (opcode) {
             .@"unreachable" => return error.TrapUnreachable,
             .nop => return,
-            .block => {
-                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+            .block => |blockcode| {
+                const block_type = blockcode.block_type;
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
@@ -93,17 +93,14 @@ pub const Interpreter = struct {
                     block_returns = func_type.results.len;
                 }
 
-                const end = try instruction.findEnd(false, code);
-                const continuation = code[end.offset + 1 ..];
-
                 try self.pushLabel(Label{
                     .return_arity = block_returns,
                     .op_stack_len = self.op_stack.len - block_params, // equivalent to pop and push
-                    .continuation = continuation,
+                    .continuation = blockcode.continuation,
                 });
             },
-            .loop => {
-                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
+            .loop => |loopcode| {
+                const block_type = loopcode.block_type;
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
@@ -115,19 +112,16 @@ pub const Interpreter = struct {
 
                 // For loop control flow, the continuation is the loop body (including
                 // the initiating loop instruction, as branch consumes the existing label)
-                const continuation = code[0..];
+                // const continuation = code[0..];
                 try self.pushLabel(Label{
                     // note that we use block_params rather than block_returns for return arity:
                     .return_arity = block_params,
                     .op_stack_len = self.op_stack.len - block_params,
-                    .continuation = continuation,
+                    .continuation = loopcode.continuation,
                 });
             },
-            .@"if" => {
-                // TODO: perform findEnd during parsing
-                const block_type = try instruction.readILEB128Mem(i32, &self.continuation);
-                const end = try instruction.findEnd(false, code);
-                const else_branch = try instruction.findElse(false, code);
+            .@"if" => |ifcode| {
+                const block_type = ifcode.block_type;
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
@@ -137,23 +131,19 @@ pub const Interpreter = struct {
                     block_returns = func_type.results.len;
                 }
 
-                // For if control flow, the continuation for our label
-                // is the continuation of code after end
-                const continuation = code[end.offset + 1 ..];
-
                 const condition = try self.popOperand(u32);
                 if (condition == 0) {
                     // We'll skip to end
-                    self.continuation = continuation;
+                    self.continuation = ifcode.continuation;
                     // unless we have an else branch
-                    if (else_branch) |eb| {
-                        self.continuation = code[eb.offset + 1 ..];
+                    if (ifcode.else_continuation) |else_continuation| {
+                        self.continuation = else_continuation;
 
                         // We are inside the if branch
                         try self.pushLabel(Label{
                             .return_arity = block_returns,
                             .op_stack_len = self.op_stack.len - block_params,
-                            .continuation = continuation,
+                            .continuation = ifcode.continuation,
                         });
                     }
                 } else {
@@ -161,7 +151,7 @@ pub const Interpreter = struct {
                     try self.pushLabel(Label{
                         .return_arity = block_returns,
                         .op_stack_len = self.op_stack.len - block_params,
-                        .continuation = continuation,
+                        .continuation = ifcode.continuation,
                     });
                 }
             },
@@ -194,36 +184,33 @@ pub const Interpreter = struct {
                     self.inst = frame.inst;
                 }
             },
-            .br => {
-                const target = try instruction.readULEB128Mem(u32, &self.continuation);
-                try self.branch(target);
+            .br => |brcode| {
+                try self.branch(brcode);
             },
-            .br_if => {
-                const target = try instruction.readULEB128Mem(u32, &self.continuation);
-
+            .br_if => |br_ifcode| {
                 const condition = try self.popOperand(u32);
                 if (condition == 0) return;
 
-                try self.branch(target);
+                try self.branch(br_ifcode);
             },
-            .br_table => {
-                const label_count = try instruction.readULEB128Mem(u32, &self.continuation);
-                const i = try self.popOperand(u32);
+            // .br_table => {
+            //     const label_count = try instruction.readULEB128Mem(u32, &self.continuation);
+            //     const i = try self.popOperand(u32);
 
-                var label: u32 = 0;
-                var j: usize = 0;
-                while (j < label_count) : (j += 1) {
-                    const tmp_label = try instruction.readULEB128Mem(u32, &self.continuation);
-                    if (j == i) label = tmp_label;
-                }
+            //     var label: u32 = 0;
+            //     var j: usize = 0;
+            //     while (j < label_count) : (j += 1) {
+            //         const tmp_label = try instruction.readULEB128Mem(u32, &self.continuation);
+            //         if (j == i) label = tmp_label;
+            //     }
 
-                const ln = try instruction.readULEB128Mem(u32, &self.continuation);
-                if (i >= j) {
-                    label = ln;
-                }
+            //     const ln = try instruction.readULEB128Mem(u32, &self.continuation);
+            //     if (i >= j) {
+            //         label = ln;
+            //     }
 
-                try self.branch(label);
-            },
+            //     try self.branch(label);
+            // },
             .@"return" => {
                 const frame = try self.peekNthFrame(0);
                 const n = frame.return_arity;
@@ -247,7 +234,7 @@ pub const Interpreter = struct {
                 _ = try self.popFrame();
                 self.inst = frame.inst;
             },
-            .call => {
+            .call => |function_index| {
                 // The spec says:
                 //      The call instruction invokes another function, consuming the necessary
                 //      arguments from the stack and returning the result values of the call.
@@ -255,7 +242,6 @@ pub const Interpreter = struct {
                 // TODO: we need to verify that we're okay to lookup this function.
                 //       we can (and probably should) do that at validation time.
                 const module = self.inst.module;
-                const function_index = try instruction.readULEB128Mem(usize, &self.continuation);
                 const function = try self.inst.getFunc(function_index);
 
                 switch (function) {
@@ -289,11 +275,11 @@ pub const Interpreter = struct {
                     },
                 }
             },
-            .call_indirect => {
+            .call_indirect => |call_indirect_instruction| {
                 var module = self.inst.module;
 
-                const op_func_type_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                const table_index = try instruction.readULEB128Mem(u32, &self.continuation);
+                const op_func_type_index = call_indirect_instruction.@"type";
+                const table_index = call_indirect_instruction.table;
 
                 // Read lookup index from stack
                 const lookup_index = try self.popOperand(u32);
@@ -352,337 +338,322 @@ pub const Interpreter = struct {
                     try self.pushAnyOperand(c2);
                 }
             },
-            .@"local.get" => {
+            .@"local.get" => |local_index| {
                 const frame = try self.peekNthFrame(0);
-                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const local_value: u64 = frame.locals[local_index];
                 try self.pushOperand(u64, local_value);
             },
-            .@"local.set" => {
+            .@"local.set" => |local_index| {
                 const value = try self.popAnyOperand();
                 const frame = try self.peekNthFrame(0);
-                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 frame.locals[local_index] = value;
             },
-            .@"local.tee" => {
+            .@"local.tee" => |local_index| {
                 const value = try self.popAnyOperand();
                 const frame = try self.peekNthFrame(0);
-                const local_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 // TODO: debug build only for return error:
                 if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
                 frame.locals[local_index] = value;
                 try self.pushAnyOperand(value);
             },
-            .@"global.get" => {
-                // 1. Get index of global from immediate
-                const global_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                // 2. Look up address of global using index. (we don't need to do this because the
-                //    the global_index is also the address of the actual global in our store)
-                // 3. Get value
+            .@"global.get" => |global_index| {
                 const global = try self.inst.getGlobal(global_index);
                 try self.pushAnyOperand(global.value);
             },
-            .@"global.set" => {
-                // 1. Get index of global from immediate
-                const global_index = try instruction.readULEB128Mem(u32, &self.continuation);
-                // 2. Look up address of global using index. (we don't need to do this because the
-                //    the global_index is also the address of the actual global in our store)
-                // 3. Get value
+            .@"global.set" => |global_index| {
                 const value = try self.popAnyOperand();
                 const global = try self.inst.getGlobal(global_index);
                 global.value = value;
             },
-            .@"i32.load" => {
+            .@"i32.load" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u32, offset, address);
                 try self.pushOperand(u32, value);
             },
-            .@"i64.load" => {
+            .@"i64.load" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u64, offset, address);
                 try self.pushOperand(u64, value);
             },
-            .@"f32.load" => {
+            .@"f32.load" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(f32, offset, address);
                 try self.pushOperand(f32, value);
             },
-            .@"f64.load" => {
+            .@"f64.load" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(f64, offset, address);
                 try self.pushOperand(f64, value);
             },
-            .@"i32.load8_s" => {
+            .@"i32.load8_s" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(i8, offset, address);
                 try self.pushOperand(i32, value);
             },
-            .@"i32.load8_u" => {
+            .@"i32.load8_u" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u8, offset, address);
                 try self.pushOperand(u32, value);
             },
-            .@"i32.load16_s" => {
+            .@"i32.load16_s" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(i16, offset, address);
                 try self.pushOperand(i32, value);
             },
-            .@"i32.load16_u" => {
+            .@"i32.load16_u" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u16, offset, address);
                 try self.pushOperand(u32, value);
             },
-            .@"i64.load8_s" => {
+            .@"i64.load8_s" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(i8, offset, address);
                 try self.pushOperand(i64, value);
             },
-            .@"i64.load8_u" => {
+            .@"i64.load8_u" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u8, offset, address);
                 try self.pushOperand(u64, value);
             },
-            .@"i64.load16_s" => {
+            .@"i64.load16_s" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(i16, offset, address);
                 try self.pushOperand(i64, value);
             },
-            .@"i64.load16_u" => {
+            .@"i64.load16_u" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u16, offset, address);
                 try self.pushOperand(u64, value);
             },
-            .@"i64.load32_s" => {
+            .@"i64.load32_s" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(i32, offset, address);
                 try self.pushOperand(i64, value);
             },
-            .@"i64.load32_u" => {
+            .@"i64.load32_u" => |load_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = load_data.alignment;
+                const offset = load_data.offset;
 
                 const address = try self.popOperand(u32);
 
                 const value = try memory.read(u32, offset, address);
                 try self.pushOperand(u64, value);
             },
-            .@"i32.store" => {
+            .@"i32.store" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = try self.popOperand(u32);
                 const address = try self.popOperand(u32);
 
                 try memory.write(u32, offset, address, value);
             },
-            .@"i64.store" => {
+            .@"i64.store" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = try self.popOperand(u64);
                 const address = try self.popOperand(u32);
 
                 try memory.write(u64, offset, address, value);
             },
-            .@"f32.store" => {
+            .@"f32.store" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = try self.popOperand(f32);
                 const address = try self.popOperand(u32);
 
                 try memory.write(f32, offset, address, value);
             },
-            .@"f64.store" => {
+            .@"f64.store" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = try self.popOperand(f64);
                 const address = try self.popOperand(u32);
 
                 try memory.write(f64, offset, address, value);
             },
-            .@"i32.store8" => {
+            .@"i32.store8" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = @truncate(u8, try self.popOperand(u32));
                 const address = try self.popOperand(u32);
 
                 try memory.write(u8, offset, address, value);
             },
-            .@"i32.store16" => {
+            .@"i32.store16" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = @truncate(u16, try self.popOperand(u32));
                 const address = try self.popOperand(u32);
 
                 try memory.write(u16, offset, address, value);
             },
-            .@"i64.store8" => {
+            .@"i64.store8" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = @truncate(u8, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
                 try memory.write(u8, offset, address, value);
             },
-            .@"i64.store16" => {
+            .@"i64.store16" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = @truncate(u16, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
                 try memory.write(u16, offset, address, value);
             },
-            .@"i64.store32" => {
+            .@"i64.store32" => |store_data| {
                 const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
-                const alignment = try instruction.readULEB128Mem(u32, &self.continuation);
-                const offset = try instruction.readULEB128Mem(u32, &self.continuation);
+                const alignment = store_data.alignment;
+                const offset = store_data.offset;
 
                 const value = @truncate(u32, try self.popOperand(u64));
                 const address = try self.popOperand(u32);
 
                 try memory.write(u32, offset, address, value);
             },
-            .@"memory.size" => {
+            .@"memory.size" => |memory_index| {
                 const frame = try self.peekNthFrame(0);
 
-                const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const memory = try self.inst.getMemory(memory_index);
 
                 try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
             },
-            .@"memory.grow" => {
+            .@"memory.grow" => |memory_index| {
                 const frame = try self.peekNthFrame(0);
 
-                const memory_index = try instruction.readULEB128Mem(u32, &self.continuation);
                 const memory = try self.inst.getMemory(memory_index);
 
                 const num_pages = try self.popOperand(u32);
@@ -692,21 +663,17 @@ pub const Interpreter = struct {
                     try self.pushOperand(i32, @as(i32, -1));
                 }
             },
-            .@"i32.const" => {
-                const x = try instruction.readILEB128Mem(i32, &self.continuation);
+            .@"i32.const" => |x| {
                 try self.pushOperand(i32, x);
             },
-            .@"i64.const" => {
-                const x = try instruction.readILEB128Mem(i64, &self.continuation);
+            .@"i64.const" => |x| {
                 try self.pushOperand(i64, x);
             },
-            .@"f32.const" => {
-                const x = try instruction.readU32(&self.continuation);
-                try self.pushOperand(f32, @bitCast(f32, x));
+            .@"f32.const" => |f| {
+                try self.pushOperand(f32, @bitCast(f32, f));
             },
-            .@"f64.const" => {
-                const x = try instruction.readU64(&self.continuation);
-                try self.pushOperand(f64, @bitCast(f64, x));
+            .@"f64.const" => |f| {
+                try self.pushOperand(f64, @bitCast(f64, f));
             },
             .@"i32.eq" => {
                 const c2 = try self.popOperand(u32);
@@ -1448,8 +1415,7 @@ pub const Interpreter = struct {
                 const c1 = try self.popOperand(i64);
                 try self.pushOperand(i64, @truncate(i32, c1));
             },
-            .trunc_sat => {
-                const trunc_type = try instruction.readULEB128Mem(u32, &self.continuation);
+            .trunc_sat => |trunc_type| {
                 switch (trunc_type) {
                     0 => {
                         const c1 = try self.popOperand(f32);
