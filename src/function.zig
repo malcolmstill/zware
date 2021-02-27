@@ -9,7 +9,6 @@ pub const Function = union(enum) {
         locals: []const u8,
         locals_count: usize,
         code: []RuntimeInstruction,
-        // code: []const RuntimeInstruction,
         params: []const ValueType,
         results: []const ValueType,
         instance: *Instance,

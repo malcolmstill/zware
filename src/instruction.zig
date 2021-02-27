@@ -14,7 +14,7 @@ pub const InstructionIterator = struct {
         };
     }
 
-    pub fn next(self: *InstructionIterator, comptime check: bool) !?InstructionMeta {
+    pub fn next(self: *InstructionIterator) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -23,7 +23,6 @@ pub const InstructionIterator = struct {
         self.code = self.code[1..];
 
         // 2. Find the start of the next instruction
-        // TODO: complete this for all opcodes
         switch (instr) {
             .@"i32.const" => _ = try readILEB128Mem(i32, &self.code),
             .@"i64.const" => _ = try readILEB128Mem(i64, &self.code),
@@ -110,7 +109,7 @@ pub const ParseIterator = struct {
         };
     }
 
-    pub fn next(self: *ParseIterator, comptime check: bool) !?RuntimeInstruction {
+    pub fn next(self: *ParseIterator) !?RuntimeInstruction {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -212,15 +211,15 @@ pub const ParseIterator = struct {
             },
             .@"return" => rt_instr = RuntimeInstruction.@"return",
             .call => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .call = immediate_u32 };
+                const function_index = try readULEB128Mem(u32, &self.code);
+                rt_instr = RuntimeInstruction{ .call = function_index };
             },
             .call_indirect => {
                 const type_index = try readULEB128Mem(u32, &self.code);
-                const table_reserved = try readULEB128Mem(u32, &self.code);
-                if (check) {
-                    if (table_reserved != 0) return error.MalformedCallIndirectReserved;
-                }
+                const table_reserved = try readByte(&self.code);
+
+                if (table_reserved != 0) return error.MalformedCallIndirectReserved;
+
                 rt_instr = RuntimeInstruction{
                     .call_indirect = .{
                         .@"type" = type_index,
@@ -251,18 +250,16 @@ pub const ParseIterator = struct {
                 rt_instr = RuntimeInstruction{ .@"local.tee" = immediate_u32 };
             },
             .@"memory.size" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                if (check) {
-                    if (immediate_u32 != 0) return error.MalformedMemoryReserved;
-                }
-                rt_instr = RuntimeInstruction{ .@"memory.size" = immediate_u32 };
+                const memory_index = try readByte(&self.code);
+                if (memory_index != 0) return error.MalformedMemoryReserved;
+
+                rt_instr = RuntimeInstruction{ .@"memory.size" = memory_index };
             },
             .@"memory.grow" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                if (check) {
-                    if (immediate_u32 != 0) return error.MalformedMemoryReserved;
-                }
-                rt_instr = RuntimeInstruction{ .@"memory.grow" = immediate_u32 };
+                const memory_index = try readByte(&self.code);
+                if (memory_index != 0) return error.MalformedMemoryReserved;
+
+                rt_instr = RuntimeInstruction{ .@"memory.grow" = memory_index };
             },
             .@"i32.const" => {
                 const i32_const = try readILEB128Mem(i32, &self.code);
