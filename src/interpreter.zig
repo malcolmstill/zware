@@ -1756,7 +1756,7 @@ test "simple interpret tests" {
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
 
-    const code: [0]u8 = [_]u8{0} ** 0;
+    var code: [0]RuntimeInstruction = [_]RuntimeInstruction{} ** 0;
 
     try i.interpret(.@"i32.add", code[0..]);
 
