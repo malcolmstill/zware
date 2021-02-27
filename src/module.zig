@@ -797,10 +797,6 @@ pub const Module = struct {
         //    blocks, loops and ifs
         try function.calculateContinuations(parsed_code);
 
-        // 3. Print
-        for (parsed_code) |pc| {
-            std.debug.warn("{}\n", .{pc});
-        }
         return parsed_code;
     }
 
