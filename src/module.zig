@@ -26,6 +26,7 @@ const Tag = common.Tag;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
+const function = @import("function.zig");
 
 pub const Module = struct {
     decoded: bool = false,
@@ -777,16 +778,26 @@ pub const Module = struct {
         _ = try instruction.findFunctionEnd(true, code);
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) !void {
+    pub fn parseCode(self: *Module, code: []const u8) ![]RuntimeInstruction {
         var it = ParseIterator.init(self, code);
+        const code_start = self.parsed_code.items.len;
+
+        // 1. Make a first pass allocating all of our RuntimeInstructions
         while (try it.next(true)) |meta| {
-            // try will fail on bad code
-            // std.debug.warn("meta = {}\n", .{meta});
             try self.parsed_code.append(meta.runtime_instruction);
         }
-        for (self.parsed_code.items) |pc| {
+
+        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
+
+        // 2. Make a second pass where we fix up the continuations for
+        //    blocks, loops and ifs
+        try function.calculateContinuations(parsed_code);
+
+        // 3. Print
+        for (parsed_code) |pc| {
             std.debug.warn("{}\n", .{pc});
         }
+        return parsed_code;
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
