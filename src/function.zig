@@ -296,16 +296,13 @@ pub const RuntimeInstruction = union(Instruction) {
 pub fn calculateContinuations(code: []RuntimeInstruction) !void {
     var offset: usize = 0;
     for (code) |*opcode| {
-        std.debug.warn("opcode = {}\n", .{opcode});
         switch (opcode.*) {
             .block => |*block_instr| {
-                std.debug.warn("code = {any}\n", .{code[offset..]});
                 const end_offset = try findEnd(code[offset..]);
 
                 block_instr.continuation = code[offset + end_offset + 1 ..];
             },
             .@"if" => |*if_instr| {
-                std.debug.warn("code = {any}\n", .{code[offset..]});
                 const end_offset = try findEnd(code[offset..]);
                 const optional_else_offset = try findElse(code[offset..]);
 
@@ -330,7 +327,6 @@ pub fn findEnd(code: []RuntimeInstruction) !usize {
     var i: usize = 1;
     for (code) |opcode| {
         defer offset += 1;
-        std.debug.warn("opcode = {any}, offset = {}\n", .{ opcode, offset });
         if (offset == 0) {
             switch (opcode) {
                 .block, .loop, .@"if" => continue,
@@ -344,8 +340,6 @@ pub fn findEnd(code: []RuntimeInstruction) !usize {
             else => {},
         }
         if (i == 0) return offset;
-
-        // offset += 1;
     }
     return error.CouldntFindEnd;
 }
