@@ -582,7 +582,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(true, expr);
+            const meta = try instruction.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -703,7 +703,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(true, expr);
+            const meta = try instruction.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -771,11 +771,13 @@ pub const Module = struct {
     }
 
     pub fn parseCode(self: *Module, code: []const u8) ![]RuntimeInstruction {
+        _ = try instruction.findFunctionEnd(code);
+
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
 
         // 1. Make a first pass allocating all of our RuntimeInstructions
-        while (try it.next(true)) |instr| {
+        while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
 

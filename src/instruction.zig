@@ -648,10 +648,27 @@ pub const ParseIterator = struct {
     }
 };
 
-pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
+pub fn findFunctionEnd(code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
-    while (try it.next(check)) |meta| {
+    while (try it.next()) |meta| {
+        if (meta.offset == 0 and meta.instruction == .end) return meta;
+        if (meta.offset == 0) continue;
+
+        switch (meta.instruction) {
+            .block, .loop, .@"if" => i += 1,
+            .end => i -= 1,
+            else => {},
+        }
+        if (i == 0) return meta;
+    }
+    return error.CouldntFindEnd;
+}
+
+pub fn findExprEnd(code: []const u8) !InstructionMeta {
+    var it = InstructionIterator.init(code);
+    var i: usize = 1;
+    while (try it.next()) |meta| {
         switch (meta.instruction) {
             .end => i -= 1,
             else => {},
