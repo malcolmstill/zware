@@ -315,8 +315,7 @@ pub fn calculateContinuations(code: []RuntimeInstruction) !void {
                 }
             },
             .loop => |*loop_instr| {
-                const end_offset = try findEnd(code[offset..]);
-
+                // const end_offset = try findEnd(code[offset..]);
                 loop_instr.continuation = code[offset..];
             },
             else => {},
