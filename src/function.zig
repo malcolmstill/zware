@@ -50,10 +50,10 @@ pub const RuntimeInstruction = union(Instruction) {
     end: void,
     br: u32,
     br_if: u32,
-    // br_table: struct {
-    //     ls: []u32,
-    //     ln: u32,
-    // },
+    br_table: struct {
+        ls: []u32,
+        ln: u32,
+    },
     @"return": void,
     call: usize, // u32?
     call_indirect: struct {

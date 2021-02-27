@@ -159,24 +159,15 @@ pub const Interpreter = struct {
 
                 try self.branch(br_ifcode);
             },
-            // .br_table => {
-            //     const label_count = try instruction.readULEB128Mem(u32, &self.continuation);
-            //     const i = try self.popOperand(u32);
+            .br_table => |br_table| {
+                const i = try self.popOperand(u32);
 
-            //     var label: u32 = 0;
-            //     var j: usize = 0;
-            //     while (j < label_count) : (j += 1) {
-            //         const tmp_label = try instruction.readULEB128Mem(u32, &self.continuation);
-            //         if (j == i) label = tmp_label;
-            //     }
-
-            //     const ln = try instruction.readULEB128Mem(u32, &self.continuation);
-            //     if (i >= j) {
-            //         label = ln;
-            //     }
-
-            //     try self.branch(label);
-            // },
+                if (i >= br_table.ls.len) {
+                    try self.branch(br_table.ln);
+                } else {
+                    try self.branch(br_table.ls[i]);
+                }
+            },
             .@"return" => {
                 const frame = try self.peekNthFrame(0);
                 const n = frame.return_arity;
