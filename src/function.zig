@@ -8,7 +8,7 @@ pub const Function = union(enum) {
     function: struct {
         locals: []const u8,
         locals_count: usize,
-        code: []RuntimeInstruction,
+        code: []Instruction,
         params: []const ValueType,
         results: []const ValueType,
         instance: *Instance,
@@ -23,27 +23,27 @@ pub const Function = union(enum) {
 pub const Code = struct {
     locals: []const u8,
     locals_count: usize,
-    code: []RuntimeInstruction,
+    code: []Instruction,
 };
 
-pub const RuntimeInstruction = union(Opcode) {
+pub const Instruction = union(Opcode) {
     @"unreachable": void,
     nop: void,
     block: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []RuntimeInstruction,
+        continuation: []Instruction,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []RuntimeInstruction,
+        continuation: []Instruction,
     },
     @"if": struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []RuntimeInstruction,
-        else_continuation: ?[]RuntimeInstruction,
+        continuation: []Instruction,
+        else_continuation: ?[]Instruction,
     },
     @"else": void,
     end: void,
@@ -295,7 +295,7 @@ pub const RuntimeInstruction = union(Opcode) {
     trunc_sat: u32,
 };
 
-pub fn calculateContinuations(code: []RuntimeInstruction) !void {
+pub fn calculateContinuations(code: []Instruction) !void {
     var offset: usize = 0;
     for (code) |*opcode| {
         switch (opcode.*) {
@@ -323,7 +323,7 @@ pub fn calculateContinuations(code: []RuntimeInstruction) !void {
     }
 }
 
-pub fn findEnd(code: []RuntimeInstruction) !usize {
+pub fn findEnd(code: []Instruction) !usize {
     var offset: usize = 0;
     var i: usize = 1;
     for (code) |opcode| {
@@ -345,7 +345,7 @@ pub fn findEnd(code: []RuntimeInstruction) !usize {
     return error.CouldntFindEnd;
 }
 
-pub fn findElse(code: []RuntimeInstruction) !?usize {
+pub fn findElse(code: []Instruction) !?usize {
     var offset: usize = 0;
     var i: usize = 1;
     for (code) |opcode| {

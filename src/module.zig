@@ -5,7 +5,7 @@ const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
-const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
+const Instruction = @import("function.zig").Instruction;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
 const Opcode = instruction.Opcode;
@@ -46,7 +46,7 @@ pub const Module = struct {
     elements: Section(Segment),
     codes: Section(Code),
     datas: Section(Segment),
-    parsed_code: ArrayList(RuntimeInstruction),
+    parsed_code: ArrayList(Instruction),
     br_table_indices: ArrayList(u32),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
@@ -66,7 +66,7 @@ pub const Module = struct {
             .elements = Section(Segment).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
-            .parsed_code = ArrayList(RuntimeInstruction).init(alloc),
+            .parsed_code = ArrayList(Instruction).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
         };
     }
@@ -473,7 +473,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
-        var parsed_code: ?[]RuntimeInstruction = null;
+        var parsed_code: ?[]Instruction = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -770,13 +770,13 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) ![]RuntimeInstruction {
+    pub fn parseCode(self: *Module, code: []const u8) ![]Instruction {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
 
-        // 1. Make a first pass allocating all of our RuntimeInstructions
+        // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }

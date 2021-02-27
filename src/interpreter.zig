@@ -4,7 +4,7 @@ const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
-const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
+const Instruction = @import("function.zig").Instruction;
 const instruction = @import("instruction.zig");
 
 // Interpreter:
@@ -29,7 +29,7 @@ pub const Interpreter = struct {
     label_stack_mem: []Label = undefined,
     label_stack: []Label = undefined,
 
-    continuation: []RuntimeInstruction = undefined,
+    continuation: []Instruction = undefined,
     inst: *Instance = undefined,
 
     pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, inst: *Instance) Interpreter {
@@ -44,7 +44,7 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn invoke(self: *Interpreter, code: []RuntimeInstruction) !void {
+    pub fn invoke(self: *Interpreter, code: []Instruction) !void {
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
@@ -75,7 +75,7 @@ pub const Interpreter = struct {
         std.debug.warn("=====================================================\n", .{});
     }
 
-    pub fn interpret(self: *Interpreter, opcode: RuntimeInstruction) !void {
+    pub fn interpret(self: *Interpreter, opcode: Instruction) !void {
         // defer self.debug(opcode);
         switch (opcode) {
             .@"unreachable" => return error.TrapUnreachable,
@@ -1689,7 +1689,7 @@ pub const Interpreter = struct {
     // - code: the code we should interpret after `end`
     pub const Label = struct {
         return_arity: usize = 0,
-        continuation: []RuntimeInstruction = undefined,
+        continuation: []Instruction = undefined,
         op_stack_len: usize, // u32?
     };
 };

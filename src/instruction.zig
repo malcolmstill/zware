@@ -1,7 +1,7 @@
 const std = @import("std");
 const leb = std.leb;
 const Module = @import("module.zig").Module;
-const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
+const Instruction = @import("function.zig").Instruction;
 
 pub const OpcodeIterator = struct {
     function: []const u8,
@@ -97,7 +97,7 @@ pub const OpcodeIterator = struct {
 pub const ParseIterator = struct {
     function: []const u8,
     code: []const u8,
-    parsed: []RuntimeInstruction,
+    parsed: []Instruction,
     module: *Module,
 
     pub fn init(module: *Module, function: []const u8) ParseIterator {
@@ -109,7 +109,7 @@ pub const ParseIterator = struct {
         };
     }
 
-    pub fn next(self: *ParseIterator) !?RuntimeInstruction {
+    pub fn next(self: *ParseIterator) !?Instruction {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -117,12 +117,12 @@ pub const ParseIterator = struct {
         const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
-        var rt_instr: RuntimeInstruction = undefined;
+        var rt_instr: Instruction = undefined;
 
         // 2. Find the start of the next instruction
         switch (instr) {
-            .@"unreachable" => rt_instr = RuntimeInstruction.@"unreachable",
-            .nop => rt_instr = RuntimeInstruction.nop,
+            .@"unreachable" => rt_instr = Instruction.@"unreachable",
+            .nop => rt_instr = Instruction.nop,
             .block => {
                 const block_type = try readILEB128Mem(i32, &self.code);
 
@@ -134,7 +134,7 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                 }
 
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .block = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
@@ -153,7 +153,7 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                 }
 
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
@@ -172,7 +172,7 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                 }
 
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"if" = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
@@ -181,15 +181,15 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .@"else" => rt_instr = RuntimeInstruction.@"else",
-            .end => rt_instr = RuntimeInstruction.end,
+            .@"else" => rt_instr = Instruction.@"else",
+            .end => rt_instr = Instruction.end,
             .br => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .br = immediate_u32 };
+                rt_instr = Instruction{ .br = immediate_u32 };
             },
             .br_if => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .br_if = immediate_u32 };
+                rt_instr = Instruction{ .br_if = immediate_u32 };
             },
             .br_table => {
                 const label_start = self.module.br_table_indices.items.len;
@@ -202,17 +202,17 @@ pub const ParseIterator = struct {
                 }
                 const ln = try readULEB128Mem(u32, &self.code);
 
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .br_table = .{
                         .ls = self.module.br_table_indices.items[label_start .. label_start + label_count],
                         .ln = ln,
                     },
                 };
             },
-            .@"return" => rt_instr = RuntimeInstruction.@"return",
+            .@"return" => rt_instr = Instruction.@"return",
             .call => {
                 const function_index = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .call = function_index };
+                rt_instr = Instruction{ .call = function_index };
             },
             .call_indirect => {
                 const type_index = try readULEB128Mem(u32, &self.code);
@@ -220,67 +220,67 @@ pub const ParseIterator = struct {
 
                 if (table_reserved != 0) return error.MalformedCallIndirectReserved;
 
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .call_indirect = .{
                         .@"type" = type_index,
                         .table = table_reserved,
                     },
                 };
             },
-            .drop => rt_instr = RuntimeInstruction.drop,
-            .select => rt_instr = RuntimeInstruction.select,
+            .drop => rt_instr = Instruction.drop,
+            .select => rt_instr = Instruction.select,
             .@"global.get" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"global.get" = immediate_u32 };
+                rt_instr = Instruction{ .@"global.get" = immediate_u32 };
             },
             .@"global.set" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"global.set" = immediate_u32 };
+                rt_instr = Instruction{ .@"global.set" = immediate_u32 };
             },
             .@"local.get" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"local.get" = immediate_u32 };
+                rt_instr = Instruction{ .@"local.get" = immediate_u32 };
             },
             .@"local.set" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"local.set" = immediate_u32 };
+                rt_instr = Instruction{ .@"local.set" = immediate_u32 };
             },
             .@"local.tee" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"local.tee" = immediate_u32 };
+                rt_instr = Instruction{ .@"local.tee" = immediate_u32 };
             },
             .@"memory.size" => {
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
-                rt_instr = RuntimeInstruction{ .@"memory.size" = memory_index };
+                rt_instr = Instruction{ .@"memory.size" = memory_index };
             },
             .@"memory.grow" => {
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
-                rt_instr = RuntimeInstruction{ .@"memory.grow" = memory_index };
+                rt_instr = Instruction{ .@"memory.grow" = memory_index };
             },
             .@"i32.const" => {
                 const i32_const = try readILEB128Mem(i32, &self.code);
-                rt_instr = RuntimeInstruction{ .@"i32.const" = i32_const };
+                rt_instr = Instruction{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
                 const i64_const = try readILEB128Mem(i64, &self.code);
-                rt_instr = RuntimeInstruction{ .@"i64.const" = i64_const };
+                rt_instr = Instruction{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
                 const float_const = @bitCast(f32, try readU32(&self.code));
-                rt_instr = RuntimeInstruction{ .@"f32.const" = float_const };
+                rt_instr = Instruction{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
                 const float_const = @bitCast(f64, try readU64(&self.code));
-                rt_instr = RuntimeInstruction{ .@"f64.const" = float_const };
+                rt_instr = Instruction{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.load" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -290,7 +290,7 @@ pub const ParseIterator = struct {
             .@"i64.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -300,7 +300,7 @@ pub const ParseIterator = struct {
             .@"f32.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"f32.load" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -310,7 +310,7 @@ pub const ParseIterator = struct {
             .@"f64.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"f64.load" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -320,7 +320,7 @@ pub const ParseIterator = struct {
             .@"i32.load8_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.load8_s" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -330,7 +330,7 @@ pub const ParseIterator = struct {
             .@"i32.load8_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.load8_u" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -340,7 +340,7 @@ pub const ParseIterator = struct {
             .@"i32.load16_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.load16_s" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -350,7 +350,7 @@ pub const ParseIterator = struct {
             .@"i32.load16_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.load16_u" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -360,7 +360,7 @@ pub const ParseIterator = struct {
             .@"i64.load8_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load8_s" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -370,7 +370,7 @@ pub const ParseIterator = struct {
             .@"i64.load8_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load8_u" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -380,7 +380,7 @@ pub const ParseIterator = struct {
             .@"i64.load16_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load16_s" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -390,7 +390,7 @@ pub const ParseIterator = struct {
             .@"i64.load16_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load16_u" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -400,7 +400,7 @@ pub const ParseIterator = struct {
             .@"i64.load32_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load32_s" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -410,7 +410,7 @@ pub const ParseIterator = struct {
             .@"i64.load32_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.load32_u" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -420,7 +420,7 @@ pub const ParseIterator = struct {
             .@"i32.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.store" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -430,7 +430,7 @@ pub const ParseIterator = struct {
             .@"i64.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.store" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -440,7 +440,7 @@ pub const ParseIterator = struct {
             .@"f32.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"f32.store" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -450,7 +450,7 @@ pub const ParseIterator = struct {
             .@"f64.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"f64.store" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -460,7 +460,7 @@ pub const ParseIterator = struct {
             .@"i32.store8" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.store8" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -470,7 +470,7 @@ pub const ParseIterator = struct {
             .@"i32.store16" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i32.store16" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -480,7 +480,7 @@ pub const ParseIterator = struct {
             .@"i64.store8" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.store8" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -490,7 +490,7 @@ pub const ParseIterator = struct {
             .@"i64.store16" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.store16" = .{
                         .alignment = alignment,
                         .offset = offset,
@@ -500,144 +500,144 @@ pub const ParseIterator = struct {
             .@"i64.store32" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{
+                rt_instr = Instruction{
                     .@"i64.store32" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.eqz" => rt_instr = RuntimeInstruction.@"i32.eqz",
-            .@"i32.eq" => rt_instr = RuntimeInstruction.@"i32.eq",
-            .@"i32.ne" => rt_instr = RuntimeInstruction.@"i32.ne",
-            .@"i32.lt_s" => rt_instr = RuntimeInstruction.@"i32.lt_s",
-            .@"i32.lt_u" => rt_instr = RuntimeInstruction.@"i32.lt_u",
-            .@"i32.gt_s" => rt_instr = RuntimeInstruction.@"i32.gt_s",
-            .@"i32.gt_u" => rt_instr = RuntimeInstruction.@"i32.gt_u",
-            .@"i32.le_s" => rt_instr = RuntimeInstruction.@"i32.le_s",
-            .@"i32.le_u" => rt_instr = RuntimeInstruction.@"i32.le_u",
-            .@"i32.ge_s" => rt_instr = RuntimeInstruction.@"i32.ge_s",
-            .@"i32.ge_u" => rt_instr = RuntimeInstruction.@"i32.ge_u",
-            .@"i64.eqz" => rt_instr = RuntimeInstruction.@"i64.eqz",
-            .@"i64.eq" => rt_instr = RuntimeInstruction.@"i64.eq",
-            .@"i64.ne" => rt_instr = RuntimeInstruction.@"i64.ne",
-            .@"i64.lt_s" => rt_instr = RuntimeInstruction.@"i64.lt_s",
-            .@"i64.lt_u" => rt_instr = RuntimeInstruction.@"i64.lt_u",
-            .@"i64.gt_s" => rt_instr = RuntimeInstruction.@"i64.gt_s",
-            .@"i64.gt_u" => rt_instr = RuntimeInstruction.@"i64.gt_u",
-            .@"i64.le_s" => rt_instr = RuntimeInstruction.@"i64.le_s",
-            .@"i64.le_u" => rt_instr = RuntimeInstruction.@"i64.le_u",
-            .@"i64.ge_s" => rt_instr = RuntimeInstruction.@"i64.ge_s",
-            .@"i64.ge_u" => rt_instr = RuntimeInstruction.@"i64.ge_u",
-            .@"f32.eq" => rt_instr = RuntimeInstruction.@"f32.eq",
-            .@"f32.ne" => rt_instr = RuntimeInstruction.@"f32.ne",
-            .@"f32.lt" => rt_instr = RuntimeInstruction.@"f32.lt",
-            .@"f32.gt" => rt_instr = RuntimeInstruction.@"f32.gt",
-            .@"f32.le" => rt_instr = RuntimeInstruction.@"f32.le",
-            .@"f32.ge" => rt_instr = RuntimeInstruction.@"f32.ge",
-            .@"f64.eq" => rt_instr = RuntimeInstruction.@"f64.eq",
-            .@"f64.ne" => rt_instr = RuntimeInstruction.@"f64.ne",
-            .@"f64.lt" => rt_instr = RuntimeInstruction.@"f64.lt",
-            .@"f64.gt" => rt_instr = RuntimeInstruction.@"f64.gt",
-            .@"f64.le" => rt_instr = RuntimeInstruction.@"f64.le",
-            .@"f64.ge" => rt_instr = RuntimeInstruction.@"f64.ge",
-            .@"i32.clz" => rt_instr = RuntimeInstruction.@"i32.clz",
-            .@"i32.ctz" => rt_instr = RuntimeInstruction.@"i32.ctz",
-            .@"i32.popcnt" => rt_instr = RuntimeInstruction.@"i32.popcnt",
-            .@"i32.add" => rt_instr = RuntimeInstruction.@"i32.add",
-            .@"i32.sub" => rt_instr = RuntimeInstruction.@"i32.sub",
-            .@"i32.mul" => rt_instr = RuntimeInstruction.@"i32.mul",
-            .@"i32.div_s" => rt_instr = RuntimeInstruction.@"i32.div_s",
-            .@"i32.div_u" => rt_instr = RuntimeInstruction.@"i32.div_u",
-            .@"i32.rem_s" => rt_instr = RuntimeInstruction.@"i32.rem_s",
-            .@"i32.rem_u" => rt_instr = RuntimeInstruction.@"i32.rem_u",
-            .@"i32.and" => rt_instr = RuntimeInstruction.@"i32.and",
-            .@"i32.or" => rt_instr = RuntimeInstruction.@"i32.or",
-            .@"i32.xor" => rt_instr = RuntimeInstruction.@"i32.xor",
-            .@"i32.shl" => rt_instr = RuntimeInstruction.@"i32.shl",
-            .@"i32.shr_s" => rt_instr = RuntimeInstruction.@"i32.shr_s",
-            .@"i32.shr_u" => rt_instr = RuntimeInstruction.@"i32.shr_u",
-            .@"i32.rotl" => rt_instr = RuntimeInstruction.@"i32.rotl",
-            .@"i32.rotr" => rt_instr = RuntimeInstruction.@"i32.rotr",
-            .@"i64.clz" => rt_instr = RuntimeInstruction.@"i64.clz",
-            .@"i64.ctz" => rt_instr = RuntimeInstruction.@"i64.ctz",
-            .@"i64.popcnt" => rt_instr = RuntimeInstruction.@"i64.popcnt",
-            .@"i64.add" => rt_instr = RuntimeInstruction.@"i64.add",
-            .@"i64.sub" => rt_instr = RuntimeInstruction.@"i64.sub",
-            .@"i64.mul" => rt_instr = RuntimeInstruction.@"i64.mul",
-            .@"i64.div_s" => rt_instr = RuntimeInstruction.@"i64.div_s",
-            .@"i64.div_u" => rt_instr = RuntimeInstruction.@"i64.div_u",
-            .@"i64.rem_s" => rt_instr = RuntimeInstruction.@"i64.rem_s",
-            .@"i64.rem_u" => rt_instr = RuntimeInstruction.@"i64.rem_u",
-            .@"i64.and" => rt_instr = RuntimeInstruction.@"i64.and",
-            .@"i64.or" => rt_instr = RuntimeInstruction.@"i64.or",
-            .@"i64.xor" => rt_instr = RuntimeInstruction.@"i64.xor",
-            .@"i64.shl" => rt_instr = RuntimeInstruction.@"i64.shl",
-            .@"i64.shr_s" => rt_instr = RuntimeInstruction.@"i64.shr_s",
-            .@"i64.shr_u" => rt_instr = RuntimeInstruction.@"i64.shr_u",
-            .@"i64.rotl" => rt_instr = RuntimeInstruction.@"i64.rotl",
-            .@"i64.rotr" => rt_instr = RuntimeInstruction.@"i64.rotr",
-            .@"f32.abs" => rt_instr = RuntimeInstruction.@"f32.abs",
-            .@"f32.neg" => rt_instr = RuntimeInstruction.@"f32.neg",
-            .@"f32.ceil" => rt_instr = RuntimeInstruction.@"f32.ceil",
-            .@"f32.floor" => rt_instr = RuntimeInstruction.@"f32.floor",
-            .@"f32.trunc" => rt_instr = RuntimeInstruction.@"f32.trunc",
-            .@"f32.nearest" => rt_instr = RuntimeInstruction.@"f32.nearest",
-            .@"f32.sqrt" => rt_instr = RuntimeInstruction.@"f32.sqrt",
-            .@"f32.add" => rt_instr = RuntimeInstruction.@"f32.add",
-            .@"f32.sub" => rt_instr = RuntimeInstruction.@"f32.sub",
-            .@"f32.mul" => rt_instr = RuntimeInstruction.@"f32.mul",
-            .@"f32.div" => rt_instr = RuntimeInstruction.@"f32.div",
-            .@"f32.min" => rt_instr = RuntimeInstruction.@"f32.min",
-            .@"f32.max" => rt_instr = RuntimeInstruction.@"f32.max",
-            .@"f32.copysign" => rt_instr = RuntimeInstruction.@"f32.copysign",
-            .@"f64.abs" => rt_instr = RuntimeInstruction.@"f64.abs",
-            .@"f64.neg" => rt_instr = RuntimeInstruction.@"f64.neg",
-            .@"f64.ceil" => rt_instr = RuntimeInstruction.@"f64.ceil",
-            .@"f64.floor" => rt_instr = RuntimeInstruction.@"f64.floor",
-            .@"f64.trunc" => rt_instr = RuntimeInstruction.@"f64.trunc",
-            .@"f64.nearest" => rt_instr = RuntimeInstruction.@"f64.nearest",
-            .@"f64.sqrt" => rt_instr = RuntimeInstruction.@"f64.sqrt",
-            .@"f64.add" => rt_instr = RuntimeInstruction.@"f64.add",
-            .@"f64.sub" => rt_instr = RuntimeInstruction.@"f64.sub",
-            .@"f64.mul" => rt_instr = RuntimeInstruction.@"f64.mul",
-            .@"f64.div" => rt_instr = RuntimeInstruction.@"f64.div",
-            .@"f64.min" => rt_instr = RuntimeInstruction.@"f64.min",
-            .@"f64.max" => rt_instr = RuntimeInstruction.@"f64.max",
-            .@"f64.copysign" => rt_instr = RuntimeInstruction.@"f64.copysign",
-            .@"i32.wrap_i64" => rt_instr = RuntimeInstruction.@"i32.wrap_i64",
-            .@"i32.trunc_f32_s" => rt_instr = RuntimeInstruction.@"i32.trunc_f32_s",
-            .@"i32.trunc_f32_u" => rt_instr = RuntimeInstruction.@"i32.trunc_f32_u",
-            .@"i32.trunc_f64_s" => rt_instr = RuntimeInstruction.@"i32.trunc_f64_s",
-            .@"i32.trunc_f64_u" => rt_instr = RuntimeInstruction.@"i32.trunc_f64_u",
-            .@"i64.extend_i32_s" => rt_instr = RuntimeInstruction.@"i64.extend_i32_s",
-            .@"i64.extend_i32_u" => rt_instr = RuntimeInstruction.@"i64.extend_i32_u",
-            .@"i64.trunc_f32_s" => rt_instr = RuntimeInstruction.@"i64.trunc_f32_s",
-            .@"i64.trunc_f32_u" => rt_instr = RuntimeInstruction.@"i64.trunc_f32_u",
-            .@"i64.trunc_f64_s" => rt_instr = RuntimeInstruction.@"i64.trunc_f64_s",
-            .@"i64.trunc_f64_u" => rt_instr = RuntimeInstruction.@"i64.trunc_f64_u",
-            .@"f32.convert_i32_s" => rt_instr = RuntimeInstruction.@"f32.convert_i32_s",
-            .@"f32.convert_i32_u" => rt_instr = RuntimeInstruction.@"f32.convert_i32_u",
-            .@"f32.convert_i64_s" => rt_instr = RuntimeInstruction.@"f32.convert_i64_s",
-            .@"f32.convert_i64_u" => rt_instr = RuntimeInstruction.@"f32.convert_i64_u",
-            .@"f32.demote_f64" => rt_instr = RuntimeInstruction.@"f32.demote_f64",
-            .@"f64.convert_i32_s" => rt_instr = RuntimeInstruction.@"f64.convert_i32_s",
-            .@"f64.convert_i32_u" => rt_instr = RuntimeInstruction.@"f64.convert_i32_u",
-            .@"f64.convert_i64_s" => rt_instr = RuntimeInstruction.@"f64.convert_i64_s",
-            .@"f64.convert_i64_u" => rt_instr = RuntimeInstruction.@"f64.convert_i64_u",
-            .@"f64.promote_f32" => rt_instr = RuntimeInstruction.@"f64.promote_f32",
-            .@"i32.reinterpret_f32" => rt_instr = RuntimeInstruction.@"i32.reinterpret_f32",
-            .@"i64.reinterpret_f64" => rt_instr = RuntimeInstruction.@"i64.reinterpret_f64",
-            .@"f32.reinterpret_i32" => rt_instr = RuntimeInstruction.@"f32.reinterpret_i32",
-            .@"f64.reinterpret_i64" => rt_instr = RuntimeInstruction.@"f64.reinterpret_i64",
-            .@"i32.extend8_s" => rt_instr = RuntimeInstruction.@"i32.extend8_s",
-            .@"i32.extend16_s" => rt_instr = RuntimeInstruction.@"i32.extend16_s",
-            .@"i64.extend8_s" => rt_instr = RuntimeInstruction.@"i64.extend8_s",
-            .@"i64.extend16_s" => rt_instr = RuntimeInstruction.@"i64.extend16_s",
-            .@"i64.extend32_s" => rt_instr = RuntimeInstruction.@"i64.extend32_s",
+            .@"i32.eqz" => rt_instr = Instruction.@"i32.eqz",
+            .@"i32.eq" => rt_instr = Instruction.@"i32.eq",
+            .@"i32.ne" => rt_instr = Instruction.@"i32.ne",
+            .@"i32.lt_s" => rt_instr = Instruction.@"i32.lt_s",
+            .@"i32.lt_u" => rt_instr = Instruction.@"i32.lt_u",
+            .@"i32.gt_s" => rt_instr = Instruction.@"i32.gt_s",
+            .@"i32.gt_u" => rt_instr = Instruction.@"i32.gt_u",
+            .@"i32.le_s" => rt_instr = Instruction.@"i32.le_s",
+            .@"i32.le_u" => rt_instr = Instruction.@"i32.le_u",
+            .@"i32.ge_s" => rt_instr = Instruction.@"i32.ge_s",
+            .@"i32.ge_u" => rt_instr = Instruction.@"i32.ge_u",
+            .@"i64.eqz" => rt_instr = Instruction.@"i64.eqz",
+            .@"i64.eq" => rt_instr = Instruction.@"i64.eq",
+            .@"i64.ne" => rt_instr = Instruction.@"i64.ne",
+            .@"i64.lt_s" => rt_instr = Instruction.@"i64.lt_s",
+            .@"i64.lt_u" => rt_instr = Instruction.@"i64.lt_u",
+            .@"i64.gt_s" => rt_instr = Instruction.@"i64.gt_s",
+            .@"i64.gt_u" => rt_instr = Instruction.@"i64.gt_u",
+            .@"i64.le_s" => rt_instr = Instruction.@"i64.le_s",
+            .@"i64.le_u" => rt_instr = Instruction.@"i64.le_u",
+            .@"i64.ge_s" => rt_instr = Instruction.@"i64.ge_s",
+            .@"i64.ge_u" => rt_instr = Instruction.@"i64.ge_u",
+            .@"f32.eq" => rt_instr = Instruction.@"f32.eq",
+            .@"f32.ne" => rt_instr = Instruction.@"f32.ne",
+            .@"f32.lt" => rt_instr = Instruction.@"f32.lt",
+            .@"f32.gt" => rt_instr = Instruction.@"f32.gt",
+            .@"f32.le" => rt_instr = Instruction.@"f32.le",
+            .@"f32.ge" => rt_instr = Instruction.@"f32.ge",
+            .@"f64.eq" => rt_instr = Instruction.@"f64.eq",
+            .@"f64.ne" => rt_instr = Instruction.@"f64.ne",
+            .@"f64.lt" => rt_instr = Instruction.@"f64.lt",
+            .@"f64.gt" => rt_instr = Instruction.@"f64.gt",
+            .@"f64.le" => rt_instr = Instruction.@"f64.le",
+            .@"f64.ge" => rt_instr = Instruction.@"f64.ge",
+            .@"i32.clz" => rt_instr = Instruction.@"i32.clz",
+            .@"i32.ctz" => rt_instr = Instruction.@"i32.ctz",
+            .@"i32.popcnt" => rt_instr = Instruction.@"i32.popcnt",
+            .@"i32.add" => rt_instr = Instruction.@"i32.add",
+            .@"i32.sub" => rt_instr = Instruction.@"i32.sub",
+            .@"i32.mul" => rt_instr = Instruction.@"i32.mul",
+            .@"i32.div_s" => rt_instr = Instruction.@"i32.div_s",
+            .@"i32.div_u" => rt_instr = Instruction.@"i32.div_u",
+            .@"i32.rem_s" => rt_instr = Instruction.@"i32.rem_s",
+            .@"i32.rem_u" => rt_instr = Instruction.@"i32.rem_u",
+            .@"i32.and" => rt_instr = Instruction.@"i32.and",
+            .@"i32.or" => rt_instr = Instruction.@"i32.or",
+            .@"i32.xor" => rt_instr = Instruction.@"i32.xor",
+            .@"i32.shl" => rt_instr = Instruction.@"i32.shl",
+            .@"i32.shr_s" => rt_instr = Instruction.@"i32.shr_s",
+            .@"i32.shr_u" => rt_instr = Instruction.@"i32.shr_u",
+            .@"i32.rotl" => rt_instr = Instruction.@"i32.rotl",
+            .@"i32.rotr" => rt_instr = Instruction.@"i32.rotr",
+            .@"i64.clz" => rt_instr = Instruction.@"i64.clz",
+            .@"i64.ctz" => rt_instr = Instruction.@"i64.ctz",
+            .@"i64.popcnt" => rt_instr = Instruction.@"i64.popcnt",
+            .@"i64.add" => rt_instr = Instruction.@"i64.add",
+            .@"i64.sub" => rt_instr = Instruction.@"i64.sub",
+            .@"i64.mul" => rt_instr = Instruction.@"i64.mul",
+            .@"i64.div_s" => rt_instr = Instruction.@"i64.div_s",
+            .@"i64.div_u" => rt_instr = Instruction.@"i64.div_u",
+            .@"i64.rem_s" => rt_instr = Instruction.@"i64.rem_s",
+            .@"i64.rem_u" => rt_instr = Instruction.@"i64.rem_u",
+            .@"i64.and" => rt_instr = Instruction.@"i64.and",
+            .@"i64.or" => rt_instr = Instruction.@"i64.or",
+            .@"i64.xor" => rt_instr = Instruction.@"i64.xor",
+            .@"i64.shl" => rt_instr = Instruction.@"i64.shl",
+            .@"i64.shr_s" => rt_instr = Instruction.@"i64.shr_s",
+            .@"i64.shr_u" => rt_instr = Instruction.@"i64.shr_u",
+            .@"i64.rotl" => rt_instr = Instruction.@"i64.rotl",
+            .@"i64.rotr" => rt_instr = Instruction.@"i64.rotr",
+            .@"f32.abs" => rt_instr = Instruction.@"f32.abs",
+            .@"f32.neg" => rt_instr = Instruction.@"f32.neg",
+            .@"f32.ceil" => rt_instr = Instruction.@"f32.ceil",
+            .@"f32.floor" => rt_instr = Instruction.@"f32.floor",
+            .@"f32.trunc" => rt_instr = Instruction.@"f32.trunc",
+            .@"f32.nearest" => rt_instr = Instruction.@"f32.nearest",
+            .@"f32.sqrt" => rt_instr = Instruction.@"f32.sqrt",
+            .@"f32.add" => rt_instr = Instruction.@"f32.add",
+            .@"f32.sub" => rt_instr = Instruction.@"f32.sub",
+            .@"f32.mul" => rt_instr = Instruction.@"f32.mul",
+            .@"f32.div" => rt_instr = Instruction.@"f32.div",
+            .@"f32.min" => rt_instr = Instruction.@"f32.min",
+            .@"f32.max" => rt_instr = Instruction.@"f32.max",
+            .@"f32.copysign" => rt_instr = Instruction.@"f32.copysign",
+            .@"f64.abs" => rt_instr = Instruction.@"f64.abs",
+            .@"f64.neg" => rt_instr = Instruction.@"f64.neg",
+            .@"f64.ceil" => rt_instr = Instruction.@"f64.ceil",
+            .@"f64.floor" => rt_instr = Instruction.@"f64.floor",
+            .@"f64.trunc" => rt_instr = Instruction.@"f64.trunc",
+            .@"f64.nearest" => rt_instr = Instruction.@"f64.nearest",
+            .@"f64.sqrt" => rt_instr = Instruction.@"f64.sqrt",
+            .@"f64.add" => rt_instr = Instruction.@"f64.add",
+            .@"f64.sub" => rt_instr = Instruction.@"f64.sub",
+            .@"f64.mul" => rt_instr = Instruction.@"f64.mul",
+            .@"f64.div" => rt_instr = Instruction.@"f64.div",
+            .@"f64.min" => rt_instr = Instruction.@"f64.min",
+            .@"f64.max" => rt_instr = Instruction.@"f64.max",
+            .@"f64.copysign" => rt_instr = Instruction.@"f64.copysign",
+            .@"i32.wrap_i64" => rt_instr = Instruction.@"i32.wrap_i64",
+            .@"i32.trunc_f32_s" => rt_instr = Instruction.@"i32.trunc_f32_s",
+            .@"i32.trunc_f32_u" => rt_instr = Instruction.@"i32.trunc_f32_u",
+            .@"i32.trunc_f64_s" => rt_instr = Instruction.@"i32.trunc_f64_s",
+            .@"i32.trunc_f64_u" => rt_instr = Instruction.@"i32.trunc_f64_u",
+            .@"i64.extend_i32_s" => rt_instr = Instruction.@"i64.extend_i32_s",
+            .@"i64.extend_i32_u" => rt_instr = Instruction.@"i64.extend_i32_u",
+            .@"i64.trunc_f32_s" => rt_instr = Instruction.@"i64.trunc_f32_s",
+            .@"i64.trunc_f32_u" => rt_instr = Instruction.@"i64.trunc_f32_u",
+            .@"i64.trunc_f64_s" => rt_instr = Instruction.@"i64.trunc_f64_s",
+            .@"i64.trunc_f64_u" => rt_instr = Instruction.@"i64.trunc_f64_u",
+            .@"f32.convert_i32_s" => rt_instr = Instruction.@"f32.convert_i32_s",
+            .@"f32.convert_i32_u" => rt_instr = Instruction.@"f32.convert_i32_u",
+            .@"f32.convert_i64_s" => rt_instr = Instruction.@"f32.convert_i64_s",
+            .@"f32.convert_i64_u" => rt_instr = Instruction.@"f32.convert_i64_u",
+            .@"f32.demote_f64" => rt_instr = Instruction.@"f32.demote_f64",
+            .@"f64.convert_i32_s" => rt_instr = Instruction.@"f64.convert_i32_s",
+            .@"f64.convert_i32_u" => rt_instr = Instruction.@"f64.convert_i32_u",
+            .@"f64.convert_i64_s" => rt_instr = Instruction.@"f64.convert_i64_s",
+            .@"f64.convert_i64_u" => rt_instr = Instruction.@"f64.convert_i64_u",
+            .@"f64.promote_f32" => rt_instr = Instruction.@"f64.promote_f32",
+            .@"i32.reinterpret_f32" => rt_instr = Instruction.@"i32.reinterpret_f32",
+            .@"i64.reinterpret_f64" => rt_instr = Instruction.@"i64.reinterpret_f64",
+            .@"f32.reinterpret_i32" => rt_instr = Instruction.@"f32.reinterpret_i32",
+            .@"f64.reinterpret_i64" => rt_instr = Instruction.@"f64.reinterpret_i64",
+            .@"i32.extend8_s" => rt_instr = Instruction.@"i32.extend8_s",
+            .@"i32.extend16_s" => rt_instr = Instruction.@"i32.extend16_s",
+            .@"i64.extend8_s" => rt_instr = Instruction.@"i64.extend8_s",
+            .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
+            .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .trunc_sat => {
                 const version = try readULEB128Mem(u32, &self.code);
-                rt_instr = RuntimeInstruction{ .trunc_sat = version };
+                rt_instr = Instruction{ .trunc_sat = version };
             },
         }
 
