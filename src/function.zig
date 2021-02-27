@@ -1,3 +1,4 @@
+const std = @import("std");
 const ValueType = @import("common.zig").ValueType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Instance = @import("instance.zig").Instance;
@@ -285,3 +286,89 @@ pub const RuntimeInstruction = union(Instruction) {
     @"i64.extend32_s": void,
     trunc_sat: u32,
 };
+
+pub fn calculateContinuations(code: []RuntimeInstruction) !void {
+    var offset: usize = 0;
+    for (code) |*opcode| {
+        std.debug.warn("opcode = {}\n", .{opcode});
+        switch (opcode.*) {
+            .block => |*block_instr| {
+                std.debug.warn("code = {any}\n", .{code[offset..]});
+                const end_offset = try findEnd(code[offset..]);
+
+                block_instr.continuation = code[offset + end_offset + 1 ..];
+            },
+            .@"if" => |*if_instr| {
+                std.debug.warn("code = {any}\n", .{code[offset..]});
+                const end_offset = try findEnd(code[offset..]);
+                const optional_else_offset = try findElse(code[offset..]);
+
+                if_instr.continuation = code[offset + end_offset + 1 ..];
+                if (optional_else_offset) |else_offset| {
+                    if_instr.else_continuation = code[offset + else_offset ..];
+                }
+            },
+            .loop => |*loop_instr| {
+                const end_offset = try findEnd(code[offset..]);
+
+                loop_instr.continuation = code[offset..];
+            },
+            else => {},
+        }
+        offset += 1;
+    }
+}
+
+pub fn findEnd(code: []RuntimeInstruction) !usize {
+    var offset: usize = 0;
+    var i: usize = 1;
+    for (code) |opcode| {
+        defer offset += 1;
+        std.debug.warn("opcode = {any}, offset = {}\n", .{ opcode, offset });
+        if (offset == 0) {
+            switch (opcode) {
+                .block, .loop, .@"if" => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (opcode) {
+            .block, .loop, .@"if" => i += 1,
+            .end => i -= 1,
+            else => {},
+        }
+        if (i == 0) return offset;
+
+        // offset += 1;
+    }
+    return error.CouldntFindEnd;
+}
+
+pub fn findElse(code: []RuntimeInstruction) !?usize {
+    var offset: usize = 0;
+    var i: usize = 1;
+    for (code) |opcode| {
+        defer offset += 1;
+        if (offset == 0) {
+            switch (opcode) {
+                .@"if" => continue,
+                else => return error.NotBranchTarget,
+            }
+        }
+
+        switch (opcode) {
+            .block, .@"if" => i += 1,
+            .@"else" => {
+                if (i < 2) i -= 1;
+            },
+
+            .end => i -= 1,
+            else => {},
+        }
+        if (i == 0 and opcode == .end) return null;
+        if (i == 0) return offset;
+
+        // offset += 1;
+    }
+    return null;
+}
