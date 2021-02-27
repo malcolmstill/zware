@@ -130,27 +130,57 @@ pub const ParseIterator = struct {
             .nop => rt_instr = RuntimeInstruction.nop,
             .block => {
                 const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
                 rt_instr = RuntimeInstruction{
                     .block = .{
-                        .block_type = block_type,
+                        .param_arity = block_params,
+                        .return_arity = block_returns,
                         .continuation = self.parsed, // TODO: fix this
                     },
                 };
             },
             .loop => {
                 const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
                 rt_instr = RuntimeInstruction{
                     .loop = .{
-                        .block_type = block_type,
+                        .param_arity = block_params,
+                        .return_arity = block_params,
                         .continuation = self.parsed, // TODO: fix this
                     },
                 };
             },
             .@"if" => {
                 const block_type = try readILEB128Mem(i32, &self.code);
+
+                var block_params: usize = 0;
+                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                if (block_type >= 0) {
+                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
+                    block_params = func_type.params.len;
+                    block_returns = func_type.results.len;
+                }
+
                 rt_instr = RuntimeInstruction{
                     .@"if" = .{
-                        .block_type = block_type,
+                        .param_arity = block_params,
+                        .return_arity = block_returns,
                         .continuation = self.parsed, // TODO: fix this
                         .else_continuation = null,
                     },

@@ -82,76 +82,43 @@ pub const Interpreter = struct {
         switch (opcode) {
             .@"unreachable" => return error.TrapUnreachable,
             .nop => return,
-            .block => |blockcode| {
-                const block_type = blockcode.block_type;
-
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
-                if (block_type >= 0) {
-                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
-                }
-
+            .block => |block| {
                 try self.pushLabel(Label{
-                    .return_arity = block_returns,
-                    .op_stack_len = self.op_stack.len - block_params, // equivalent to pop and push
-                    .continuation = blockcode.continuation,
+                    .return_arity = block.return_arity,
+                    .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
+                    .continuation = block.continuation,
                 });
             },
-            .loop => |loopcode| {
-                const block_type = loopcode.block_type;
-
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
-                if (block_type >= 0) {
-                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
-                }
-
-                // For loop control flow, the continuation is the loop body (including
-                // the initiating loop instruction, as branch consumes the existing label)
-                // const continuation = code[0..];
+            .loop => |block| {
                 try self.pushLabel(Label{
                     // note that we use block_params rather than block_returns for return arity:
-                    .return_arity = block_params,
-                    .op_stack_len = self.op_stack.len - block_params,
-                    .continuation = loopcode.continuation,
+                    .return_arity = block.param_arity,
+                    .op_stack_len = self.op_stack.len - block.param_arity,
+                    .continuation = block.continuation,
                 });
             },
-            .@"if" => |ifcode| {
-                const block_type = ifcode.block_type;
-
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
-                if (block_type >= 0) {
-                    const func_type = self.inst.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
-                }
-
+            .@"if" => |block| {
                 const condition = try self.popOperand(u32);
                 if (condition == 0) {
                     // We'll skip to end
-                    self.continuation = ifcode.continuation;
+                    self.continuation = block.continuation;
                     // unless we have an else branch
-                    if (ifcode.else_continuation) |else_continuation| {
+                    if (block.else_continuation) |else_continuation| {
                         self.continuation = else_continuation;
 
                         // We are inside the if branch
                         try self.pushLabel(Label{
-                            .return_arity = block_returns,
-                            .op_stack_len = self.op_stack.len - block_params,
-                            .continuation = ifcode.continuation,
+                            .return_arity = block.return_arity,
+                            .op_stack_len = self.op_stack.len - block.param_arity,
+                            .continuation = block.continuation,
                         });
                     }
                 } else {
                     // We are inside the if branch
                     try self.pushLabel(Label{
-                        .return_arity = block_returns,
-                        .op_stack_len = self.op_stack.len - block_params,
-                        .continuation = ifcode.continuation,
+                        .return_arity = block.return_arity,
+                        .op_stack_len = self.op_stack.len - block.param_arity,
+                        .continuation = block.continuation,
                     });
                 }
             },

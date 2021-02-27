@@ -31,15 +31,18 @@ pub const RuntimeInstruction = union(Instruction) {
     @"unreachable": void,
     nop: void,
     block: struct {
-        block_type: i32,
+        param_arity: usize,
+        return_arity: usize,
         continuation: []RuntimeInstruction,
     },
     loop: struct {
-        block_type: i32,
+        param_arity: usize,
+        return_arity: usize,
         continuation: []RuntimeInstruction,
     },
     @"if": struct {
-        block_type: i32,
+        param_arity: usize,
+        return_arity: usize,
         continuation: []RuntimeInstruction,
         else_continuation: ?[]RuntimeInstruction,
     },
