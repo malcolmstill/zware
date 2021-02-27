@@ -1,4 +1,5 @@
 const Instruction = @import("instruction.zig").Instruction;
+const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 
 pub const LimitType = enum(u8) {
     Min,
@@ -63,7 +64,7 @@ pub const Function = struct {
 pub const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
-    code: ?[]const u8,
+    code: ?[]RuntimeInstruction,
     import: ?u32,
 };
 
@@ -84,7 +85,7 @@ pub const Element = struct {};
 
 pub const Segment = struct {
     index: u32,
-    offset: []const u8,
+    offset: []RuntimeInstruction,
     count: u32, // Number of elements in data (useful when data is not []u8)
     data: []const u8,
 };
