@@ -8,7 +8,7 @@ pub const Function = union(enum) {
     function: struct {
         locals: []const u8,
         locals_count: usize,
-        code: []const u8,
+        code: []RuntimeInstruction,
         // code: []const RuntimeInstruction,
         params: []const ValueType,
         results: []const ValueType,
@@ -19,6 +19,12 @@ pub const Function = union(enum) {
         params: []const ValueType,
         results: []const ValueType,
     },
+};
+
+pub const Code = struct {
+    locals: []const u8,
+    locals_count: usize,
+    code: []RuntimeInstruction,
 };
 
 pub const RuntimeInstruction = union(Instruction) {
