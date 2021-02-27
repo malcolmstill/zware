@@ -1,4 +1,4 @@
-const Instruction = @import("instruction.zig").Instruction;
+const Opcode = @import("instruction.zig").Opcode;
 const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 
 pub const LimitType = enum(u8) {

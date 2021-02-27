@@ -680,12 +680,6 @@ const InstructionMeta = struct {
     offset: usize, // offset from start of function
 };
 
-const ParseMeta = struct {
-    instruction: Instruction,
-    offset: usize, // offset from start of function
-    runtime_instruction: RuntimeInstruction,
-};
-
 const testing = std.testing;
 
 pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {

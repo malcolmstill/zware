@@ -4,7 +4,6 @@ const math = std.math;
 const ArrayList = std.ArrayList;
 const ValueType = @import("module.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
-const Instruction = @import("instruction.zig").Instruction;
 const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 const instruction = @import("instruction.zig");
 
