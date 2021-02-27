@@ -3,18 +3,18 @@ const leb = std.leb;
 const Module = @import("module.zig").Module;
 const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 
-pub const InstructionIterator = struct {
+pub const OpcodeIterator = struct {
     function: []const u8,
     code: []const u8,
 
-    pub fn init(function: []const u8) InstructionIterator {
-        return InstructionIterator{
+    pub fn init(function: []const u8) OpcodeIterator {
+        return OpcodeIterator{
             .code = function,
             .function = function,
         };
     }
 
-    pub fn next(self: *InstructionIterator) !?InstructionMeta {
+    pub fn next(self: *OpcodeIterator) !?InstructionMeta {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -646,7 +646,7 @@ pub const ParseIterator = struct {
 };
 
 pub fn findFunctionEnd(code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
+    var it = OpcodeIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
         if (meta.offset == 0 and meta.instruction == .end) return meta;
@@ -663,7 +663,7 @@ pub fn findFunctionEnd(code: []const u8) !InstructionMeta {
 }
 
 pub fn findExprEnd(code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
+    var it = OpcodeIterator.init(code);
     var i: usize = 1;
     while (try it.next()) |meta| {
         switch (meta.instruction) {
