@@ -473,6 +473,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
+        var parsed_code: ?[]RuntimeInstruction = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -489,7 +490,7 @@ pub const Module = struct {
             }
             code = self.module[offset .. offset + j + 1];
 
-            try decodeCode(code orelse return error.ExpectedCode);
+            parsed_code = try self.parseCode(code orelse return error.NoCode);
         }
 
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
@@ -498,7 +499,7 @@ pub const Module = struct {
         try self.globals.list.append(Global{
             .value_type = global_type,
             .mutability = mutability,
-            .code = code,
+            .code = parsed_code,
             .import = import,
         });
     }
@@ -605,9 +606,11 @@ pub const Module = struct {
                 };
             }
 
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+
             try self.elements.list.append(Segment{
                 .index = table_index,
-                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
+                .offset = parsed_code,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -718,9 +721,11 @@ pub const Module = struct {
                 else => return err,
             };
 
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+
             try self.datas.list.append(Segment{
                 .index = mem_idx,
-                .offset = self.module[expr_start .. expr_start + meta.offset + 1],
+                .offset = parsed_code,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
