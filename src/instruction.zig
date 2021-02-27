@@ -646,57 +646,6 @@ pub const ParseIterator = struct {
     }
 };
 
-// findEnd
-//
-// Finds the end instruction corresponding to the instruction at index 0
-// of `code`. The offset is relative to `code[0]` (not the start of the function)
-//
-// Errors:
-// - CouldntFindEnd if we run out of elements in `code`
-// - NotBranchTarget if the instruction at `code[0]` isn't branch target
-pub fn findEnd(comptime check: bool, code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
-    var i: usize = 1;
-    while (try it.next(check)) |meta| {
-        if (meta.offset == 0) {
-            switch (meta.instruction) {
-                .block, .loop, .@"if" => continue,
-                else => return error.NotBranchTarget,
-            }
-        }
-
-        switch (meta.instruction) {
-            .block, .loop, .@"if" => i += 1,
-            .end => i -= 1,
-            else => {},
-        }
-        if (i == 0) return meta;
-    }
-    return error.CouldntFindEnd;
-}
-
-// findFunctionEnd
-//
-// Similar to findEnd. findEnd however, is looking to match the end of
-// block, loop or if. This function simply takes what should be a valid
-// function and attempts to find its end. If it can't, we have an error
-pub fn findFunctionEnd(comptime check: bool, code: []const u8) !InstructionMeta {
-    var it = InstructionIterator.init(code);
-    var i: usize = 1;
-    while (try it.next(check)) |meta| {
-        if (meta.offset == 0 and meta.instruction == .end) return meta;
-        if (meta.offset == 0) continue;
-
-        switch (meta.instruction) {
-            .block, .loop, .@"if" => i += 1,
-            .end => i -= 1,
-            else => {},
-        }
-        if (i == 0) return meta;
-    }
-    return error.CouldntFindEnd;
-}
-
 pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
     var it = InstructionIterator.init(code);
     var i: usize = 1;
@@ -708,35 +657,6 @@ pub fn findExprEnd(comptime check: bool, code: []const u8) !InstructionMeta {
         if (i == 0) return meta;
     }
     return error.CouldntFindExprEnd;
-}
-
-// findElse
-//
-// Similar to findEnd but finds the match else branch, if
-// one exists
-pub fn findElse(comptime check: bool, code: []const u8) !?InstructionMeta {
-    var it = InstructionIterator.init(code);
-    var i: usize = 1;
-    while (try it.next(check)) |meta| {
-        if (meta.offset == 0) {
-            switch (meta.instruction) {
-                .@"if" => continue,
-                else => return error.NotBranchTarget,
-            }
-        }
-
-        switch (meta.instruction) {
-            .@"if", .block => i += 1,
-            .@"else" => {
-                if (i < 2) i -= 1;
-            },
-            .end => i -= 1,
-            else => {},
-        }
-        if (i == 0 and meta.instruction == .end) return null;
-        if (i == 0) return meta;
-    }
-    return null;
 }
 
 const InstructionMeta = struct {
@@ -751,46 +671,6 @@ const ParseMeta = struct {
 };
 
 const testing = std.testing;
-
-test "instruction iterator" {
-    const ArenaAllocator = std.heap.ArenaAllocator;
-    const Module = @import("module.zig").Module;
-    var arena = ArenaAllocator.init(testing.allocator);
-    defer _ = arena.deinit();
-
-    const bytes = @embedFile("../test/fib.wasm");
-
-    var module = Module.init(&arena.allocator, bytes);
-    try module.decode();
-
-    const func = module.codes.list.items[0];
-
-    var it = InstructionIterator.init(func.code);
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 0 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 2 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.lt_s", .offset = 4 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"if", .offset = 5 });
-
-    const if_end_meta = try findEnd(false, func.code[5..]);
-    testing.expectEqual(if_end_meta.offset + 1, 6);
-
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 7 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 9 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 10 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 11 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 13 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 15 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 16 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"local.get", .offset = 18 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.const", .offset = 20 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.sub", .offset = 22 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .call, .offset = 23 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"i32.add", .offset = 25 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .@"return", .offset = 26 });
-    testing.expectEqual(try it.next(false), InstructionMeta{ .instruction = .end, .offset = 27 });
-
-    testing.expectEqual(try it.next(false), null);
-}
 
 pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     var buf = std.io.fixedBufferStream(ptr.*);
