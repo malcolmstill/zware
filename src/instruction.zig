@@ -18,7 +18,7 @@ pub const InstructionIterator = struct {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
-        const instr = @intToEnum(Instruction, self.code[0]);
+        const instr = @intToEnum(Opcode, self.code[0]);
         const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
@@ -113,7 +113,7 @@ pub const ParseIterator = struct {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
-        const instr = @intToEnum(Instruction, self.code[0]);
+        const instr = @intToEnum(Opcode, self.code[0]);
         const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
@@ -676,7 +676,7 @@ pub fn findExprEnd(code: []const u8) !InstructionMeta {
 }
 
 const InstructionMeta = struct {
-    instruction: Instruction,
+    instruction: Opcode,
     offset: usize, // offset from start of function
 };
 
@@ -734,7 +734,7 @@ pub fn readByte(ptr: *[]const u8) !u8 {
     return value;
 }
 
-pub const Instruction = enum(u8) {
+pub const Opcode = enum(u8) {
     @"unreachable" = 0x0,
     nop = 0x01,
     block = 0x02,

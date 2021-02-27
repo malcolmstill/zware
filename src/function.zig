@@ -2,7 +2,7 @@ const std = @import("std");
 const ValueType = @import("common.zig").ValueType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Instance = @import("instance.zig").Instance;
-const Instruction = @import("instruction.zig").Instruction;
+const Opcode = @import("instruction.zig").Opcode;
 
 pub const Function = union(enum) {
     function: struct {
@@ -26,7 +26,7 @@ pub const Code = struct {
     code: []RuntimeInstruction,
 };
 
-pub const RuntimeInstruction = union(Instruction) {
+pub const RuntimeInstruction = union(Opcode) {
     @"unreachable": void,
     nop: void,
     block: struct {

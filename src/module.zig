@@ -8,7 +8,7 @@ const instruction = @import("instruction.zig");
 const RuntimeInstruction = @import("function.zig").RuntimeInstruction;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
-const Instruction = instruction.Instruction;
+const Opcode = instruction.Opcode;
 const ParseIterator = instruction.ParseIterator;
 const InstructionIterator = instruction.InstructionIterator;
 const FuncType = common.FuncType;
@@ -486,7 +486,7 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                if (byte == @enumToInt(Instruction.end)) break;
+                if (byte == @enumToInt(Opcode.end)) break;
             }
             code = self.module[offset .. offset + j + 1];
 
