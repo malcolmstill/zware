@@ -770,18 +770,6 @@ pub const Module = struct {
         return 1;
     }
 
-    // decodeCode
-    //
-    // Checks the binary representation of a function is well formed
-    pub fn decodeCode(code: []const u8) !void {
-        var it = instruction.InstructionIterator.init(code);
-        while (try it.next(true)) |meta| {
-            // try will fail on bad code
-        }
-        // 2. Make sure we can find the end of every function
-        _ = try instruction.findFunctionEnd(true, code);
-    }
-
     pub fn parseCode(self: *Module, code: []const u8) ![]RuntimeInstruction {
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
