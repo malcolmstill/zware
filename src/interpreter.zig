@@ -49,9 +49,8 @@ pub const Interpreter = struct {
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
-            const instr_code = self.continuation;
             self.continuation = self.continuation[1..];
-            try self.interpret(instr, instr_code);
+            try self.interpret(instr);
         }
     }
 
@@ -77,7 +76,7 @@ pub const Interpreter = struct {
         std.debug.warn("=====================================================\n", .{});
     }
 
-    pub fn interpret(self: *Interpreter, opcode: RuntimeInstruction, code: []RuntimeInstruction) !void {
+    pub fn interpret(self: *Interpreter, opcode: RuntimeInstruction) !void {
         // defer self.debug(opcode);
         switch (opcode) {
             .@"unreachable" => return error.TrapUnreachable,
@@ -1756,9 +1755,7 @@ test "simple interpret tests" {
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
 
-    var code: [0]RuntimeInstruction = [_]RuntimeInstruction{} ** 0;
-
-    try i.interpret(.@"i32.add", code[0..]);
+    try i.interpret(.@"i32.add");
 
     testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }
