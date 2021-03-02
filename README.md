@@ -8,4 +8,21 @@
 
 ## About
 
-`foxwren` is a [Zig](https://ziglang.org) library for executing WebAssembly.
+`foxwren` is a library for executing WebAssembly embedded in [Zig](https://ziglang.org) programs.
+
+## Goals
+
+- To allow the author, gentle reader, to understand WebAssembly
+- Embed WebAssembly programs in other zig programs
+- Be fast enough to be useful
+
+## Future goals
+
+- Implement some of the proposed extensions
+- Implement WASI
+
+## Status
+
+- The project is very much alpha quality
+- The majority of the WebAssembly MVP spec testsuite passes (and is integrated into the CI) with a few exceptions and the type-checking validator code is not complete and so the `assert_invalid` tests are not included yet. See #13 and #82.
+- Currently, only the MVP spec is implemented without any extensions other than multiple-return values.
