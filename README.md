@@ -48,6 +48,21 @@ pub fn main() !void {
 }
 ```
 
+## Requirements
+
+### Compile-time
+
+- Zig 0.8.0
+
+### Run-time
+
+- None, zig generates static binaries:
+
+```bash
+➜  foxwren git:(master) ✗ ldd fib
+        not a dynamic executable
+```
+
 ## Goals
 
 - To allow the author, gentle reader, to understand WebAssembly
