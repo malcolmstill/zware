@@ -53,9 +53,6 @@ pub fn main() !void {
 - To allow the author, gentle reader, to understand WebAssembly
 - Embed WebAssembly programs in other zig programs
 - Be fast enough to be useful
-
-## Future goals
-
 - Implement some of the proposed extensions
 - Implement WASI
 
