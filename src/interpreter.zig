@@ -322,7 +322,6 @@ pub const Interpreter = struct {
                 global.value = value;
             },
             .@"i32.load" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -334,7 +333,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u32, value);
             },
             .@"i64.load" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -346,7 +344,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u64, value);
             },
             .@"f32.load" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
@@ -359,7 +356,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(f32, value);
             },
             .@"f64.load" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
@@ -372,7 +368,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(f64, value);
             },
             .@"i32.load8_s" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -384,7 +379,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(i32, value);
             },
             .@"i32.load8_u" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -396,7 +390,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u32, value);
             },
             .@"i32.load16_s" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -408,7 +401,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(i32, value);
             },
             .@"i32.load16_u" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -420,7 +412,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u32, value);
             },
             .@"i64.load8_s" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -432,7 +423,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(i64, value);
             },
             .@"i64.load8_u" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -444,7 +434,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u64, value);
             },
             .@"i64.load16_s" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -456,7 +445,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(i64, value);
             },
             .@"i64.load16_u" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -468,7 +456,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u64, value);
             },
             .@"i64.load32_s" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -480,7 +467,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(i64, value);
             },
             .@"i64.load32_u" => |load_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = load_data.alignment;
@@ -492,7 +478,6 @@ pub const Interpreter = struct {
                 try self.pushOperand(u64, value);
             },
             .@"i32.store" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 // TODO: we need to check this / handle multiple memories
                 const memory = try self.inst.getMemory(0);
 
@@ -505,7 +490,6 @@ pub const Interpreter = struct {
                 try memory.write(u32, offset, address, value);
             },
             .@"i64.store" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -517,7 +501,6 @@ pub const Interpreter = struct {
                 try memory.write(u64, offset, address, value);
             },
             .@"f32.store" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -529,7 +512,6 @@ pub const Interpreter = struct {
                 try memory.write(f32, offset, address, value);
             },
             .@"f64.store" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -541,7 +523,6 @@ pub const Interpreter = struct {
                 try memory.write(f64, offset, address, value);
             },
             .@"i32.store8" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -553,7 +534,6 @@ pub const Interpreter = struct {
                 try memory.write(u8, offset, address, value);
             },
             .@"i32.store16" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -565,7 +545,6 @@ pub const Interpreter = struct {
                 try memory.write(u16, offset, address, value);
             },
             .@"i64.store8" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -577,7 +556,6 @@ pub const Interpreter = struct {
                 try memory.write(u8, offset, address, value);
             },
             .@"i64.store16" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -589,7 +567,6 @@ pub const Interpreter = struct {
                 try memory.write(u16, offset, address, value);
             },
             .@"i64.store32" => |store_data| {
-                const frame = try self.peekNthFrame(0);
                 const memory = try self.inst.getMemory(0);
 
                 const alignment = store_data.alignment;
@@ -601,15 +578,11 @@ pub const Interpreter = struct {
                 try memory.write(u32, offset, address, value);
             },
             .@"memory.size" => |memory_index| {
-                const frame = try self.peekNthFrame(0);
-
                 const memory = try self.inst.getMemory(memory_index);
 
                 try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
             },
             .@"memory.grow" => |memory_index| {
-                const frame = try self.peekNthFrame(0);
-
                 const memory = try self.inst.getMemory(memory_index);
 
                 const num_pages = try self.popOperand(u32);
