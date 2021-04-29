@@ -132,7 +132,7 @@ pub const Interpreter = struct {
                 },
                 .br_if => |br_ifcode| {
                     const condition = try self.popOperand(u32);
-                    if (condition == 0) return;
+                    if (condition == 0) continue;
 
                     try self.branch(br_ifcode);
                     continue;
