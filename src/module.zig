@@ -785,7 +785,7 @@ pub const Module = struct {
 
         // 2. Make a second pass where we fix up the continuations for
         //    blocks, loops and ifs
-        try function.calculateContinuations(parsed_code);
+        try function.calculateContinuations(code_start, parsed_code);
 
         return common.Range{
             .offset = code_start,

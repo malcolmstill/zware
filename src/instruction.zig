@@ -2,6 +2,7 @@ const std = @import("std");
 const leb = std.leb;
 const Module = @import("module.zig").Module;
 const Instruction = @import("function.zig").Instruction;
+const Range = @import("common.zig").Range;
 
 pub const OpcodeIterator = struct {
     function: []const u8,
@@ -138,7 +139,7 @@ pub const ParseIterator = struct {
                     .block = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .continuation = self.parsed, // TODO: fix this
+                        .continuation = Range{ .offset = 0, .count = 0 },
                     },
                 };
             },
@@ -157,7 +158,7 @@ pub const ParseIterator = struct {
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .continuation = self.parsed, // TODO: fix this
+                        .continuation = Range{ .offset = 0, .count = 0 },
                     },
                 };
             },
@@ -176,7 +177,7 @@ pub const ParseIterator = struct {
                     .@"if" = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .continuation = self.parsed, // TODO: fix this
+                        .continuation = Range{ .offset = 0, .count = 0 },
                         .else_continuation = null,
                     },
                 };
@@ -204,7 +205,7 @@ pub const ParseIterator = struct {
 
                 rt_instr = Instruction{
                     .br_table = .{
-                        .ls = self.module.br_table_indices.items[label_start .. label_start + label_count],
+                        .ls = Range{ .offset = label_start, .count = label_count },
                         .ln = ln,
                     },
                 };

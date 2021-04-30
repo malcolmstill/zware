@@ -33,25 +33,25 @@ pub const Instruction = union(Opcode) {
     block: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []Instruction,
+        continuation: Range,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []Instruction,
+        continuation: Range,
     },
     @"if": struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: []Instruction,
-        else_continuation: ?[]Instruction,
+        continuation: Range,
+        else_continuation: ?Range,
     },
     @"else": void,
     end: void,
     br: u32,
     br_if: u32,
     br_table: struct {
-        ls: []u32,
+        ls: Range,
         ln: u32,
     },
     @"return": void,
@@ -296,27 +296,31 @@ pub const Instruction = union(Opcode) {
     trunc_sat: u32,
 };
 
-pub fn calculateContinuations(code: []Instruction) !void {
+pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !void {
     var offset: usize = 0;
     for (code) |*opcode| {
         switch (opcode.*) {
             .block => |*block_instr| {
                 const end_offset = try findEnd(code[offset..]);
 
-                block_instr.continuation = code[offset + end_offset + 1 ..];
+                const continuation = code[offset + end_offset + 1 ..];
+                block_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
             },
             .@"if" => |*if_instr| {
                 const end_offset = try findEnd(code[offset..]);
                 const optional_else_offset = try findElse(code[offset..]);
 
-                if_instr.continuation = code[offset + end_offset + 1 ..];
+                const continuation = code[offset + end_offset + 1 ..];
+                if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
                 if (optional_else_offset) |else_offset| {
-                    if_instr.else_continuation = code[offset + else_offset + 1 ..];
+                    const else_continuation = code[offset + else_offset + 1 ..];
+                    if_instr.else_continuation = Range{ .offset = parsed_code_offset + offset + else_offset + 1, .count = else_continuation.len };
                 }
             },
             .loop => |*loop_instr| {
                 // const end_offset = try findEnd(code[offset..]);
-                loop_instr.continuation = code[offset..];
+                const continuation = code[offset..];
+                loop_instr.continuation = Range{ .offset = parsed_code_offset + offset, .count = continuation.len };
             },
             else => {},
         }

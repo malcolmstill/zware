@@ -49,6 +49,7 @@ pub const Interpreter = struct {
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
             self.continuation = self.continuation[1..];
+
             switch (instr) {
                 .@"unreachable" => return error.TrapUnreachable,
                 .nop => continue,
@@ -56,7 +57,7 @@ pub const Interpreter = struct {
                     try self.pushLabel(Label{
                         .return_arity = block.return_arity,
                         .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
-                        .continuation = block.continuation,
+                        .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
                     });
                     continue;
                 },
@@ -65,7 +66,7 @@ pub const Interpreter = struct {
                         // note that we use block_params rather than block_returns for return arity:
                         .return_arity = block.param_arity,
                         .op_stack_len = self.op_stack.len - block.param_arity,
-                        .continuation = block.continuation,
+                        .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count],
                     });
                     continue;
                 },
@@ -73,16 +74,16 @@ pub const Interpreter = struct {
                     const condition = try self.popOperand(u32);
                     if (condition == 0) {
                         // We'll skip to end
-                        self.continuation = block.continuation;
+                        self.continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count];
                         // unless we have an else branch
                         if (block.else_continuation) |else_continuation| {
-                            self.continuation = else_continuation;
+                            self.continuation = self.inst.module.parsed_code.items[else_continuation.offset .. else_continuation.offset + else_continuation.count];
 
                             // We are inside the if branch
                             try self.pushLabel(Label{
                                 .return_arity = block.return_arity,
                                 .op_stack_len = self.op_stack.len - block.param_arity,
-                                .continuation = block.continuation,
+                                .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
                             });
                         }
                     } else {
@@ -90,7 +91,7 @@ pub const Interpreter = struct {
                         try self.pushLabel(Label{
                             .return_arity = block.return_arity,
                             .op_stack_len = self.op_stack.len - block.param_arity,
-                            .continuation = block.continuation,
+                            .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
                         });
                     }
                     continue;
@@ -139,11 +140,12 @@ pub const Interpreter = struct {
                 },
                 .br_table => |br_table| {
                     const i = try self.popOperand(u32);
+                    const ls = self.inst.module.br_table_indices.items[br_table.ls.offset .. br_table.ls.offset + br_table.ls.count];
 
-                    if (i >= br_table.ls.len) {
+                    if (i >= ls.len) {
                         try self.branch(br_table.ln);
                     } else {
-                        try self.branch(br_table.ls[i]);
+                        try self.branch(ls[i]);
                     }
                     continue;
                 },
