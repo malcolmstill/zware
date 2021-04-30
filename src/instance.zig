@@ -49,7 +49,7 @@ pub const Instance = struct {
         };
     }
 
-    pub fn instantiate(self: *Instance) !void {
+    pub fn instantiate(self: *Instance, index: usize) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
         // 1. Initialise imports
@@ -104,7 +104,7 @@ pub const Instance = struct {
                         .locals_count = code.locals_count,
                         .params = func_type.params,
                         .results = func_type.results,
-                        .instance = self,
+                        .instance = index,
                     },
                 });
 
@@ -246,7 +246,7 @@ pub const Instance = struct {
                 if (f.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
 
                 const locals_start = interp.op_stack.len;
 
@@ -303,7 +303,7 @@ pub const Instance = struct {
 
         switch (function) {
             .function => |f| {
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], f.instance);
+                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
 
                 const locals_start = interp.op_stack.len;
 

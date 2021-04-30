@@ -12,7 +12,7 @@ pub const Function = union(enum) {
         code: []Instruction,
         params: []const ValueType,
         results: []const ValueType,
-        instance: *Instance,
+        instance: usize,
     },
     host_function: struct {
         func: fn (*Interpreter) anyerror!void,

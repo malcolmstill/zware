@@ -9,6 +9,7 @@ const Global = @import("global.zig").Global;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
 const ValueType = @import("common.zig").ValueType;
+const Instance = @import("instance.zig").Instance;
 
 // - Stores provide the runtime memory shared between modules
 // - For different applications you may want to use a store that
@@ -31,6 +32,7 @@ pub const ArrayListStore = struct {
     tables: ArrayList(Table),
     globals: ArrayList(Global),
     imports: ArrayList(ImportExport),
+    instances: ArrayList(Instance),
 
     pub fn init(alloc: *mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
@@ -40,6 +42,7 @@ pub const ArrayListStore = struct {
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(Global).init(alloc),
             .imports = ArrayList(ImportExport).init(alloc),
+            .instances = ArrayList(Instance).init(alloc),
         };
 
         return store;
@@ -116,5 +119,16 @@ pub const ArrayListStore = struct {
         glbl_ptr.* = value;
 
         return self.globals.items.len - 1;
+    }
+
+    pub fn instance(self: *ArrayListStore, handle: usize) !*Instance {
+        if (handle >= self.instances.items.len) return error.BadInstanceIndex;
+        return &self.instances.items[handle];
+    }
+
+    pub fn addInstance(self: *ArrayListStore, inst: Instance) !usize {
+        const instance_ptr = try self.instances.addOne();
+        instance_ptr.* = inst;
+        return self.instances.items.len - 1;
     }
 };

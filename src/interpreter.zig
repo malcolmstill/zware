@@ -207,7 +207,7 @@ pub const Interpreter = struct {
                             });
 
                             self.continuation = f.code;
-                            self.inst = f.instance;
+                            self.inst = try self.inst.store.instance(f.instance);
                         },
                         .host_function => |hf| {
                             try hf.func(self);
