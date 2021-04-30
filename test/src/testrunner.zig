@@ -232,14 +232,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
 
     var inst: *Instance = undefined;
-    var instances = ArrayList(Instance).init(&arena.allocator);
 
-    const NamedInstance = struct {
-        name: ?[]const u8,
-        inst: Instance,
-    };
-
-    var registered_names = StringHashMap(*Instance).init(&arena.allocator);
+    var registered_names = StringHashMap(usize).init(&arena.allocator);
 
     for (r.commands) |command| {
         switch (command) {
@@ -253,13 +247,13 @@ pub fn main() anyerror!void {
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                inst = try instances.addOne();
-                inst.* = Instance.init(&arena.allocator, &store, module);
-
-                try inst.instantiate();
+                var new_inst = Instance.init(&arena.allocator, &store, module);
+                const inst_index = try store.addInstance(new_inst);
+                inst = try store.instance(inst_index);
+                try inst.instantiate(inst_index);
 
                 if (command.module.name) |name| {
-                    try registered_names.put(name, inst);
+                    try registered_names.put(name, inst_index);
                 }
             },
             .assert_return => {
@@ -272,8 +266,8 @@ pub fn main() anyerror!void {
 
                         var instance = inst;
                         if (command.assert_return.action.invoke.module) |name| {
-                            if (registered_names.get(name)) |instptr| {
-                                instance = instptr;
+                            if (registered_names.get(name)) |inst_offset| {
+                                instance = try store.instance(inst_offset);
                             }
                         }
 
@@ -327,7 +321,8 @@ pub fn main() anyerror!void {
                         std.debug.warn("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
                         std.debug.warn("(result) get \"{s}\"\n", .{field});
                         if (action.get.module) |m| {
-                            const registered_inst = registered_names.get(m) orelse return error.NotRegistered;
+                            const registered_inst_offset = registered_names.get(m) orelse return error.NotRegistered;
+                            const registered_inst = try store.instance(registered_inst_offset);
                             var global_i: usize = 0;
                             for (registered_inst.module.exports.list.items) |exprt, i| {
                                 if (mem.eql(u8, exprt.name, field)) {
@@ -377,8 +372,8 @@ pub fn main() anyerror!void {
 
                         var instance = inst;
                         if (command.assert_trap.action.invoke.module) |name| {
-                            if (registered_names.get(name)) |instptr| {
-                                instance = instptr;
+                            if (registered_names.get(name)) |inst_offset| {
+                                instance = try store.instance(inst_offset);
                             }
                         }
 
@@ -730,10 +725,11 @@ pub fn main() anyerror!void {
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                inst = try instances.addOne();
-                inst.* = Instance.init(&arena.allocator, &store, module);
+                var new_inst = Instance.init(&arena.allocator, &store, module);
+                const inst_index = try store.addInstance(new_inst);
+                inst = try store.instance(inst_index);
 
-                if (inst.instantiate()) |x| {
+                if (inst.instantiate(inst_index)) |x| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
                     error.ImportedMemoryNotBigEnough => continue,
@@ -757,10 +753,11 @@ pub fn main() anyerror!void {
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
 
-                inst = try instances.addOne();
-                inst.* = Instance.init(&arena.allocator, &store, module);
+                var new_inst = Instance.init(&arena.allocator, &store, module);
+                const inst_index = try store.addInstance(new_inst);
+                inst = try store.instance(inst_index);
 
-                if (inst.instantiate()) |x| {
+                if (inst.instantiate(inst_index)) |x| {
                     return error.ExpectedUninstantiable;
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
@@ -773,7 +770,8 @@ pub fn main() anyerror!void {
             .register => {
                 std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
                 if (command.register.name) |name| {
-                    const registered_inst = registered_names.get(name) orelse return error.NotRegistered;
+                    const registered_inst_offset = registered_names.get(name) orelse return error.NotRegistered;
+                    const registered_inst = try store.instance(registered_inst_offset);
 
                     for (registered_inst.module.exports.list.items) |exprt, i| {
                         switch (exprt.tag) {
@@ -836,65 +834,63 @@ const Wast = struct {
     commands: []const Command,
 };
 
-const Command = union(enum) {
-    module: struct {
-        comptime @"type": []const u8 = "module",
-        line: usize,
-        name: ?[]const u8 = null,
-        filename: []const u8,
-    }, assert_return: struct {
-        comptime @"type": []const u8 = "assert_return",
-        line: usize,
-        action: Action,
-        expected: []const Value,
-    }, assert_trap: struct {
-        comptime @"type": []const u8 = "assert_trap",
-        line: usize,
-        action: Action,
-        text: []const u8,
-        expected: []const ValueTrap,
-    }, assert_malformed: struct {
-        comptime @"type": []const u8 = "assert_malformed",
-        line: usize,
-        filename: []const u8,
-        text: []const u8,
-        module_type: []const u8,
-    }, assert_invalid: struct {
-        comptime @"type": []const u8 = "assert_invalid",
-        line: usize,
-        filename: []const u8,
-        text: []const u8,
-        module_type: []const u8,
-    }, assert_exhaustion: struct {
-        comptime @"type": []const u8 = "assert_exhaustion",
-        line: usize,
-        action: Action,
-        text: []const u8,
-        expected: []const ValueTrap,
-    }, assert_unlinkable: struct {
-        comptime @"type": []const u8 = "assert_unlinkable",
-        line: usize,
-        filename: []const u8,
-        text: []const u8,
-        module_type: []const u8,
-    }, assert_uninstantiable: struct {
-        comptime @"type": []const u8 = "assert_uninstantiable",
-        line: usize,
-        filename: []const u8,
-        text: []const u8,
-        module_type: []const u8,
-    }, action: struct {
-        comptime @"type": []const u8 = "action",
-        line: usize,
-        action: Action,
-        expected: []const ValueTrap,
-    }, register: struct {
-        comptime @"type": []const u8 = "register",
-        line: usize,
-        name: ?[]const u8 = null,
-        as: []const u8,
-    }
-};
+const Command = union(enum) { module: struct {
+    comptime @"type": []const u8 = "module",
+    line: usize,
+    name: ?[]const u8 = null,
+    filename: []const u8,
+}, assert_return: struct {
+    comptime @"type": []const u8 = "assert_return",
+    line: usize,
+    action: Action,
+    expected: []const Value,
+}, assert_trap: struct {
+    comptime @"type": []const u8 = "assert_trap",
+    line: usize,
+    action: Action,
+    text: []const u8,
+    expected: []const ValueTrap,
+}, assert_malformed: struct {
+    comptime @"type": []const u8 = "assert_malformed",
+    line: usize,
+    filename: []const u8,
+    text: []const u8,
+    module_type: []const u8,
+}, assert_invalid: struct {
+    comptime @"type": []const u8 = "assert_invalid",
+    line: usize,
+    filename: []const u8,
+    text: []const u8,
+    module_type: []const u8,
+}, assert_exhaustion: struct {
+    comptime @"type": []const u8 = "assert_exhaustion",
+    line: usize,
+    action: Action,
+    text: []const u8,
+    expected: []const ValueTrap,
+}, assert_unlinkable: struct {
+    comptime @"type": []const u8 = "assert_unlinkable",
+    line: usize,
+    filename: []const u8,
+    text: []const u8,
+    module_type: []const u8,
+}, assert_uninstantiable: struct {
+    comptime @"type": []const u8 = "assert_uninstantiable",
+    line: usize,
+    filename: []const u8,
+    text: []const u8,
+    module_type: []const u8,
+}, action: struct {
+    comptime @"type": []const u8 = "action",
+    line: usize,
+    action: Action,
+    expected: []const ValueTrap,
+}, register: struct {
+    comptime @"type": []const u8 = "register",
+    line: usize,
+    name: ?[]const u8 = null,
+    as: []const u8,
+} };
 
 const Action = union(enum) {
     invoke: struct {
