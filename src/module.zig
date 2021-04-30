@@ -473,7 +473,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
-        var parsed_code: ?[]Instruction = null;
+        var parsed_code: ?common.Range = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -770,7 +770,7 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) ![]Instruction {
+    pub fn parseCode(self: *Module, code: []const u8) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
@@ -785,9 +785,12 @@ pub const Module = struct {
 
         // 2. Make a second pass where we fix up the continuations for
         //    blocks, loops and ifs
-        try function.calculateContinuations(parsed_code);
+        try function.calculateContinuations(code_start, parsed_code);
 
-        return parsed_code;
+        return common.Range{
+            .offset = code_start,
+            .count = self.parsed_code.items.len - code_start,
+        };
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
@@ -880,8 +883,10 @@ test "module loading (simple add function)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [2]u64{ 22, 23 };
     var out = [1]u64{0};
@@ -901,8 +906,10 @@ test "module loading (fib)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [1]u64{0};
     var out = [1]u64{0};
@@ -946,8 +953,10 @@ test "module loading (fact)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [1]u64{1};
     var out = [1]u64{0};

@@ -20,8 +20,10 @@ pub fn main() !void {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     const n = 28;
     var in = [1]u64{n};

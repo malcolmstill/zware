@@ -49,7 +49,1631 @@ pub const Interpreter = struct {
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
             self.continuation = self.continuation[1..];
-            try self.interpret(instr);
+
+            switch (instr) {
+                .@"unreachable" => return error.TrapUnreachable,
+                .nop => continue,
+                .block => |block| {
+                    try self.pushLabel(Label{
+                        .return_arity = block.return_arity,
+                        .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
+                        .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+                    });
+                    continue;
+                },
+                .loop => |block| {
+                    try self.pushLabel(Label{
+                        // note that we use block_params rather than block_returns for return arity:
+                        .return_arity = block.param_arity,
+                        .op_stack_len = self.op_stack.len - block.param_arity,
+                        .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count],
+                    });
+                    continue;
+                },
+                .@"if" => |block| {
+                    const condition = try self.popOperand(u32);
+                    if (condition == 0) {
+                        // We'll skip to end
+                        self.continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count];
+                        // unless we have an else branch
+                        if (block.else_continuation) |else_continuation| {
+                            self.continuation = self.inst.module.parsed_code.items[else_continuation.offset .. else_continuation.offset + else_continuation.count];
+
+                            // We are inside the if branch
+                            try self.pushLabel(Label{
+                                .return_arity = block.return_arity,
+                                .op_stack_len = self.op_stack.len - block.param_arity,
+                                .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+                            });
+                        }
+                    } else {
+                        // We are inside the if branch
+                        try self.pushLabel(Label{
+                            .return_arity = block.return_arity,
+                            .op_stack_len = self.op_stack.len - block.param_arity,
+                            .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+                        });
+                    }
+                    continue;
+                },
+                .@"else" => {
+                    // If we hit else, it's because we've hit the end of if
+                    // Therefore we want to skip to end of current label
+                    const label = try self.popLabel();
+                    self.continuation = label.continuation;
+                    continue;
+                },
+                .end => {
+                    // https://webassembly.github.io/spec/core/exec/instructions.html#exiting-xref-syntax-instructions-syntax-instr-mathit-instr-ast-with-label-l
+                    const label = try self.popLabel();
+
+                    // It seems like we need to special case end for a function call. This
+                    // doesn't seem quite right because the spec doesn't mention it. On
+                    // call we push a label containing a continuation which is the code to
+                    // resume after the call has returned. We want to use that if we've run
+                    // out of code in the current function, i.e. self.continuation is empty
+                    if (self.continuation.len == 0) {
+                        const frame = try self.peekNthFrame(0);
+                        const n = label.return_arity;
+                        var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+                        const src = self.op_stack[self.op_stack.len - n ..];
+                        mem.copy(u64, dst, src);
+
+                        self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+                        self.label_stack = self.label_stack[0..frame.label_stack_len];
+                        self.continuation = label.continuation;
+                        _ = try self.popFrame();
+                        self.inst = frame.inst;
+                    }
+                    continue;
+                },
+                .br => |brcode| {
+                    try self.branch(brcode);
+                    continue;
+                },
+                .br_if => |br_ifcode| {
+                    const condition = try self.popOperand(u32);
+                    if (condition == 0) continue;
+
+                    try self.branch(br_ifcode);
+                    continue;
+                },
+                .br_table => |br_table| {
+                    const i = try self.popOperand(u32);
+                    const ls = self.inst.module.br_table_indices.items[br_table.ls.offset .. br_table.ls.offset + br_table.ls.count];
+
+                    if (i >= ls.len) {
+                        try self.branch(br_table.ln);
+                    } else {
+                        try self.branch(ls[i]);
+                    }
+                    continue;
+                },
+                .@"return" => {
+                    const frame = try self.peekNthFrame(0);
+                    const n = frame.return_arity;
+
+                    if (std.builtin.mode == .Debug) {
+                        if (self.op_stack.len < n) return error.OperandStackUnderflow;
+                    }
+
+                    const label = self.label_stack[frame.label_stack_len];
+                    self.continuation = label.continuation;
+
+                    // The mem copy is equivalent of popping n operands, doing everything
+                    // up to and including popFrame and then repushing the n operands
+                    var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+                    const src = self.op_stack[self.op_stack.len - n ..];
+                    mem.copy(u64, dst, src);
+
+                    self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+                    self.label_stack = self.label_stack[0..frame.label_stack_len];
+
+                    _ = try self.popFrame();
+                    self.inst = frame.inst;
+                    continue;
+                },
+                .call => |function_index| {
+                    // The spec says:
+                    //      The call instruction invokes another function, consuming the necessary
+                    //      arguments from the stack and returning the result values of the call.
+
+                    // TODO: we need to verify that we're okay to lookup this function.
+                    //       we can (and probably should) do that at validation time.
+                    const module = self.inst.module;
+                    const function = try self.inst.getFunc(function_index);
+
+                    switch (function) {
+                        .function => |f| {
+                            // Make space for locals (again, params already on stack)
+                            var j: usize = 0;
+                            while (j < f.locals_count) : (j += 1) {
+                                try self.pushOperand(u64, 0);
+                            }
+
+                            // Consume parameters from the stack
+                            try self.pushFrame(Frame{
+                                .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                                .label_stack_len = self.label_stack.len,
+                                .return_arity = f.results.len,
+                                .inst = self.inst,
+                            }, f.locals_count + f.params.len);
+
+                            // Our continuation is the code after call
+                            try self.pushLabel(Label{
+                                .return_arity = f.results.len,
+                                .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                                .continuation = self.continuation,
+                            });
+
+                            self.continuation = f.code;
+                            self.inst = try self.inst.store.instance(f.instance);
+                        },
+                        .host_function => |hf| {
+                            try hf.func(self);
+                        },
+                    }
+                    continue;
+                },
+                .call_indirect => |call_indirect_instruction| {
+                    var module = self.inst.module;
+
+                    const op_func_type_index = call_indirect_instruction.@"type";
+                    const table_index = call_indirect_instruction.table;
+
+                    // Read lookup index from stack
+                    const lookup_index = try self.popOperand(u32);
+                    const table = try self.inst.getTable(table_index);
+                    const function_handle = try table.lookup(lookup_index);
+                    const function = try self.inst.store.function(function_handle);
+
+                    switch (function) {
+                        .function => |func| {
+                            // Check that signatures match
+                            // const func_type = module.types.list.items[function.typeidx];
+                            const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                            if (!module.signaturesEqual(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+
+                            // Make space for locals (again, params already on stack)
+                            var j: usize = 0;
+                            while (j < func.locals_count) : (j += 1) {
+                                try self.pushOperand(u64, 0);
+                            }
+
+                            // Consume parameters from the stack
+                            try self.pushFrame(Frame{
+                                .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
+                                .label_stack_len = self.label_stack.len,
+                                .return_arity = func.results.len,
+                                .inst = self.inst,
+                            }, func.locals_count + func.params.len);
+
+                            // Our continuation is the code after call
+                            try self.pushLabel(Label{
+                                .return_arity = func.results.len,
+                                .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
+                                .continuation = self.continuation,
+                            });
+
+                            self.continuation = func.code;
+                        },
+                        .host_function => |host_func| {
+                            const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                            if (!module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+
+                            try host_func.func(self);
+                        },
+                    }
+                    continue;
+                },
+                .drop => {
+                    _ = try self.popAnyOperand();
+                    continue;
+                },
+                .select => {
+                    const condition = try self.popOperand(u32);
+
+                    const c2 = try self.popAnyOperand();
+                    const c1 = try self.popAnyOperand();
+
+                    if (condition != 0) {
+                        try self.pushAnyOperand(c1);
+                    } else {
+                        try self.pushAnyOperand(c2);
+                    }
+
+                    continue;
+                },
+                .@"local.get" => |local_index| {
+                    const frame = try self.peekNthFrame(0);
+                    const local_value: u64 = frame.locals[local_index];
+                    try self.pushOperand(u64, local_value);
+
+                    continue;
+                },
+                .@"local.set" => |local_index| {
+                    const value = try self.popAnyOperand();
+                    const frame = try self.peekNthFrame(0);
+                    frame.locals[local_index] = value;
+
+                    continue;
+                },
+                .@"local.tee" => |local_index| {
+                    const value = try self.popAnyOperand();
+                    const frame = try self.peekNthFrame(0);
+                    // TODO: debug build only for return error:
+                    if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
+                    frame.locals[local_index] = value;
+                    try self.pushAnyOperand(value);
+                    continue;
+                },
+                .@"global.get" => |global_index| {
+                    const global = try self.inst.getGlobal(global_index);
+                    try self.pushAnyOperand(global.value);
+                    continue;
+                },
+                .@"global.set" => |global_index| {
+                    const value = try self.popAnyOperand();
+                    const global = try self.inst.getGlobal(global_index);
+                    global.value = value;
+                    continue;
+                },
+                .@"i32.load" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u32, offset, address);
+                    try self.pushOperand(u32, value);
+                    continue;
+                },
+                .@"i64.load" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u64, offset, address);
+                    try self.pushOperand(u64, value);
+                    continue;
+                },
+                .@"f32.load" => |load_data| {
+                    // TODO: we need to check this / handle multiple memories
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(f32, offset, address);
+                    try self.pushOperand(f32, value);
+                    continue;
+                },
+                .@"f64.load" => |load_data| {
+                    // TODO: we need to check this / handle multiple memories
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(f64, offset, address);
+                    try self.pushOperand(f64, value);
+                    continue;
+                },
+                .@"i32.load8_s" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(i8, offset, address);
+                    try self.pushOperand(i32, value);
+                    continue;
+                },
+                .@"i32.load8_u" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u8, offset, address);
+                    try self.pushOperand(u32, value);
+                    continue;
+                },
+                .@"i32.load16_s" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(i16, offset, address);
+                    try self.pushOperand(i32, value);
+                    continue;
+                },
+                .@"i32.load16_u" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u16, offset, address);
+                    try self.pushOperand(u32, value);
+                    continue;
+                },
+                .@"i64.load8_s" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(i8, offset, address);
+                    try self.pushOperand(i64, value);
+                    continue;
+                },
+                .@"i64.load8_u" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u8, offset, address);
+                    try self.pushOperand(u64, value);
+                    continue;
+                },
+                .@"i64.load16_s" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(i16, offset, address);
+                    try self.pushOperand(i64, value);
+                    continue;
+                },
+                .@"i64.load16_u" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u16, offset, address);
+                    try self.pushOperand(u64, value);
+                    continue;
+                },
+                .@"i64.load32_s" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(i32, offset, address);
+                    try self.pushOperand(i64, value);
+                    continue;
+                },
+                .@"i64.load32_u" => |load_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = load_data.alignment;
+                    const offset = load_data.offset;
+
+                    const address = try self.popOperand(u32);
+
+                    const value = try memory.read(u32, offset, address);
+                    try self.pushOperand(u64, value);
+                    continue;
+                },
+                .@"i32.store" => |store_data| {
+                    // TODO: we need to check this / handle multiple memories
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = try self.popOperand(u32);
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u32, offset, address, value);
+                    continue;
+                },
+                .@"i64.store" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = try self.popOperand(u64);
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u64, offset, address, value);
+                    continue;
+                },
+                .@"f32.store" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = try self.popOperand(f32);
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(f32, offset, address, value);
+                    continue;
+                },
+                .@"f64.store" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = try self.popOperand(f64);
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(f64, offset, address, value);
+                    continue;
+                },
+                .@"i32.store8" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = @truncate(u8, try self.popOperand(u32));
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u8, offset, address, value);
+                    continue;
+                },
+                .@"i32.store16" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = @truncate(u16, try self.popOperand(u32));
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u16, offset, address, value);
+                    continue;
+                },
+                .@"i64.store8" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = @truncate(u8, try self.popOperand(u64));
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u8, offset, address, value);
+                    continue;
+                },
+                .@"i64.store16" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = @truncate(u16, try self.popOperand(u64));
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u16, offset, address, value);
+                    continue;
+                },
+                .@"i64.store32" => |store_data| {
+                    const memory = try self.inst.getMemory(0);
+
+                    const alignment = store_data.alignment;
+                    const offset = store_data.offset;
+
+                    const value = @truncate(u32, try self.popOperand(u64));
+                    const address = try self.popOperand(u32);
+
+                    try memory.write(u32, offset, address, value);
+                    continue;
+                },
+                .@"memory.size" => |memory_index| {
+                    const memory = try self.inst.getMemory(memory_index);
+
+                    try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
+                    continue;
+                },
+                .@"memory.grow" => |memory_index| {
+                    const memory = try self.inst.getMemory(memory_index);
+
+                    const num_pages = try self.popOperand(u32);
+                    if (memory.grow(num_pages)) |old_size| {
+                        try self.pushOperand(u32, @intCast(u32, old_size));
+                    } else |err| {
+                        try self.pushOperand(i32, @as(i32, -1));
+                    }
+                    continue;
+                },
+                .@"i32.const" => |x| {
+                    try self.pushOperand(i32, x);
+                    continue;
+                },
+                .@"i64.const" => |x| {
+                    try self.pushOperand(i64, x);
+                    continue;
+                },
+                .@"f32.const" => |f| {
+                    try self.pushOperand(f32, @bitCast(f32, f));
+                    continue;
+                },
+                .@"f64.const" => |f| {
+                    try self.pushOperand(f64, @bitCast(f64, f));
+                    continue;
+                },
+                .@"i32.eq" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 == c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.ne" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 != c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.eqz" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 == 0) 1 else 0));
+                    continue;
+                },
+                .@"i32.lt_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.lt_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.gt_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.gt_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.le_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.le_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.ge_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.ge_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.eq" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.ne" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.eqz" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 == 0) 1 else 0));
+                    continue;
+                },
+                .@"i64.lt_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.lt_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.gt_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.gt_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.le_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.le_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.ge_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"i64.ge_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.eq" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.ne" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.lt" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.gt" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.le" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"f32.ge" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.eq" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.ne" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.lt" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.gt" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.le" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
+                    continue;
+                },
+                .@"f64.ge" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
+                    continue;
+                },
+                .@"i32.clz" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @clz(u32, c1));
+                    continue;
+                },
+                .@"i32.ctz" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @ctz(u32, c1));
+                    continue;
+                },
+                .@"i32.popcnt" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, @popCount(u32, c1));
+                    continue;
+                },
+                .@"i32.add" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 +% c2);
+                    continue;
+                },
+                .@"i32.sub" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 -% c2);
+                    continue;
+                },
+                .@"i32.mul" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 *% c2);
+                    continue;
+                },
+                .@"i32.div_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(i32, try math.divTrunc(i32, c1, c2));
+                    continue;
+                },
+                .@"i32.div_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, try math.divTrunc(u32, c1, c2));
+                    continue;
+                },
+                .@"i32.rem_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(i32, try math.rem(i32, c1, try math.absInt(c2)));
+                    continue;
+                },
+                .@"i32.rem_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, try math.rem(u32, c1, c2));
+                    continue;
+                },
+                .@"i32.and" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 & c2);
+                    continue;
+                },
+                .@"i32.or" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 | c2);
+                    continue;
+                },
+                .@"i32.xor" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, c1 ^ c2);
+                    continue;
+                },
+                .@"i32.shl" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, math.shl(u32, c1, c2 % 32));
+                    continue;
+                },
+                .@"i32.shr_s" => {
+                    const c2 = try self.popOperand(i32);
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(i32, math.shr(i32, c1, try math.mod(i32, c2, 32)));
+                    continue;
+                },
+                .@"i32.shr_u" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, math.shr(u32, c1, c2 % 32));
+                    continue;
+                },
+                .@"i32.rotl" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, math.rotl(u32, c1, c2 % 32));
+                    continue;
+                },
+                .@"i32.rotr" => {
+                    const c2 = try self.popOperand(u32);
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(u32, math.rotr(u32, c1, c2 % 32));
+                    continue;
+                },
+                .@"i64.clz" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @clz(u64, c1));
+                    continue;
+                },
+                .@"i64.ctz" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @ctz(u64, c1));
+                    continue;
+                },
+                .@"i64.popcnt" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @popCount(u64, c1));
+                    continue;
+                },
+                .@"i64.add" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 +% c2);
+                    continue;
+                },
+                .@"i64.sub" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 -% c2);
+                    continue;
+                },
+                .@"i64.mul" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 *% c2);
+                    continue;
+                },
+                .@"i64.div_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, try math.divTrunc(i64, c1, c2));
+                    continue;
+                },
+                .@"i64.div_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, try math.divTrunc(u64, c1, c2));
+                    continue;
+                },
+                .@"i64.rem_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, try math.rem(i64, c1, try math.absInt(c2)));
+                    continue;
+                },
+                .@"i64.rem_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, try math.rem(u64, c1, c2));
+                    continue;
+                },
+                .@"i64.and" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 & c2);
+                    continue;
+                },
+                .@"i64.or" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 | c2);
+                    continue;
+                },
+                .@"i64.xor" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, c1 ^ c2);
+                    continue;
+                },
+                .@"i64.shl" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, math.shl(u64, c1, c2 % 64));
+                    continue;
+                },
+                .@"i64.shr_s" => {
+                    const c2 = try self.popOperand(i64);
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, math.shr(i64, c1, try math.mod(i64, c2, 64)));
+                    continue;
+                },
+                .@"i64.shr_u" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, math.shr(u64, c1, c2 % 64));
+                    continue;
+                },
+                .@"i64.rotl" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, math.rotl(u64, c1, c2 % 64));
+                    continue;
+                },
+                .@"i64.rotr" => {
+                    const c2 = try self.popOperand(u64);
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, math.rotr(u64, c1, c2 % 64));
+                    continue;
+                },
+                .@"f32.abs" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, math.fabs(c1));
+                    continue;
+                },
+                .@"f32.neg" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, -c1);
+                    continue;
+                },
+                .@"f32.ceil" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, @ceil(c1));
+                    continue;
+                },
+                .@"f32.floor" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, @floor(c1));
+                    continue;
+                },
+                .@"f32.trunc" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, @trunc(c1));
+                    continue;
+                },
+                .@"f32.nearest" => {
+                    const c1 = try self.popOperand(f32);
+                    const floor = @floor(c1);
+                    const ceil = @ceil(c1);
+
+                    if (ceil - c1 == c1 - floor) {
+                        if (@mod(ceil, 2) == 0) {
+                            try self.pushOperand(f32, ceil);
+                        } else {
+                            try self.pushOperand(f32, floor);
+                        }
+                    } else {
+                        try self.pushOperand(f32, @round(c1));
+                    }
+                    continue;
+                },
+                .@"f32.sqrt" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, math.sqrt(c1));
+                    continue;
+                },
+                .@"f32.add" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, c1 + c2);
+                    continue;
+                },
+                .@"f32.sub" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, c1 - c2);
+                    continue;
+                },
+                .@"f32.mul" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, c1 * c2);
+                    continue;
+                },
+                .@"f32.div" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f32, c1 / c2);
+                    continue;
+                },
+                .@"f32.min" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+
+                    if (math.isNan(c1)) {
+                        try self.pushOperand(f32, math.nan_f32);
+                        return;
+                    }
+                    if (math.isNan(c2)) {
+                        try self.pushOperand(f32, math.nan_f32);
+                        return;
+                    }
+
+                    if (c1 == 0.0 and c2 == 0.0) {
+                        if (math.signbit(c1)) {
+                            try self.pushOperand(f32, c1);
+                        } else {
+                            try self.pushOperand(f32, c2);
+                        }
+                    } else {
+                        try self.pushOperand(f32, math.min(c1, c2));
+                    }
+                    continue;
+                },
+                .@"f32.max" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+
+                    if (math.isNan(c1)) {
+                        try self.pushOperand(f32, math.nan_f32);
+                        return;
+                    }
+                    if (math.isNan(c2)) {
+                        try self.pushOperand(f32, math.nan_f32);
+                        return;
+                    }
+
+                    if (c1 == 0.0 and c2 == 0.0) {
+                        if (math.signbit(c1)) {
+                            try self.pushOperand(f32, c2);
+                        } else {
+                            try self.pushOperand(f32, c1);
+                        }
+                    } else {
+                        try self.pushOperand(f32, math.max(c1, c2));
+                    }
+                    continue;
+                },
+                .@"f32.copysign" => {
+                    const c2 = try self.popOperand(f32);
+                    const c1 = try self.popOperand(f32);
+
+                    if (math.signbit(c2)) {
+                        try self.pushOperand(f32, -math.fabs(c1));
+                    } else {
+                        try self.pushOperand(f32, math.fabs(c1));
+                    }
+                    continue;
+                },
+                .@"f64.abs" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, math.fabs(c1));
+                    continue;
+                },
+                .@"f64.neg" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, -c1);
+                    continue;
+                },
+                .@"f64.ceil" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, @ceil(c1));
+                    continue;
+                },
+                .@"f64.floor" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, @floor(c1));
+                    continue;
+                },
+                .@"f64.trunc" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, @trunc(c1));
+                    continue;
+                },
+                .@"f64.nearest" => {
+                    const c1 = try self.popOperand(f64);
+                    const floor = @floor(c1);
+                    const ceil = @ceil(c1);
+
+                    if (ceil - c1 == c1 - floor) {
+                        if (@mod(ceil, 2) == 0) {
+                            try self.pushOperand(f64, ceil);
+                        } else {
+                            try self.pushOperand(f64, floor);
+                        }
+                    } else {
+                        try self.pushOperand(f64, @round(c1));
+                    }
+                    continue;
+                },
+                .@"f64.sqrt" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, math.sqrt(c1));
+                    continue;
+                },
+                .@"f64.add" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, c1 + c2);
+                    continue;
+                },
+                .@"f64.sub" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, c1 - c2);
+                    continue;
+                },
+                .@"f64.mul" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, c1 * c2);
+                    continue;
+                },
+                .@"f64.div" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f64, c1 / c2);
+                    continue;
+                },
+                .@"f64.min" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+
+                    if (math.isNan(c1)) {
+                        try self.pushOperand(f64, math.nan_f64);
+                        return;
+                    }
+                    if (math.isNan(c2)) {
+                        try self.pushOperand(f64, math.nan_f64);
+                        return;
+                    }
+
+                    if (c1 == 0.0 and c2 == 0.0) {
+                        if (math.signbit(c1)) {
+                            try self.pushOperand(f64, c1);
+                        } else {
+                            try self.pushOperand(f64, c2);
+                        }
+                    } else {
+                        try self.pushOperand(f64, math.min(c1, c2));
+                    }
+                    continue;
+                },
+                .@"f64.max" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+
+                    if (math.isNan(c1)) {
+                        try self.pushOperand(f64, math.nan_f64);
+                        return;
+                    }
+                    if (math.isNan(c2)) {
+                        try self.pushOperand(f64, math.nan_f64);
+                        return;
+                    }
+
+                    if (c1 == 0.0 and c2 == 0.0) {
+                        if (math.signbit(c1)) {
+                            try self.pushOperand(f64, c2);
+                        } else {
+                            try self.pushOperand(f64, c1);
+                        }
+                    } else {
+                        try self.pushOperand(f64, math.max(c1, c2));
+                    }
+                    continue;
+                },
+                .@"f64.copysign" => {
+                    const c2 = try self.popOperand(f64);
+                    const c1 = try self.popOperand(f64);
+
+                    if (math.signbit(c2)) {
+                        try self.pushOperand(f64, -math.fabs(c1));
+                    } else {
+                        try self.pushOperand(f64, math.fabs(c1));
+                    }
+                    continue;
+                },
+                .@"i32.wrap_i64" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i32, @truncate(i32, c1));
+                    continue;
+                },
+                .@"i32.trunc_f32_s" => {
+                    const c1 = try self.popOperand(f32);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) return error.Overflow;
+                    if (trunc < @intToFloat(f32, std.math.minInt(i32))) return error.Overflow;
+
+                    try self.pushOperand(i32, @floatToInt(i32, trunc));
+                    continue;
+                },
+                .@"i32.trunc_f32_u" => {
+                    const c1 = try self.popOperand(f32);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
+                    if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
+
+                    try self.pushOperand(u32, @floatToInt(u32, trunc));
+                    continue;
+                },
+                .@"i32.trunc_f64_s" => {
+                    const c1 = try self.popOperand(f64);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
+                    if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
+
+                    try self.pushOperand(i32, @floatToInt(i32, trunc));
+                    continue;
+                },
+                .@"i32.trunc_f64_u" => {
+                    const c1 = try self.popOperand(f64);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
+                    if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
+
+                    try self.pushOperand(u32, @floatToInt(u32, trunc));
+                    continue;
+                },
+                .@"i64.extend_i32_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, @truncate(i32, c1));
+                    continue;
+                },
+                .@"i64.extend_i32_u" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(u64, @truncate(u32, c1));
+                    continue;
+                },
+                .@"i64.trunc_f32_s" => {
+                    const c1 = try self.popOperand(f32);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
+                    if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
+
+                    try self.pushOperand(i64, @floatToInt(i64, trunc));
+                    continue;
+                },
+                .@"i64.trunc_f32_u" => {
+                    const c1 = try self.popOperand(f32);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
+                    if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
+
+                    try self.pushOperand(u64, @floatToInt(u64, trunc));
+                    continue;
+                },
+                .@"i64.trunc_f64_s" => {
+                    const c1 = try self.popOperand(f64);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
+                    if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
+
+                    try self.pushOperand(i64, @floatToInt(i64, trunc));
+                    continue;
+                },
+                .@"i64.trunc_f64_u" => {
+                    const c1 = try self.popOperand(f64);
+                    if (math.isNan(c1)) return error.InvalidConversion;
+                    const trunc = @trunc(c1);
+
+                    if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
+                    if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
+
+                    try self.pushOperand(u64, @floatToInt(u64, trunc));
+                    continue;
+                },
+                .@"f32.convert_i32_s" => {
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(f32, @intToFloat(f32, c1));
+                    continue;
+                },
+                .@"f32.convert_i32_u" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(f32, @intToFloat(f32, c1));
+                    continue;
+                },
+                .@"f32.convert_i64_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(f32, @intToFloat(f32, c1));
+                    continue;
+                },
+                .@"f32.convert_i64_u" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(f32, @intToFloat(f32, c1));
+                    continue;
+                },
+                .@"f32.demote_f64" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(f32, @floatCast(f32, c1));
+                    continue;
+                },
+                .@"f64.convert_i32_s" => {
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(f64, @intToFloat(f64, c1));
+                    continue;
+                },
+                .@"f64.convert_i32_u" => {
+                    const c1 = try self.popOperand(u32);
+                    try self.pushOperand(f64, @intToFloat(f64, c1));
+                    continue;
+                },
+                .@"f64.convert_i64_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(f64, @intToFloat(f64, c1));
+                    continue;
+                },
+                .@"f64.convert_i64_u" => {
+                    const c1 = try self.popOperand(u64);
+                    try self.pushOperand(f64, @intToFloat(f64, c1));
+                    continue;
+                },
+                .@"f64.promote_f32" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(f64, @floatCast(f64, c1));
+                    continue;
+                },
+                .@"i32.reinterpret_f32" => {
+                    const c1 = try self.popOperand(f32);
+                    try self.pushOperand(i32, @bitCast(i32, c1));
+                    continue;
+                },
+                .@"i64.reinterpret_f64" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(i64, @bitCast(i64, c1));
+                    continue;
+                },
+                .@"f32.reinterpret_i32" => {
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(f32, @bitCast(f32, c1));
+                    continue;
+                },
+                .@"f64.reinterpret_i64" => {
+                    const c1 = try self.popOperand(f64);
+                    try self.pushOperand(i64, @bitCast(i64, c1));
+                    continue;
+                },
+                .@"i32.extend8_s" => {
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(i32, @truncate(i8, c1));
+                    continue;
+                },
+                .@"i32.extend16_s" => {
+                    const c1 = try self.popOperand(i32);
+                    try self.pushOperand(i32, @truncate(i16, c1));
+                    continue;
+                },
+                .@"i64.extend8_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, @truncate(i8, c1));
+                    continue;
+                },
+                .@"i64.extend16_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, @truncate(i16, c1));
+                    continue;
+                },
+                .@"i64.extend32_s" => {
+                    const c1 = try self.popOperand(i64);
+                    try self.pushOperand(i64, @truncate(i32, c1));
+                    continue;
+                },
+                .trunc_sat => |trunc_type| {
+                    switch (trunc_type) {
+                        0 => {
+                            const c1 = try self.popOperand(f32);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(i32, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
+                                try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
+                                try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(i32, @floatToInt(i32, trunc));
+                            // continue;
+                        },
+                        1 => {
+                            const c1 = try self.popOperand(f32);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(u32, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
+                                try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
+                                try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(u32, @floatToInt(u32, trunc));
+                            // continue;
+                        },
+                        2 => {
+                            const c1 = try self.popOperand(f64);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(i32, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+                                try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
+                                try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(i32, @floatToInt(i32, trunc));
+                            // continue;
+                        },
+                        3 => {
+                            const c1 = try self.popOperand(f64);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(u32, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+                                try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
+                                try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(u32, @floatToInt(u32, trunc));
+                            // continue;
+                        },
+                        4 => {
+                            const c1 = try self.popOperand(f32);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(i64, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
+                                try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
+                                try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(i64, @floatToInt(i64, trunc));
+                            // continue;
+                        },
+                        5 => {
+                            const c1 = try self.popOperand(f32);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(u64, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
+                                try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
+                                try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(u64, @floatToInt(u64, trunc));
+                            // continue;
+                        },
+                        6 => {
+                            const c1 = try self.popOperand(f64);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(i64, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
+                                try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
+                                try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(i64, @floatToInt(i64, trunc));
+                            // continue;
+                        },
+                        7 => {
+                            const c1 = try self.popOperand(f64);
+                            const trunc = @trunc(c1);
+
+                            if (math.isNan(c1)) {
+                                try self.pushOperand(u64, 0);
+                                return;
+                            }
+
+                            if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
+                                try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                                return;
+                            }
+                            if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
+                                try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                                return;
+                            }
+
+                            try self.pushOperand(u64, @floatToInt(u64, trunc));
+                            // continue;
+                        },
+                        else => return error.Trap,
+                    }
+                    continue;
+                },
+            }
+            break;
         }
     }
 
@@ -73,1443 +1697,6 @@ pub const Interpreter = struct {
             std.debug.warn("frame_stack[{}] = [{}, {}, {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
         }
         std.debug.warn("=====================================================\n", .{});
-    }
-
-    pub fn interpret(self: *Interpreter, opcode: Instruction) !void {
-        // defer self.debug(opcode);
-        switch (opcode) {
-            .@"unreachable" => return error.TrapUnreachable,
-            .nop => return,
-            .block => |block| {
-                try self.pushLabel(Label{
-                    .return_arity = block.return_arity,
-                    .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
-                    .continuation = block.continuation,
-                });
-            },
-            .loop => |block| {
-                try self.pushLabel(Label{
-                    // note that we use block_params rather than block_returns for return arity:
-                    .return_arity = block.param_arity,
-                    .op_stack_len = self.op_stack.len - block.param_arity,
-                    .continuation = block.continuation,
-                });
-            },
-            .@"if" => |block| {
-                const condition = try self.popOperand(u32);
-                if (condition == 0) {
-                    // We'll skip to end
-                    self.continuation = block.continuation;
-                    // unless we have an else branch
-                    if (block.else_continuation) |else_continuation| {
-                        self.continuation = else_continuation;
-
-                        // We are inside the if branch
-                        try self.pushLabel(Label{
-                            .return_arity = block.return_arity,
-                            .op_stack_len = self.op_stack.len - block.param_arity,
-                            .continuation = block.continuation,
-                        });
-                    }
-                } else {
-                    // We are inside the if branch
-                    try self.pushLabel(Label{
-                        .return_arity = block.return_arity,
-                        .op_stack_len = self.op_stack.len - block.param_arity,
-                        .continuation = block.continuation,
-                    });
-                }
-            },
-            .@"else" => {
-                // If we hit else, it's because we've hit the end of if
-                // Therefore we want to skip to end of current label
-                const label = try self.popLabel();
-                self.continuation = label.continuation;
-            },
-            .end => {
-                // https://webassembly.github.io/spec/core/exec/instructions.html#exiting-xref-syntax-instructions-syntax-instr-mathit-instr-ast-with-label-l
-                const label = try self.popLabel();
-
-                // It seems like we need to special case end for a function call. This
-                // doesn't seem quite right because the spec doesn't mention it. On
-                // call we push a label containing a continuation which is the code to
-                // resume after the call has returned. We want to use that if we've run
-                // out of code in the current function, i.e. self.continuation is empty
-                if (self.continuation.len == 0) {
-                    const frame = try self.peekNthFrame(0);
-                    const n = label.return_arity;
-                    var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-                    const src = self.op_stack[self.op_stack.len - n ..];
-                    mem.copy(u64, dst, src);
-
-                    self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-                    self.label_stack = self.label_stack[0..frame.label_stack_len];
-                    self.continuation = label.continuation;
-                    _ = try self.popFrame();
-                    self.inst = frame.inst;
-                }
-            },
-            .br => |brcode| {
-                try self.branch(brcode);
-            },
-            .br_if => |br_ifcode| {
-                const condition = try self.popOperand(u32);
-                if (condition == 0) return;
-
-                try self.branch(br_ifcode);
-            },
-            .br_table => |br_table| {
-                const i = try self.popOperand(u32);
-
-                if (i >= br_table.ls.len) {
-                    try self.branch(br_table.ln);
-                } else {
-                    try self.branch(br_table.ls[i]);
-                }
-            },
-            .@"return" => {
-                const frame = try self.peekNthFrame(0);
-                const n = frame.return_arity;
-
-                if (std.builtin.mode == .Debug) {
-                    if (self.op_stack.len < n) return error.OperandStackUnderflow;
-                }
-
-                const label = self.label_stack[frame.label_stack_len];
-                self.continuation = label.continuation;
-
-                // The mem copy is equivalent of popping n operands, doing everything
-                // up to and including popFrame and then repushing the n operands
-                var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-                const src = self.op_stack[self.op_stack.len - n ..];
-                mem.copy(u64, dst, src);
-
-                self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-                self.label_stack = self.label_stack[0..frame.label_stack_len];
-
-                _ = try self.popFrame();
-                self.inst = frame.inst;
-            },
-            .call => |function_index| {
-                // The spec says:
-                //      The call instruction invokes another function, consuming the necessary
-                //      arguments from the stack and returning the result values of the call.
-
-                // TODO: we need to verify that we're okay to lookup this function.
-                //       we can (and probably should) do that at validation time.
-                const module = self.inst.module;
-                const function = try self.inst.getFunc(function_index);
-
-                switch (function) {
-                    .function => |f| {
-                        // Make space for locals (again, params already on stack)
-                        var j: usize = 0;
-                        while (j < f.locals_count) : (j += 1) {
-                            try self.pushOperand(u64, 0);
-                        }
-
-                        // Consume parameters from the stack
-                        try self.pushFrame(Frame{
-                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
-                            .label_stack_len = self.label_stack.len,
-                            .return_arity = f.results.len,
-                            .inst = self.inst,
-                        }, f.locals_count + f.params.len);
-
-                        // Our continuation is the code after call
-                        try self.pushLabel(Label{
-                            .return_arity = f.results.len,
-                            .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
-                            .continuation = self.continuation,
-                        });
-
-                        self.continuation = f.code;
-                        self.inst = f.instance;
-                    },
-                    .host_function => |hf| {
-                        try hf.func(self);
-                    },
-                }
-            },
-            .call_indirect => |call_indirect_instruction| {
-                var module = self.inst.module;
-
-                const op_func_type_index = call_indirect_instruction.@"type";
-                const table_index = call_indirect_instruction.table;
-
-                // Read lookup index from stack
-                const lookup_index = try self.popOperand(u32);
-                const table = try self.inst.getTable(table_index);
-                const function_handle = try table.lookup(lookup_index);
-                const function = try self.inst.store.function(function_handle);
-
-                switch (function) {
-                    .function => |func| {
-                        // Check that signatures match
-                        // const func_type = module.types.list.items[function.typeidx];
-                        const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                        if (!module.signaturesEqual(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
-
-                        // Make space for locals (again, params already on stack)
-                        var j: usize = 0;
-                        while (j < func.locals_count) : (j += 1) {
-                            try self.pushOperand(u64, 0);
-                        }
-
-                        // Consume parameters from the stack
-                        try self.pushFrame(Frame{
-                            .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
-                            .label_stack_len = self.label_stack.len,
-                            .return_arity = func.results.len,
-                            .inst = self.inst,
-                        }, func.locals_count + func.params.len);
-
-                        // Our continuation is the code after call
-                        try self.pushLabel(Label{
-                            .return_arity = func.results.len,
-                            .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
-                            .continuation = self.continuation,
-                        });
-
-                        self.continuation = func.code;
-                    },
-                    .host_function => |host_func| {
-                        const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                        if (!module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
-
-                        try host_func.func(self);
-                    },
-                }
-            },
-            .drop => _ = try self.popAnyOperand(),
-            .select => {
-                const condition = try self.popOperand(u32);
-
-                const c2 = try self.popAnyOperand();
-                const c1 = try self.popAnyOperand();
-
-                if (condition != 0) {
-                    try self.pushAnyOperand(c1);
-                } else {
-                    try self.pushAnyOperand(c2);
-                }
-            },
-            .@"local.get" => |local_index| {
-                const frame = try self.peekNthFrame(0);
-                const local_value: u64 = frame.locals[local_index];
-                try self.pushOperand(u64, local_value);
-            },
-            .@"local.set" => |local_index| {
-                const value = try self.popAnyOperand();
-                const frame = try self.peekNthFrame(0);
-                frame.locals[local_index] = value;
-            },
-            .@"local.tee" => |local_index| {
-                const value = try self.popAnyOperand();
-                const frame = try self.peekNthFrame(0);
-                // TODO: debug build only for return error:
-                if (frame.locals.len < local_index + 1) return error.LocalOutOfBound;
-                frame.locals[local_index] = value;
-                try self.pushAnyOperand(value);
-            },
-            .@"global.get" => |global_index| {
-                const global = try self.inst.getGlobal(global_index);
-                try self.pushAnyOperand(global.value);
-            },
-            .@"global.set" => |global_index| {
-                const value = try self.popAnyOperand();
-                const global = try self.inst.getGlobal(global_index);
-                global.value = value;
-            },
-            .@"i32.load" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u32, offset, address);
-                try self.pushOperand(u32, value);
-            },
-            .@"i64.load" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u64, offset, address);
-                try self.pushOperand(u64, value);
-            },
-            .@"f32.load" => |load_data| {
-                // TODO: we need to check this / handle multiple memories
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(f32, offset, address);
-                try self.pushOperand(f32, value);
-            },
-            .@"f64.load" => |load_data| {
-                // TODO: we need to check this / handle multiple memories
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(f64, offset, address);
-                try self.pushOperand(f64, value);
-            },
-            .@"i32.load8_s" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(i8, offset, address);
-                try self.pushOperand(i32, value);
-            },
-            .@"i32.load8_u" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u8, offset, address);
-                try self.pushOperand(u32, value);
-            },
-            .@"i32.load16_s" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(i16, offset, address);
-                try self.pushOperand(i32, value);
-            },
-            .@"i32.load16_u" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u16, offset, address);
-                try self.pushOperand(u32, value);
-            },
-            .@"i64.load8_s" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(i8, offset, address);
-                try self.pushOperand(i64, value);
-            },
-            .@"i64.load8_u" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u8, offset, address);
-                try self.pushOperand(u64, value);
-            },
-            .@"i64.load16_s" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(i16, offset, address);
-                try self.pushOperand(i64, value);
-            },
-            .@"i64.load16_u" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u16, offset, address);
-                try self.pushOperand(u64, value);
-            },
-            .@"i64.load32_s" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(i32, offset, address);
-                try self.pushOperand(i64, value);
-            },
-            .@"i64.load32_u" => |load_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = load_data.alignment;
-                const offset = load_data.offset;
-
-                const address = try self.popOperand(u32);
-
-                const value = try memory.read(u32, offset, address);
-                try self.pushOperand(u64, value);
-            },
-            .@"i32.store" => |store_data| {
-                // TODO: we need to check this / handle multiple memories
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = try self.popOperand(u32);
-                const address = try self.popOperand(u32);
-
-                try memory.write(u32, offset, address, value);
-            },
-            .@"i64.store" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = try self.popOperand(u64);
-                const address = try self.popOperand(u32);
-
-                try memory.write(u64, offset, address, value);
-            },
-            .@"f32.store" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = try self.popOperand(f32);
-                const address = try self.popOperand(u32);
-
-                try memory.write(f32, offset, address, value);
-            },
-            .@"f64.store" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = try self.popOperand(f64);
-                const address = try self.popOperand(u32);
-
-                try memory.write(f64, offset, address, value);
-            },
-            .@"i32.store8" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = @truncate(u8, try self.popOperand(u32));
-                const address = try self.popOperand(u32);
-
-                try memory.write(u8, offset, address, value);
-            },
-            .@"i32.store16" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = @truncate(u16, try self.popOperand(u32));
-                const address = try self.popOperand(u32);
-
-                try memory.write(u16, offset, address, value);
-            },
-            .@"i64.store8" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = @truncate(u8, try self.popOperand(u64));
-                const address = try self.popOperand(u32);
-
-                try memory.write(u8, offset, address, value);
-            },
-            .@"i64.store16" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = @truncate(u16, try self.popOperand(u64));
-                const address = try self.popOperand(u32);
-
-                try memory.write(u16, offset, address, value);
-            },
-            .@"i64.store32" => |store_data| {
-                const memory = try self.inst.getMemory(0);
-
-                const alignment = store_data.alignment;
-                const offset = store_data.offset;
-
-                const value = @truncate(u32, try self.popOperand(u64));
-                const address = try self.popOperand(u32);
-
-                try memory.write(u32, offset, address, value);
-            },
-            .@"memory.size" => |memory_index| {
-                const memory = try self.inst.getMemory(memory_index);
-
-                try self.pushOperand(u32, @intCast(u32, memory.data.items.len));
-            },
-            .@"memory.grow" => |memory_index| {
-                const memory = try self.inst.getMemory(memory_index);
-
-                const num_pages = try self.popOperand(u32);
-                if (memory.grow(num_pages)) |old_size| {
-                    try self.pushOperand(u32, @intCast(u32, old_size));
-                } else |err| {
-                    try self.pushOperand(i32, @as(i32, -1));
-                }
-            },
-            .@"i32.const" => |x| {
-                try self.pushOperand(i32, x);
-            },
-            .@"i64.const" => |x| {
-                try self.pushOperand(i64, x);
-            },
-            .@"f32.const" => |f| {
-                try self.pushOperand(f32, @bitCast(f32, f));
-            },
-            .@"f64.const" => |f| {
-                try self.pushOperand(f64, @bitCast(f64, f));
-            },
-            .@"i32.eq" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 == c2) 1 else 0));
-            },
-            .@"i32.ne" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 != c2) 1 else 0));
-            },
-            .@"i32.eqz" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 == 0) 1 else 0));
-            },
-            .@"i32.lt_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
-            },
-            .@"i32.lt_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 < c2) 1 else 0));
-            },
-            .@"i32.gt_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
-            },
-            .@"i32.gt_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 > c2) 1 else 0));
-            },
-            .@"i32.le_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
-            },
-            .@"i32.le_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 <= c2) 1 else 0));
-            },
-            .@"i32.ge_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
-            },
-            .@"i32.ge_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @as(u32, if (c1 >= c2) 1 else 0));
-            },
-            .@"i64.eq" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
-            },
-            .@"i64.ne" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
-            },
-            .@"i64.eqz" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 == 0) 1 else 0));
-            },
-            .@"i64.lt_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
-            },
-            .@"i64.lt_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
-            },
-            .@"i64.gt_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
-            },
-            .@"i64.gt_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
-            },
-            .@"i64.le_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
-            },
-            .@"i64.le_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
-            },
-            .@"i64.ge_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
-            },
-            .@"i64.ge_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
-            },
-            .@"f32.eq" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
-            },
-            .@"f32.ne" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
-            },
-            .@"f32.lt" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
-            },
-            .@"f32.gt" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
-            },
-            .@"f32.le" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
-            },
-            .@"f32.ge" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
-            },
-            .@"f64.eq" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 == c2) 1 else 0));
-            },
-            .@"f64.ne" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 != c2) 1 else 0));
-            },
-            .@"f64.lt" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 < c2) 1 else 0));
-            },
-            .@"f64.gt" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 > c2) 1 else 0));
-            },
-            .@"f64.le" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 <= c2) 1 else 0));
-            },
-            .@"f64.ge" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(u64, @as(u64, if (c1 >= c2) 1 else 0));
-            },
-            .@"i32.clz" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @clz(u32, c1));
-            },
-            .@"i32.ctz" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @ctz(u32, c1));
-            },
-            .@"i32.popcnt" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, @popCount(u32, c1));
-            },
-            .@"i32.add" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 +% c2);
-            },
-            .@"i32.sub" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 -% c2);
-            },
-            .@"i32.mul" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 *% c2);
-            },
-            .@"i32.div_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, try math.divTrunc(i32, c1, c2));
-            },
-            .@"i32.div_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, try math.divTrunc(u32, c1, c2));
-            },
-            .@"i32.rem_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, try math.rem(i32, c1, try math.absInt(c2)));
-            },
-            .@"i32.rem_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, try math.rem(u32, c1, c2));
-            },
-            .@"i32.and" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 & c2);
-            },
-            .@"i32.or" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 | c2);
-            },
-            .@"i32.xor" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, c1 ^ c2);
-            },
-            .@"i32.shl" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, math.shl(u32, c1, c2 % 32));
-            },
-            .@"i32.shr_s" => {
-                const c2 = try self.popOperand(i32);
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, math.shr(i32, c1, try math.mod(i32, c2, 32)));
-            },
-            .@"i32.shr_u" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, math.shr(u32, c1, c2 % 32));
-            },
-            .@"i32.rotl" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, math.rotl(u32, c1, c2 % 32));
-            },
-            .@"i32.rotr" => {
-                const c2 = try self.popOperand(u32);
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(u32, math.rotr(u32, c1, c2 % 32));
-            },
-            .@"i64.clz" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @clz(u64, c1));
-            },
-            .@"i64.ctz" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @ctz(u64, c1));
-            },
-            .@"i64.popcnt" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @popCount(u64, c1));
-            },
-            .@"i64.add" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 +% c2);
-            },
-            .@"i64.sub" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 -% c2);
-            },
-            .@"i64.mul" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 *% c2);
-            },
-            .@"i64.div_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, try math.divTrunc(i64, c1, c2));
-            },
-            .@"i64.div_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, try math.divTrunc(u64, c1, c2));
-            },
-            .@"i64.rem_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, try math.rem(i64, c1, try math.absInt(c2)));
-            },
-            .@"i64.rem_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, try math.rem(u64, c1, c2));
-            },
-            .@"i64.and" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 & c2);
-            },
-            .@"i64.or" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 | c2);
-            },
-            .@"i64.xor" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, c1 ^ c2);
-            },
-            .@"i64.shl" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, math.shl(u64, c1, c2 % 64));
-            },
-            .@"i64.shr_s" => {
-                const c2 = try self.popOperand(i64);
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, math.shr(i64, c1, try math.mod(i64, c2, 64)));
-            },
-            .@"i64.shr_u" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, math.shr(u64, c1, c2 % 64));
-            },
-            .@"i64.rotl" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, math.rotl(u64, c1, c2 % 64));
-            },
-            .@"i64.rotr" => {
-                const c2 = try self.popOperand(u64);
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, math.rotr(u64, c1, c2 % 64));
-            },
-            .@"f32.abs" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, math.fabs(c1));
-            },
-            .@"f32.neg" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, -c1);
-            },
-            .@"f32.ceil" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, @ceil(c1));
-            },
-            .@"f32.floor" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, @floor(c1));
-            },
-            .@"f32.trunc" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, @trunc(c1));
-            },
-            .@"f32.nearest" => {
-                const c1 = try self.popOperand(f32);
-                const floor = @floor(c1);
-                const ceil = @ceil(c1);
-
-                if (ceil - c1 == c1 - floor) {
-                    if (@mod(ceil, 2) == 0) {
-                        try self.pushOperand(f32, ceil);
-                    } else {
-                        try self.pushOperand(f32, floor);
-                    }
-                } else {
-                    try self.pushOperand(f32, @round(c1));
-                }
-            },
-            .@"f32.sqrt" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, math.sqrt(c1));
-            },
-            .@"f32.add" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, c1 + c2);
-            },
-            .@"f32.sub" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, c1 - c2);
-            },
-            .@"f32.mul" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, c1 * c2);
-            },
-            .@"f32.div" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f32, c1 / c2);
-            },
-            .@"f32.min" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-
-                if (math.isNan(c1)) {
-                    try self.pushOperand(f32, math.nan_f32);
-                    return;
-                }
-                if (math.isNan(c2)) {
-                    try self.pushOperand(f32, math.nan_f32);
-                    return;
-                }
-
-                if (c1 == 0.0 and c2 == 0.0) {
-                    if (math.signbit(c1)) {
-                        try self.pushOperand(f32, c1);
-                    } else {
-                        try self.pushOperand(f32, c2);
-                    }
-                } else {
-                    try self.pushOperand(f32, math.min(c1, c2));
-                }
-            },
-            .@"f32.max" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-
-                if (math.isNan(c1)) {
-                    try self.pushOperand(f32, math.nan_f32);
-                    return;
-                }
-                if (math.isNan(c2)) {
-                    try self.pushOperand(f32, math.nan_f32);
-                    return;
-                }
-
-                if (c1 == 0.0 and c2 == 0.0) {
-                    if (math.signbit(c1)) {
-                        try self.pushOperand(f32, c2);
-                    } else {
-                        try self.pushOperand(f32, c1);
-                    }
-                } else {
-                    try self.pushOperand(f32, math.max(c1, c2));
-                }
-            },
-            .@"f32.copysign" => {
-                const c2 = try self.popOperand(f32);
-                const c1 = try self.popOperand(f32);
-
-                if (math.signbit(c2)) {
-                    try self.pushOperand(f32, -math.fabs(c1));
-                } else {
-                    try self.pushOperand(f32, math.fabs(c1));
-                }
-            },
-            .@"f64.abs" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, math.fabs(c1));
-            },
-            .@"f64.neg" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, -c1);
-            },
-            .@"f64.ceil" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, @ceil(c1));
-            },
-            .@"f64.floor" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, @floor(c1));
-            },
-            .@"f64.trunc" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, @trunc(c1));
-            },
-            .@"f64.nearest" => {
-                const c1 = try self.popOperand(f64);
-                const floor = @floor(c1);
-                const ceil = @ceil(c1);
-
-                if (ceil - c1 == c1 - floor) {
-                    if (@mod(ceil, 2) == 0) {
-                        try self.pushOperand(f64, ceil);
-                    } else {
-                        try self.pushOperand(f64, floor);
-                    }
-                } else {
-                    try self.pushOperand(f64, @round(c1));
-                }
-            },
-            .@"f64.sqrt" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, math.sqrt(c1));
-            },
-            .@"f64.add" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, c1 + c2);
-            },
-            .@"f64.sub" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, c1 - c2);
-            },
-            .@"f64.mul" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, c1 * c2);
-            },
-            .@"f64.div" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f64, c1 / c2);
-            },
-            .@"f64.min" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-
-                if (math.isNan(c1)) {
-                    try self.pushOperand(f64, math.nan_f64);
-                    return;
-                }
-                if (math.isNan(c2)) {
-                    try self.pushOperand(f64, math.nan_f64);
-                    return;
-                }
-
-                if (c1 == 0.0 and c2 == 0.0) {
-                    if (math.signbit(c1)) {
-                        try self.pushOperand(f64, c1);
-                    } else {
-                        try self.pushOperand(f64, c2);
-                    }
-                } else {
-                    try self.pushOperand(f64, math.min(c1, c2));
-                }
-            },
-            .@"f64.max" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-
-                if (math.isNan(c1)) {
-                    try self.pushOperand(f64, math.nan_f64);
-                    return;
-                }
-                if (math.isNan(c2)) {
-                    try self.pushOperand(f64, math.nan_f64);
-                    return;
-                }
-
-                if (c1 == 0.0 and c2 == 0.0) {
-                    if (math.signbit(c1)) {
-                        try self.pushOperand(f64, c2);
-                    } else {
-                        try self.pushOperand(f64, c1);
-                    }
-                } else {
-                    try self.pushOperand(f64, math.max(c1, c2));
-                }
-            },
-            .@"f64.copysign" => {
-                const c2 = try self.popOperand(f64);
-                const c1 = try self.popOperand(f64);
-
-                if (math.signbit(c2)) {
-                    try self.pushOperand(f64, -math.fabs(c1));
-                } else {
-                    try self.pushOperand(f64, math.fabs(c1));
-                }
-            },
-            .@"i32.wrap_i64" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i32, @truncate(i32, c1));
-            },
-            .@"i32.trunc_f32_s" => {
-                const c1 = try self.popOperand(f32);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) return error.Overflow;
-                if (trunc < @intToFloat(f32, std.math.minInt(i32))) return error.Overflow;
-
-                try self.pushOperand(i32, @floatToInt(i32, trunc));
-            },
-            .@"i32.trunc_f32_u" => {
-                const c1 = try self.popOperand(f32);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
-                if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
-
-                try self.pushOperand(u32, @floatToInt(u32, trunc));
-            },
-            .@"i32.trunc_f64_s" => {
-                const c1 = try self.popOperand(f64);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
-                if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
-
-                try self.pushOperand(i32, @floatToInt(i32, trunc));
-            },
-            .@"i32.trunc_f64_u" => {
-                const c1 = try self.popOperand(f64);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
-                if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
-
-                try self.pushOperand(u32, @floatToInt(u32, trunc));
-            },
-            .@"i64.extend_i32_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, @truncate(i32, c1));
-            },
-            .@"i64.extend_i32_u" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(u64, @truncate(u32, c1));
-            },
-            .@"i64.trunc_f32_s" => {
-                const c1 = try self.popOperand(f32);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
-                if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
-
-                try self.pushOperand(i64, @floatToInt(i64, trunc));
-            },
-            .@"i64.trunc_f32_u" => {
-                const c1 = try self.popOperand(f32);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
-                if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
-
-                try self.pushOperand(u64, @floatToInt(u64, trunc));
-            },
-            .@"i64.trunc_f64_s" => {
-                const c1 = try self.popOperand(f64);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
-                if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
-
-                try self.pushOperand(i64, @floatToInt(i64, trunc));
-            },
-            .@"i64.trunc_f64_u" => {
-                const c1 = try self.popOperand(f64);
-                if (math.isNan(c1)) return error.InvalidConversion;
-                const trunc = @trunc(c1);
-
-                if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
-                if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
-
-                try self.pushOperand(u64, @floatToInt(u64, trunc));
-            },
-            .@"f32.convert_i32_s" => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(f32, @intToFloat(f32, c1));
-            },
-            .@"f32.convert_i32_u" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(f32, @intToFloat(f32, c1));
-            },
-            .@"f32.convert_i64_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(f32, @intToFloat(f32, c1));
-            },
-            .@"f32.convert_i64_u" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(f32, @intToFloat(f32, c1));
-            },
-            .@"f32.demote_f64" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(f32, @floatCast(f32, c1));
-            },
-            .@"f64.convert_i32_s" => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(f64, @intToFloat(f64, c1));
-            },
-            .@"f64.convert_i32_u" => {
-                const c1 = try self.popOperand(u32);
-                try self.pushOperand(f64, @intToFloat(f64, c1));
-            },
-            .@"f64.convert_i64_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(f64, @intToFloat(f64, c1));
-            },
-            .@"f64.convert_i64_u" => {
-                const c1 = try self.popOperand(u64);
-                try self.pushOperand(f64, @intToFloat(f64, c1));
-            },
-            .@"f64.promote_f32" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(f64, @floatCast(f64, c1));
-            },
-            .@"i32.reinterpret_f32" => {
-                const c1 = try self.popOperand(f32);
-                try self.pushOperand(i32, @bitCast(i32, c1));
-            },
-            .@"i64.reinterpret_f64" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(i64, @bitCast(i64, c1));
-            },
-            .@"f32.reinterpret_i32" => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(f32, @bitCast(f32, c1));
-            },
-            .@"f64.reinterpret_i64" => {
-                const c1 = try self.popOperand(f64);
-                try self.pushOperand(i64, @bitCast(i64, c1));
-            },
-            .@"i32.extend8_s" => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, @truncate(i8, c1));
-            },
-            .@"i32.extend16_s" => {
-                const c1 = try self.popOperand(i32);
-                try self.pushOperand(i32, @truncate(i16, c1));
-            },
-            .@"i64.extend8_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, @truncate(i8, c1));
-            },
-            .@"i64.extend16_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, @truncate(i16, c1));
-            },
-            .@"i64.extend32_s" => {
-                const c1 = try self.popOperand(i64);
-                try self.pushOperand(i64, @truncate(i32, c1));
-            },
-            .trunc_sat => |trunc_type| {
-                switch (trunc_type) {
-                    0 => {
-                        const c1 = try self.popOperand(f32);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(i32, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
-                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
-                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(i32, @floatToInt(i32, trunc));
-                    },
-                    1 => {
-                        const c1 = try self.popOperand(f32);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(u32, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
-                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
-                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(u32, @floatToInt(u32, trunc));
-                    },
-                    2 => {
-                        const c1 = try self.popOperand(f64);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(i32, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
-                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
-                            try self.pushOperand(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(i32, @floatToInt(i32, trunc));
-                    },
-                    3 => {
-                        const c1 = try self.popOperand(f64);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(u32, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
-                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
-                            try self.pushOperand(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(u32, @floatToInt(u32, trunc));
-                    },
-                    4 => {
-                        const c1 = try self.popOperand(f32);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(i64, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
-                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
-                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(i64, @floatToInt(i64, trunc));
-                    },
-                    5 => {
-                        const c1 = try self.popOperand(f32);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(u64, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
-                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
-                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(u64, @floatToInt(u64, trunc));
-                    },
-                    6 => {
-                        const c1 = try self.popOperand(f64);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(i64, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
-                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
-                            try self.pushOperand(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(i64, @floatToInt(i64, trunc));
-                    },
-                    7 => {
-                        const c1 = try self.popOperand(f64);
-                        const trunc = @trunc(c1);
-
-                        if (math.isNan(c1)) {
-                            try self.pushOperand(u64, 0);
-                            return;
-                        }
-
-                        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
-                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                            return;
-                        }
-                        if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
-                            try self.pushOperand(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                            return;
-                        }
-
-                        try self.pushOperand(u64, @floatToInt(u64, trunc));
-                    },
-                    else => return error.Trap,
-                }
-            },
-        }
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
@@ -1718,7 +1905,9 @@ test "simple interpret tests" {
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
 
-    try i.interpret(.@"i32.add");
+    var code = [_]Instruction{Instruction.@"i32.add"};
+
+    try i.invoke(code[0..]);
 
     testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }

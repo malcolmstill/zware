@@ -64,7 +64,7 @@ pub const Function = struct {
 pub const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
-    code: ?[]Instruction,
+    code: ?Range,
     import: ?u32,
 };
 
@@ -85,7 +85,7 @@ pub const Element = struct {};
 
 pub const Segment = struct {
     index: u32,
-    offset: []Instruction,
+    offset: Range,
     count: u32, // Number of elements in data (useful when data is not []u8)
     data: []const u8,
 };
@@ -95,4 +95,9 @@ pub const Tag = enum(u8) {
     Table,
     Mem,
     Global,
+};
+
+pub const Range = struct {
+    offset: usize = 0,
+    count: usize = 0,
 };
