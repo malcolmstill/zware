@@ -3,6 +3,7 @@ const ValueType = @import("common.zig").ValueType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Instance = @import("instance.zig").Instance;
 const Opcode = @import("instruction.zig").Opcode;
+const Range = @import("common.zig").Range;
 
 pub const Function = union(enum) {
     function: struct {
@@ -23,7 +24,7 @@ pub const Function = union(enum) {
 pub const Code = struct {
     locals: []const u8,
     locals_count: usize,
-    code: []Instruction,
+    code: Range,
 };
 
 pub const Instruction = union(Opcode) {

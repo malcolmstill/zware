@@ -473,7 +473,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
-        var parsed_code: ?[]Instruction = null;
+        var parsed_code: ?common.Range = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -770,7 +770,7 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) ![]Instruction {
+    pub fn parseCode(self: *Module, code: []const u8) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
@@ -787,7 +787,10 @@ pub const Module = struct {
         //    blocks, loops and ifs
         try function.calculateContinuations(parsed_code);
 
-        return parsed_code;
+        return common.Range{
+            .offset = code_start,
+            .count = self.parsed_code.items.len - code_start,
+        };
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {

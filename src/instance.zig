@@ -99,7 +99,7 @@ pub const Instance = struct {
                 const func_type = self.module.types.list.items[func.typeidx];
                 const handle = try self.store.addFunction(Function{
                     .function = .{
-                        .code = code.code,
+                        .code = self.module.parsed_code.items[code.code.offset .. code.code.offset + code.code.count],
                         .locals = code.locals,
                         .locals_count = code.locals_count,
                         .params = func_type.params,
@@ -119,7 +119,7 @@ pub const Instance = struct {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
             } else {
-                const value = if (global_def.code) |code| try self.invokeExpression(code, u64, .{}) else 0;
+                const value = if (global_def.code) |code| try self.invokeExpression(self.module.parsed_code.items[code.offset .. code.offset + code.count], u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
                     .value = value,
                     .mutability = global_def.mutability,
@@ -156,14 +156,14 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.offset, u32, .{});
+            const offset = try self.invokeExpression(self.module.parsed_code.items[data.offset.offset .. data.offset.offset + data.offset.count], u32, .{});
             try memory.check(offset, data.data);
         }
 
         // 4b. Check all elements
         for (self.module.elements.list.items) |segment, i| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.offset, u32, .{});
+            const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
 
@@ -172,14 +172,14 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.offset, u32, .{});
+            const offset = try self.invokeExpression(self.module.parsed_code.items[data.offset.offset .. data.offset.offset + data.offset.count], u32, .{});
             try memory.copy(offset, data.data);
         }
 
         // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment, i| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.offset, u32, .{});
+            const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
 
             var data = segment.data;
             var j: usize = 0;
