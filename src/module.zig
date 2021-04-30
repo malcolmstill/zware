@@ -883,8 +883,10 @@ test "module loading (simple add function)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [2]u64{ 22, 23 };
     var out = [1]u64{0};
@@ -904,8 +906,10 @@ test "module loading (fib)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [1]u64{0};
     var out = [1]u64{0};
@@ -949,8 +953,10 @@ test "module loading (fact)" {
     var module = Module.init(&arena.allocator, bytes);
     try module.decode();
 
-    var inst = Instance.init(&arena.allocator, &store, module);
-    try inst.instantiate();
+    var new_inst = Instance.init(&arena.allocator, &store, module);
+    const index = try store.addInstance(new_inst);
+    var inst = try store.instance(index);
+    try inst.instantiate(index);
 
     var in = [1]u64{1};
     var out = [1]u64{0};

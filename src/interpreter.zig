@@ -1905,7 +1905,9 @@ test "simple interpret tests" {
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
 
-    try i.interpret(.@"i32.add");
+    var code = [_]Instruction{Instruction.@"i32.add"};
+
+    try i.invoke(code[0..]);
 
     testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }
