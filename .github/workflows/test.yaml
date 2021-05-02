@@ -31,9 +31,27 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - name: Build test docker image
-        run: docker build -t foxwren-test .
-      - name: Run  tests
+      - name: Set up Docker Buildx
+        id: buildx
+        uses: docker/setup-buildx-action@master
+      - name: Cache Docker layers
+        uses: actions/cache@v2
+        with:
+          path: /tmp/.buildx-cache
+          key: ${{ runner.os }}-single-buildx-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-single-buildx
+      - name: Build test image
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          builder: ${{ steps.buildx.outputs.name }}
+          file: Dockerfile
+          push: false
+          tags: foxwren-test
+          cache-from: type=gha
+          cache-to: type=gha
+      - name: Run tests
         run: docker run foxwren-test
   lint:
     runs-on: ubuntu-latest
