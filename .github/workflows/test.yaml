@@ -22,7 +22,6 @@ jobs:
         run: apt-get install wabt
       - name: Install xz
         run: apt-get install xz-utils
-      - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
           version: master
@@ -31,6 +30,7 @@ jobs:
   testsuite-docker:
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v2
       - name: Build test docker image
         run: docker build -t foxwren-test .
       - name: Run  tests
