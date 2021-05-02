@@ -29,9 +29,12 @@ jobs:
       - run: zig build --build-file test/build.zig --prefix ./
       - run: bash test/run.sh
   testsuite-docker:
-    runs:
-      using: docker
-      image: Dockerfile
+    runs-on: ubuntu-latest
+    steps:
+      - name: Build test docker image
+        run: docker build -t foxwren-test .
+      - name: Run  tests
+        run: docker run foxwren-test
   lint:
     runs-on: ubuntu-latest
     steps:
