@@ -47,6 +47,7 @@ jobs:
           context: .
           builder: ${{ steps.buildx.outputs.name }}
           file: Dockerfile
+          load: true
           push: false
           tags: foxwren-test
           cache-from: type=local,src=/tmp/.buildx-cache
