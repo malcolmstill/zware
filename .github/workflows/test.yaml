@@ -42,17 +42,21 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-single-buildx
       - name: Build test image
-        uses: docker/build-push-action@master
+        uses: docker/build-push-action@v2
         with:
           context: .
           builder: ${{ steps.buildx.outputs.name }}
           file: Dockerfile
           push: false
           tags: foxwren-test
-          cache-from: type=gha
-          cache-to: type=gha
+          cache-from: type=local,src=/tmp/.buildx-cache
+          cache-to: type=local,dest=/tmp/.buildx-cache-new
       - name: Run tests
         run: docker run foxwren-test
+      - name: Move cache
+        run: |
+          rm -rf /tmp/.buildx-cache
+          mv /tmp/.buildx-cache-new /tmp/.buildx-cache        
   lint:
     runs-on: ubuntu-latest
     steps:
