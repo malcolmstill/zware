@@ -28,6 +28,10 @@ jobs:
           version: master
       - run: zig build --build-file test/build.zig --prefix ./
       - run: bash test/run.sh
+  testsuite-docker:
+    runs:
+      using: docker
+      image: Dockerfile
   lint:
     runs-on: ubuntu-latest
     steps:
