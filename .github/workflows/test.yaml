@@ -52,7 +52,7 @@ jobs:
           cache-from: type=local,src=/tmp/.buildx-cache
           cache-to: type=local,dest=/tmp/.buildx-cache-new
       - name: Run tests
-        run: docker run foxwren-test
+        run: docker buildx run foxwren-test
       - name: Move cache
         run: |
           rm -rf /tmp/.buildx-cache
