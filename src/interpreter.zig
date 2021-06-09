@@ -1879,12 +1879,12 @@ test "operand push / pop test" {
         if (err != error.OperandStackOverflow) return error.TestUnexpectedError;
     }
 
-    testing.expectEqual(@as(f64, 43.07), try i.popOperand(f64));
-    testing.expectEqual(@as(f32, 22.07), try i.popOperand(f32));
-    testing.expectEqual(@as(i64, -43), try i.popOperand(i64));
-    testing.expectEqual(@as(i64, 44), try i.popOperand(i64));
-    testing.expectEqual(@as(i32, -23), try i.popOperand(i32));
-    testing.expectEqual(@as(i32, 22), try i.popOperand(i32));
+    try testing.expectEqual(@as(f64, 43.07), try i.popOperand(f64));
+    try testing.expectEqual(@as(f32, 22.07), try i.popOperand(f32));
+    try testing.expectEqual(@as(i64, -43), try i.popOperand(i64));
+    try testing.expectEqual(@as(i64, 44), try i.popOperand(i64));
+    try testing.expectEqual(@as(i32, -23), try i.popOperand(i32));
+    try testing.expectEqual(@as(i32, 22), try i.popOperand(i32));
 
     // stack underflow:
     if (i.popOperand(i32)) |r| {
@@ -1909,5 +1909,5 @@ test "simple interpret tests" {
 
     try i.invoke(code[0..]);
 
-    testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
+    try testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
 }
