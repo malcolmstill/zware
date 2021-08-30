@@ -480,6 +480,23 @@ pub fn main() anyerror!void {
 
                 return error.ExpectedTrapDidntOccur;
             },
+            .assert_invalid => {
+                wasm_filename = command.assert_invalid.filename;
+                std.debug.warn("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
+
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                module = Module.init(&arena.allocator, program);
+
+                if (module.decode()) |x| {
+                    return error.TestsuiteExpectedInvalid;
+                } else |err| switch (err) {
+                    error.InvalidAlignment => continue,
+                    else => {
+                        std.debug.warn("Unexpected error: {}\n", .{err});
+                        return error.TestsuiteExpectedInvalid;
+                    },
+                }
+            },
             .assert_malformed => {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
                 wasm_filename = command.assert_malformed.filename;

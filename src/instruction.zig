@@ -321,6 +321,9 @@ pub const ParseIterator = struct {
             .@"i32.load8_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load8_s" = .{
                         .alignment = alignment,
