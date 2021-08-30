@@ -281,6 +281,9 @@ pub const ParseIterator = struct {
             .@"i32.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load" = .{
                         .alignment = alignment,
@@ -291,6 +294,9 @@ pub const ParseIterator = struct {
             .@"i64.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load" = .{
                         .alignment = alignment,
@@ -301,6 +307,9 @@ pub const ParseIterator = struct {
             .@"f32.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f32.load" = .{
                         .alignment = alignment,
@@ -311,6 +320,9 @@ pub const ParseIterator = struct {
             .@"f64.load" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f64.load" = .{
                         .alignment = alignment,
@@ -334,6 +346,9 @@ pub const ParseIterator = struct {
             .@"i32.load8_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load8_u" = .{
                         .alignment = alignment,
@@ -344,6 +359,9 @@ pub const ParseIterator = struct {
             .@"i32.load16_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load16_s" = .{
                         .alignment = alignment,
@@ -354,6 +372,9 @@ pub const ParseIterator = struct {
             .@"i32.load16_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load16_u" = .{
                         .alignment = alignment,
@@ -364,6 +385,9 @@ pub const ParseIterator = struct {
             .@"i64.load8_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load8_s" = .{
                         .alignment = alignment,
@@ -374,6 +398,9 @@ pub const ParseIterator = struct {
             .@"i64.load8_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load8_u" = .{
                         .alignment = alignment,
@@ -384,6 +411,9 @@ pub const ParseIterator = struct {
             .@"i64.load16_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load16_s" = .{
                         .alignment = alignment,
@@ -394,6 +424,9 @@ pub const ParseIterator = struct {
             .@"i64.load16_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load16_u" = .{
                         .alignment = alignment,
@@ -404,6 +437,9 @@ pub const ParseIterator = struct {
             .@"i64.load32_s" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load32_s" = .{
                         .alignment = alignment,
@@ -414,6 +450,9 @@ pub const ParseIterator = struct {
             .@"i64.load32_u" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load32_u" = .{
                         .alignment = alignment,
@@ -424,6 +463,9 @@ pub const ParseIterator = struct {
             .@"i32.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store" = .{
                         .alignment = alignment,
@@ -434,6 +476,9 @@ pub const ParseIterator = struct {
             .@"i64.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store" = .{
                         .alignment = alignment,
@@ -444,6 +489,9 @@ pub const ParseIterator = struct {
             .@"f32.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f32.store" = .{
                         .alignment = alignment,
@@ -454,6 +502,9 @@ pub const ParseIterator = struct {
             .@"f64.store" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f64.store" = .{
                         .alignment = alignment,
@@ -464,6 +515,9 @@ pub const ParseIterator = struct {
             .@"i32.store8" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store8" = .{
                         .alignment = alignment,
@@ -474,6 +528,9 @@ pub const ParseIterator = struct {
             .@"i32.store16" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store16" = .{
                         .alignment = alignment,
@@ -484,6 +541,9 @@ pub const ParseIterator = struct {
             .@"i64.store8" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store8" = .{
                         .alignment = alignment,
@@ -494,6 +554,9 @@ pub const ParseIterator = struct {
             .@"i64.store16" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store16" = .{
                         .alignment = alignment,
@@ -504,6 +567,9 @@ pub const ParseIterator = struct {
             .@"i64.store32" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store32" = .{
                         .alignment = alignment,
