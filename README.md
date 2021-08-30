@@ -92,5 +92,5 @@ docker build -t foxwren-test .
 2. Run
 
 ```
-docker run foxwren test
+docker run foxwren-test
 ```
