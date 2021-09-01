@@ -3,6 +3,9 @@ const leb = std.leb;
 const Module = @import("module.zig").Module;
 const Instruction = @import("function.zig").Instruction;
 const Range = @import("common.zig").Range;
+const Validator = @import("validator.zig").Validator;
+const ValueType = @import("common.zig").ValueType;
+const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 pub const OpcodeIterator = struct {
     function: []const u8,
@@ -100,6 +103,7 @@ pub const ParseIterator = struct {
     code: []const u8,
     parsed: []Instruction,
     module: *Module,
+    validator: Validator,
 
     pub fn init(module: *Module, function: []const u8) ParseIterator {
         return ParseIterator{
@@ -107,7 +111,23 @@ pub const ParseIterator = struct {
             .function = function,
             .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
             .module = module,
+            // TODO: what type of allocator is this?
+            // we want to free this every function parse, so we
+            // want a general purpose allocator, not an arena allocator
+            .validator = Validator.init(module.alloc),
         };
+    }
+
+    // pushFunction initiliase the validator for the current function
+    pub fn pushFunction(self: *ParseIterator, func_index: usize) !void {
+        const function = self.module.functions.list.items[@intCast(usize, func_index)];
+        const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+
+        try self.validator.pushControlFrame(
+            .nop,
+            function_type.params,
+            function_type.results,
+        );
     }
 
     pub fn next(self: *ParseIterator) !?Instruction {
@@ -129,10 +149,26 @@ pub const ParseIterator = struct {
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
+
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateBlock(func_type.params, func_type.results);
+                } else {
+                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
+                    if (block_type == -0x40) {
+                        var out_types = [0]ValueType{} ** 0;
+                        try self.validator.validateBlock(in_types[0..], out_types[0..]);
+                    } else {
+                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => [1]ValueType{.I32} ** 1,
+                            .I64 => [1]ValueType{.I64} ** 1,
+                            .F32 => [1]ValueType{.F32} ** 1,
+                            .F64 => [1]ValueType{.F64} ** 1,
+                        };
+                        try self.validator.validateBlock(in_types[0..], out_types[0..]);
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -152,6 +188,21 @@ pub const ParseIterator = struct {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateLoop(func_type.params, func_type.results);
+                } else {
+                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
+                    if (block_type == -0x40) {
+                        var out_types = [0]ValueType{} ** 0;
+                        try self.validator.validateLoop(in_types[0..], out_types[0..]);
+                    } else {
+                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => [1]ValueType{.I32} ** 1,
+                            .I64 => [1]ValueType{.I64} ** 1,
+                            .F32 => [1]ValueType{.F32} ** 1,
+                            .F64 => [1]ValueType{.F64} ** 1,
+                        };
+                        try self.validator.validateLoop(in_types[0..], out_types[0..]);
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -165,12 +216,32 @@ pub const ParseIterator = struct {
             .@"if" => {
                 const block_type = try readILEB128Mem(i32, &self.code);
 
+                // 1. First assume the number of block params is 0
+                // 2. The number of return values is 0 if block_type == -0x40
+                //    otherwise assume temporarily that 1 value is returned
+                // 3. If block_type >= 0 then we reference a function type,
+                //    so look it up and update the params / returns count to match
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateIf(func_type.params, func_type.results);
+                } else {
+                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
+                    if (block_type == -0x40) {
+                        var out_types = [0]ValueType{} ** 0;
+                        try self.validator.validateIf(in_types[0..], out_types[0..]);
+                    } else {
+                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => [1]ValueType{.I32} ** 1,
+                            .I64 => [1]ValueType{.I64} ** 1,
+                            .F32 => [1]ValueType{.F32} ** 1,
+                            .F64 => [1]ValueType{.F64} ** 1,
+                        };
+                        try self.validator.validateIf(in_types[0..], out_types[0..]);
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -228,7 +299,10 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .drop => rt_instr = Instruction.drop,
+            .drop => {
+                try self.validator.validate(.drop);
+                rt_instr = Instruction.drop;
+            },
             .select => rt_instr = Instruction.select,
             .@"global.get" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
@@ -263,18 +337,23 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"memory.grow" = memory_index };
             },
             .@"i32.const" => {
+                // This (calling validate with the enum value) is a bit weird
+                try self.validator.validate(.@"i32.const");
                 const i32_const = try readILEB128Mem(i32, &self.code);
                 rt_instr = Instruction{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
+                try self.validator.validate(.@"i64.const");
                 const i64_const = try readILEB128Mem(i64, &self.code);
                 rt_instr = Instruction{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
+                try self.validator.validate(.@"f32.const");
                 const float_const = @bitCast(f32, try readU32(&self.code));
                 rt_instr = Instruction{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
+                try self.validator.validate(.@"f64.const");
                 const float_const = @bitCast(f64, try readU64(&self.code));
                 rt_instr = Instruction{ .@"f64.const" = float_const };
             },
@@ -577,7 +656,10 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .@"i32.eqz" => rt_instr = Instruction.@"i32.eqz",
+            .@"i32.eqz" => {
+                try self.validator.validate(.@"i32.eqz");
+                rt_instr = Instruction.@"i32.eqz";
+            },
             .@"i32.eq" => rt_instr = Instruction.@"i32.eq",
             .@"i32.ne" => rt_instr = Instruction.@"i32.ne",
             .@"i32.lt_s" => rt_instr = Instruction.@"i32.lt_s",

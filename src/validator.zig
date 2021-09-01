@@ -16,6 +16,22 @@ pub const Validator = struct {
         };
     }
 
+    pub fn validateBlock(v: *Validator, in_operands: []const ValueType, out_operands: []const ValueType) !void {
+        try v.popOperands(in_operands);
+        try v.pushControlFrame(.block, in_operands, out_operands);
+    }
+
+    pub fn validateLoop(v: *Validator, in_operands: []const ValueType, out_operands: []const ValueType) !void {
+        try v.popOperands(in_operands);
+        try v.pushControlFrame(.loop, in_operands, out_operands);
+    }
+
+    pub fn validateIf(v: *Validator, in_operands: []const ValueType, out_operands: []const ValueType) !void {
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+        try v.popOperands(in_operands);
+        try v.pushControlFrame(.@"if", in_operands, out_operands);
+    }
+
     pub fn validate(v: *Validator, opcode: Opcode) !void {
         switch (opcode) {
             .@"unreachable" => try v.setUnreachable(),
@@ -58,6 +74,11 @@ pub const Validator = struct {
             },
             .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
+            .@"i32.eqz" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             else => unreachable,
         }
@@ -107,7 +128,7 @@ pub const Validator = struct {
         }
     }
 
-    fn pushControlFrame(v: *Validator, opcode: Opcode, in: []ValueType, out: []ValueType) !void {
+    pub fn pushControlFrame(v: *Validator, opcode: Opcode, in: []const ValueType, out: []const ValueType) !void {
         const frame = ControlFrame{
             .opcode = opcode,
             .start_types = in,

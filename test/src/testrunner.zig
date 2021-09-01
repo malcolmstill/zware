@@ -491,9 +491,10 @@ pub fn main() anyerror!void {
                     return error.TestsuiteExpectedInvalid;
                 } else |err| switch (err) {
                     error.InvalidAlignment => continue,
+                    error.ValidatorPopOperandError => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
-                        return error.TestsuiteExpectedInvalid;
+                        return error.TestsuiteExpectedInvalidUnexpectedError;
                     },
                 }
             },
