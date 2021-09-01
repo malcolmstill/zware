@@ -33,6 +33,7 @@ pub const Validator = struct {
     }
 
     pub fn validate(v: *Validator, opcode: Opcode) !void {
+        std.log.info("validate {}\n", .{opcode});
         switch (opcode) {
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
@@ -40,11 +41,46 @@ pub const Validator = struct {
                 const frame = try v.popControlFrame();
                 _ = try v.pushOperands(frame.end_types);
             },
+            .@"else" => {
+                const frame = try v.popControlFrame();
+                if (frame.opcode != .@"if") return error.ElseMustOnlyOccurAfterIf;
+                try v.pushControlFrame(.@"else", frame.start_types, frame.end_types);
+            },
             .drop => {
                 _ = try v.popOperand();
             },
-            .@"i32.add" => {
+            .@"i32.add",
+            .@"i32.sub",
+            .@"i32.eq",
+            .@"i32.ne",
+            .@"i32.le_s",
+            .@"i32.le_u",
+            .@"i32.lt_s",
+            .@"i32.lt_u",
+            .@"i32.ge_s",
+            .@"i32.ge_u",
+            .@"i32.gt_s",
+            .@"i32.gt_u",
+            .@"i32.xor",
+            .@"i32.and",
+            .@"i32.div_s",
+            .@"i32.div_u",
+            .@"i32.mul",
+            .@"i32.or",
+            .@"i32.rem_s",
+            .@"i32.rem_u",
+            .@"i32.rotl",
+            .@"i32.rotr",
+            .@"i32.shl",
+            .@"i32.shr_s",
+            .@"i32.shr_u",
+            .@"i32.eqz",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"i32.clz", .@"i32.ctz", .@"i32.popcnt" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
@@ -74,11 +110,6 @@ pub const Validator = struct {
             },
             .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
-            },
-            .@"i32.eqz" => {
-                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             else => unreachable,
         }

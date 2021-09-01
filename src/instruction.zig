@@ -122,6 +122,7 @@ pub const ParseIterator = struct {
     pub fn pushFunction(self: *ParseIterator, func_index: usize) !void {
         const function = self.module.functions.list.items[@intCast(usize, func_index)];
         const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+        std.log.info("pushFunction {any} {any}\n", .{ function_type.params, function_type.results });
 
         try self.validator.pushControlFrame(
             .nop,
@@ -299,10 +300,7 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .drop => {
-                try self.validator.validate(.drop);
-                rt_instr = Instruction.drop;
-            },
+            .drop => rt_instr = Instruction.drop,
             .select => rt_instr = Instruction.select,
             .@"global.get" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
@@ -337,23 +335,18 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"memory.grow" = memory_index };
             },
             .@"i32.const" => {
-                // This (calling validate with the enum value) is a bit weird
-                try self.validator.validate(.@"i32.const");
                 const i32_const = try readILEB128Mem(i32, &self.code);
                 rt_instr = Instruction{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
-                try self.validator.validate(.@"i64.const");
                 const i64_const = try readILEB128Mem(i64, &self.code);
                 rt_instr = Instruction{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
-                try self.validator.validate(.@"f32.const");
                 const float_const = @bitCast(f32, try readU32(&self.code));
                 rt_instr = Instruction{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
-                try self.validator.validate(.@"f64.const");
                 const float_const = @bitCast(f64, try readU64(&self.code));
                 rt_instr = Instruction{ .@"f64.const" = float_const };
             },
@@ -656,10 +649,7 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .@"i32.eqz" => {
-                try self.validator.validate(.@"i32.eqz");
-                rt_instr = Instruction.@"i32.eqz";
-            },
+            .@"i32.eqz" => rt_instr = Instruction.@"i32.eqz",
             .@"i32.eq" => rt_instr = Instruction.@"i32.eq",
             .@"i32.ne" => rt_instr = Instruction.@"i32.ne",
             .@"i32.lt_s" => rt_instr = Instruction.@"i32.lt_s",
@@ -791,6 +781,11 @@ pub const ParseIterator = struct {
                 const version = try readULEB128Mem(u32, &self.code);
                 rt_instr = Instruction{ .trunc_sat = version };
             },
+        }
+
+        switch (instr) {
+            .block, .loop, .@"if" => {},
+            else => try self.validator.validate(instr),
         }
 
         return rt_instr;
