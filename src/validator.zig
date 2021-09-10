@@ -132,7 +132,7 @@ pub const Validator = struct {
                     try v.pushOperand(t1);
                 }
             },
-            .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz", @"memory.grow" => {
+            .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz", .@"memory.grow" => {
                 // no change
             },
             .@"i32.add",
