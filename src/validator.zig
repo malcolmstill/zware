@@ -86,6 +86,11 @@ pub const Validator = struct {
         try v.pushOperand(ValueTypeUnknown{ .Known = value_type });
     }
 
+    pub fn validateLocalSet(v: *Validator, local_type: ValueType) !void {
+        const t = try v.popOperand();
+        if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
+    }
+
     pub fn validate(v: *Validator, opcode: Opcode) !void {
         std.log.info("validate {}\n", .{opcode});
         switch (opcode) {

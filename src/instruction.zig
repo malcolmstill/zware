@@ -348,8 +348,20 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"local.get" = index };
             },
             .@"local.set" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"local.set" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const params = self.params orelse return error.ParamsNotSetForLocalGet;
+                const locals = self.locals orelse return error.ParamsNotSetForLocalGet;
+
+                if (index < params.len) {
+                    try self.validator.validateLocalSet(params[index]);
+                } else if (index >= params.len and index < (params.len + locals.len)) {
+                    try self.validator.validateLocalSet(locals[index - params.len]);
+                } else {
+                    return error.LocalSetIndexOutOfBounds;
+                }
+
+                rt_instr = Instruction{ .@"local.set" = index };
             },
             .@"local.tee" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
