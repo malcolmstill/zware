@@ -133,7 +133,8 @@ pub const Validator = struct {
                 }
             },
             .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz", .@"memory.grow", .@"i32.load" => {
-                // no change
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"i32.add",
             .@"i32.sub",
@@ -174,7 +175,8 @@ pub const Validator = struct {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"i64.extend8_s", .@"i64.extend16_s", .@"i64.extend32_s" => {
-                // no change
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
             .@"i64.add",
             .@"i64.sub",
@@ -223,8 +225,23 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
-            .@"f32.add" => {
+            .@"f32.add",
+            .@"f32.sub",
+            .@"f32.mul",
+            .@"f32.div",
+            .@"f32.min",
+            .@"f32.max",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
+            },
+            .@"f32.sqrt",
+            .@"f32.ceil",
+            .@"f32.floor",
+            .@"f32.trunc",
+            .@"f32.nearest",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
