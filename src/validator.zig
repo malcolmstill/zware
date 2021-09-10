@@ -94,8 +94,26 @@ pub const Validator = struct {
                 if (frame.opcode != .@"if") return error.ElseMustOnlyOccurAfterIf;
                 try v.pushControlFrame(.@"else", frame.start_types, frame.end_types);
             },
+            .@"return" => {
+                // No idea if this is correct...
+                const frame = try v.popControlFrame();
+                _ = try v.pushOperands(frame.end_types);
+            },
             .drop => {
                 _ = try v.popOperand();
+            },
+            .select => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                const t1 = try v.popOperand();
+                const t2 = try v.popOperand();
+
+                if (!(isNum(t1) and isNum(t2))) return error.ExpectingBothNum;
+                if (valueTypeEqual(t1, t2) and !valueTypeEqual(t1, ValueTypeUnknown.Unknown) and !valueTypeEqual(t2, ValueTypeUnknown.Unknown)) return error.ValidatorSelect;
+                if (valueTypeEqual(t1, ValueTypeUnknown.Unknown)) {
+                    try v.pushOperand(t2);
+                } else {
+                    try v.pushOperand(t1);
+                }
             },
             .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz" => {
                 // no change
@@ -247,6 +265,29 @@ pub const Validator = struct {
         frame.unreachable_flag = true;
     }
 };
+
+fn isNum(value_type: ValueTypeUnknown) bool {
+    // TODO: for version 1.1 value type may be ref type
+    // so we'll have to update this:
+    return true;
+}
+
+fn valueTypeEqual(v1: ValueTypeUnknown, v2: ValueTypeUnknown) bool {
+    switch (v1) {
+        .Known => |t1| {
+            switch (v2) {
+                .Known => |t2| return t1 == t2,
+                .Unknown => return false,
+            }
+        },
+        .Unknown => {
+            switch (v2) {
+                .Known => return false,
+                .Unknown => return true,
+            }
+        },
+    }
+}
 
 const ValueTypeUnknownTag = enum {
     Known,
