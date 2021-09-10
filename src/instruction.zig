@@ -843,7 +843,17 @@ pub const ParseIterator = struct {
         // Validate the instruction. Some instructions, e.g. block, loop
         // are validate separately above.
         switch (instr) {
-            .block, .loop, .@"if", .br, .br_if, .br_table, .call, .@"local.get" => {},
+            .block,
+            .loop,
+            .@"if",
+            .br,
+            .br_if,
+            .br_table,
+            .call,
+            .@"local.get",
+            .@"local.set",
+            .@"local.tee",
+            => {},
             else => try self.validator.validate(instr),
         }
 
