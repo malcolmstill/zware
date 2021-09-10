@@ -245,6 +245,17 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
+            .@"f32.eq",
+            .@"f32.ne",
+            .@"f32.lt",
+            .@"f32.le",
+            .@"f32.gt",
+            .@"f32.ge",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
             .@"f64.add" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
