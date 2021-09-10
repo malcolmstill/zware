@@ -82,13 +82,19 @@ pub const Validator = struct {
         try v.pushOperands(func_type.results);
     }
 
-    pub fn validateLocalGet(v: *Validator, value_type: ValueType) !void {
-        try v.pushOperand(ValueTypeUnknown{ .Known = value_type });
+    pub fn validateLocalGet(v: *Validator, local_type: ValueType) !void {
+        try v.pushOperand(ValueTypeUnknown{ .Known = local_type });
     }
 
     pub fn validateLocalSet(v: *Validator, local_type: ValueType) !void {
         const t = try v.popOperand();
         if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
+    }
+
+    pub fn validateLocalTee(v: *Validator, local_type: ValueType) !void {
+        const t = try v.popOperand();
+        if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
+        try v.pushOperand(t);
     }
 
     pub fn validate(v: *Validator, opcode: Opcode) !void {
