@@ -173,9 +173,54 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            .@"i64.add" => {
+            .@"i64.extend8_s", .@"i64.extend16_s", .@"i64.extend32_s" => {
+                // no change
+            },
+            .@"i64.add",
+            .@"i64.sub",
+            .@"i64.xor",
+            .@"i64.and",
+            .@"i64.div_s",
+            .@"i64.div_u",
+            .@"i64.mul",
+            .@"i64.or",
+            .@"i64.rem_s",
+            .@"i64.rem_u",
+            .@"i64.rotl",
+            .@"i64.rotr",
+            .@"i64.shl",
+            .@"i64.shr_s",
+            .@"i64.shr_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            .@"i64.eq",
+            .@"i64.ne",
+            .@"i64.le_s",
+            .@"i64.le_u",
+            .@"i64.lt_s",
+            .@"i64.lt_u",
+            .@"i64.ge_s",
+            .@"i64.ge_u",
+            .@"i64.gt_s",
+            .@"i64.gt_u",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"i64.eqz" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"i64.clz", .@"i64.ctz", .@"i64.popcnt" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            .@"i64.load" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
             .@"f32.add" => {
