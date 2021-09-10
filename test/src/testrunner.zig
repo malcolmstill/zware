@@ -492,6 +492,10 @@ pub fn main() anyerror!void {
                 } else |err| switch (err) {
                     error.InvalidAlignment => continue,
                     error.ValidatorPopOperandError => continue,
+                    error.MismatchedTypes => continue,
+                    error.ValidatorPopControlFrameControlStackEmpty => continue,
+                    error.ValidatorPopControlFrameMismatchedSizes => continue,
+                    error.ControlStackEmpty => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
