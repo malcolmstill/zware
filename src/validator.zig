@@ -259,10 +259,39 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            .@"f64.add" => {
+            .@"f64.add",
+            .@"f64.sub",
+            .@"f64.mul",
+            .@"f64.div",
+            .@"f64.min",
+            .@"f64.max",
+            .@"f64.copysign",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
+            .@"f64.abs",
+            .@"f64.neg",
+            .@"f64.sqrt",
+            .@"f64.ceil",
+            .@"f64.floor",
+            .@"f64.trunc",
+            .@"f64.nearest",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
+            .@"f64.eq",
+            .@"f64.ne",
+            .@"f64.lt",
+            .@"f64.le",
+            .@"f64.gt",
+            .@"f64.ge",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"i32.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
