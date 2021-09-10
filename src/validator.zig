@@ -32,6 +32,54 @@ pub const Validator = struct {
         try v.pushControlFrame(.@"if", in_operands, out_operands);
     }
 
+    pub fn validateBr(v: *Validator, label: usize) !void {
+        if (v.ctrl_stack.items.len < label) return error.ValidateBrInvalidLabel;
+        const frame = v.ctrl_stack.items[label];
+        try v.popOperands(v.labelTypes(frame));
+        try v.setUnreachable();
+    }
+
+    pub fn validateBrIf(v: *Validator, label: usize) !void {
+        if (v.ctrl_stack.items.len < label) return error.ValidateBrIfInvalidLabel;
+        const frame = v.ctrl_stack.items[label];
+
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+        try v.popOperands(v.labelTypes(frame));
+        try v.pushOperands(v.labelTypes(frame));
+    }
+
+    pub fn validateBrTable(v: *Validator, n_star: []u32, label: u32) !void {
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+        if (v.ctrl_stack.items.len < label) return error.ValidateBrTableInvalidLabel;
+        const frame = v.ctrl_stack.items[label];
+
+        const arity = v.labelTypes(frame).len;
+
+        for (n_star) |n| {
+            if (v.ctrl_stack.items.len < n) return error.ValidateBrTableInvalidLabel;
+            const frame_n = v.ctrl_stack.items[n];
+            if (v.labelTypes(frame_n).len != arity) return error.ValidateBrTableInvalidLabel;
+
+            if (!(arity <= 64)) return error.TODOAllocation;
+
+            var temp = [_]ValueTypeUnknown{.{ .Known = .I32 }} ** 64; // TODO: allocate some memory for this
+            for (v.labelTypes(frame_n)) |_, i| {
+                temp[i] = try v.popOperandExpecting(ValueTypeUnknown{ .Known = v.labelTypes(frame)[arity - i - 1] });
+            }
+
+            for (v.labelTypes(frame_n)) |_, i| {
+                try v.pushOperand(temp[i]);
+            }
+        }
+
+        try v.popOperands(v.labelTypes(frame));
+        try v.setUnreachable();
+    }
+
+    pub fn validateLocalGet(v: *Validator, value_type: ValueType) !void {
+        try v.pushOperand(ValueTypeUnknown{ .Known = value_type });
+    }
+
     pub fn validate(v: *Validator, opcode: Opcode) !void {
         std.log.info("validate {}\n", .{opcode});
         switch (opcode) {
@@ -48,6 +96,9 @@ pub const Validator = struct {
             },
             .drop => {
                 _ = try v.popOperand();
+            },
+            .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz" => {
+                // no change
             },
             .@"i32.add",
             .@"i32.sub",
@@ -74,7 +125,6 @@ pub const Validator = struct {
             .@"i32.shl",
             .@"i32.shr_s",
             .@"i32.shr_u",
-            .@"i32.eqz",
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
@@ -181,7 +231,7 @@ pub const Validator = struct {
         return frame;
     }
 
-    fn labelTypes(v: *Validator, frame: ControlFrame) []ValueTypes {
+    fn labelTypes(v: *Validator, frame: ControlFrame) []const ValueType {
         if (frame.opcode == Opcode.loop) {
             return frame.start_types;
         } else {

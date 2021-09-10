@@ -803,7 +803,7 @@ pub const Module = struct {
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
 
-        try it.pushFunction(func_index);
+        try it.pushFunction(locals, func_index);
 
         // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {

@@ -104,6 +104,8 @@ pub const ParseIterator = struct {
     parsed: []Instruction,
     module: *Module,
     validator: Validator,
+    params: ?[]const ValueType,
+    locals: ?[]const ValueType,
 
     pub fn init(module: *Module, function: []const u8) ParseIterator {
         return ParseIterator{
@@ -111,6 +113,8 @@ pub const ParseIterator = struct {
             .function = function,
             .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
             .module = module,
+            .params = null,
+            .locals = null,
             // TODO: what type of allocator is this?
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
@@ -119,14 +123,17 @@ pub const ParseIterator = struct {
     }
 
     // pushFunction initiliase the validator for the current function
-    pub fn pushFunction(self: *ParseIterator, func_index: usize) !void {
+    pub fn pushFunction(self: *ParseIterator, locals: []const ValueType, func_index: usize) !void {
         const function = self.module.functions.list.items[@intCast(usize, func_index)];
         const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
         std.log.info("pushFunction {any} {any}\n", .{ function_type.params, function_type.results });
 
+        self.params = function_type.params;
+        self.locals = locals;
+
         try self.validator.pushControlFrame(
-            .nop,
-            function_type.params,
+            .nop, // block?
+            function_type.params[0..0],
             function_type.results,
         );
     }
@@ -139,7 +146,12 @@ pub const ParseIterator = struct {
         const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
+        std.debug.warn("instr = {}\n", .{instr});
+
         var rt_instr: Instruction = undefined;
+        defer {
+            std.debug.warn("val_stack = {any}\n", .{self.validator.op_stack.items});
+        }
 
         // 2. Find the start of the next instruction
         switch (instr) {
@@ -257,12 +269,14 @@ pub const ParseIterator = struct {
             .@"else" => rt_instr = Instruction.@"else",
             .end => rt_instr = Instruction.end,
             .br => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .br = immediate_u32 };
+                const label = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateBr(label);
+                rt_instr = Instruction{ .br = label };
             },
             .br_if => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .br_if = immediate_u32 };
+                const label = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateBrIf(label);
+                rt_instr = Instruction{ .br_if = label };
             },
             .br_table => {
                 const label_start = self.module.br_table_indices.items.len;
@@ -274,6 +288,9 @@ pub const ParseIterator = struct {
                     try self.module.br_table_indices.append(tmp_label);
                 }
                 const ln = try readULEB128Mem(u32, &self.code);
+                const l_star = self.module.br_table_indices.items[label_start .. label_start + j];
+
+                try self.validator.validateBrTable(l_star, ln);
 
                 rt_instr = Instruction{
                     .br_table = .{
@@ -311,8 +328,19 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"global.set" = immediate_u32 };
             },
             .@"local.get" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"local.get" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+                const params = self.params orelse return error.ParamsNotSetForLocalGet;
+                const locals = self.locals orelse return error.ParamsNotSetForLocalGet;
+
+                if (index < params.len) {
+                    try self.validator.validateLocalGet(params[index]);
+                } else if (index >= params.len and index < (params.len + locals.len)) {
+                    try self.validator.validateLocalGet(locals[index - params.len]);
+                } else {
+                    return error.LocalGetIndexOutOfBounds;
+                }
+
+                rt_instr = Instruction{ .@"local.get" = index };
             },
             .@"local.set" => {
                 const immediate_u32 = try readULEB128Mem(u32, &self.code);
@@ -783,8 +811,10 @@ pub const ParseIterator = struct {
             },
         }
 
+        // Validate the instruction. Some instructions, e.g. block, loop
+        // are validate separately above.
         switch (instr) {
-            .block, .loop, .@"if" => {},
+            .block, .loop, .@"if", .br, .br_if, .br_table, .@"local.get" => {},
             else => try self.validator.validate(instr),
         }
 
