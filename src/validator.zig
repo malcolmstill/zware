@@ -125,7 +125,7 @@ pub const Validator = struct {
                 const t2 = try v.popOperand();
 
                 if (!(isNum(t1) and isNum(t2))) return error.ExpectingBothNum;
-                if (valueTypeEqual(t1, t2) and !valueTypeEqual(t1, ValueTypeUnknown.Unknown) and !valueTypeEqual(t2, ValueTypeUnknown.Unknown)) return error.ValidatorSelect;
+                if (!valueTypeEqual(t1, t2) and !valueTypeEqual(t1, ValueTypeUnknown.Unknown) and !valueTypeEqual(t2, ValueTypeUnknown.Unknown)) return error.ValidatorSelect;
                 if (valueTypeEqual(t1, ValueTypeUnknown.Unknown)) {
                     try v.pushOperand(t2);
                 } else {
