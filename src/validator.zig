@@ -132,7 +132,7 @@ pub const Validator = struct {
                     try v.pushOperand(t1);
                 }
             },
-            .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz", .@"memory.grow" => {
+            .@"i32.extend8_s", .@"i32.extend16_s", .@"i32.eqz", .@"memory.grow", .@"i32.load" => {
                 // no change
             },
             .@"i32.add",
@@ -164,6 +164,10 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"i32.store" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"i32.clz", .@"i32.ctz", .@"i32.popcnt" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
