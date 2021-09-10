@@ -47,6 +47,7 @@ pub const Module = struct {
     codes: Section(Code),
     datas: Section(Segment),
     parsed_code: ArrayList(Instruction),
+    local_types: ArrayList(ValueType),
     br_table_indices: ArrayList(u32),
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
@@ -67,6 +68,7 @@ pub const Module = struct {
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
+            .local_types = ArrayList(ValueType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
         };
     }
@@ -642,7 +644,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const locals_start = rd.context.pos;
+            const locals_start = self.local_types.items.len;
 
             // Iterate over local definitions counting them
             var j: usize = 0;
@@ -653,10 +655,12 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                const local_type = rd.readByte() catch |err| switch (err) {
+                const local_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                try self.local_types.append(local_type);
                 locals_count += type_count;
             }
             if (locals_count > 0x100000000) return error.TooManyLocals;
@@ -669,13 +673,13 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const locals = self.module[locals_start..code_start];
+            const locals = self.local_types.items[locals_start .. locals_start + locals_count];
             const code = self.module[code_start..rd.context.pos];
 
             const parsed_code = try self.parseCode(code, i);
 
             try self.codes.list.append(Code{
-                .locals = locals,
+                // .locals = locals,
                 .locals_count = locals_count,
                 .code = parsed_code,
             });
