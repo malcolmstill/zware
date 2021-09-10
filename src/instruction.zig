@@ -302,6 +302,11 @@ pub const ParseIterator = struct {
             .@"return" => rt_instr = Instruction.@"return",
             .call => {
                 const function_index = try readULEB128Mem(u32, &self.code);
+                const function = self.module.functions.list.items[@intCast(usize, function_index)];
+                const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+
+                try self.validator.validateCall(function_type);
+
                 rt_instr = Instruction{ .call = function_index };
             },
             .call_indirect => {
@@ -814,7 +819,7 @@ pub const ParseIterator = struct {
         // Validate the instruction. Some instructions, e.g. block, loop
         // are validate separately above.
         switch (instr) {
-            .block, .loop, .@"if", .br, .br_if, .br_table, .@"local.get" => {},
+            .block, .loop, .@"if", .br, .br_if, .br_table, .call, .@"local.get" => {},
             else => try self.validator.validate(instr),
         }
 

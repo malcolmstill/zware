@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
+const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("common.zig").ValueType;
 const Opcode = @import("instruction.zig").Opcode;
 
@@ -74,6 +75,11 @@ pub const Validator = struct {
 
         try v.popOperands(v.labelTypes(frame));
         try v.setUnreachable();
+    }
+
+    pub fn validateCall(v: *Validator, func_type: FuncType) !void {
+        try v.popOperands(func_type.params);
+        try v.pushOperands(func_type.results);
     }
 
     pub fn validateLocalGet(v: *Validator, value_type: ValueType) !void {
