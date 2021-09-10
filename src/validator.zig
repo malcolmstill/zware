@@ -231,11 +231,14 @@ pub const Validator = struct {
             .@"f32.div",
             .@"f32.min",
             .@"f32.max",
+            .@"f32.copysign",
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
+            .@"f32.abs",
+            .@"f32.neg",
             .@"f32.sqrt",
             .@"f32.ceil",
             .@"f32.floor",
