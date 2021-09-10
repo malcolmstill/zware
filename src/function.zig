@@ -7,7 +7,7 @@ const Range = @import("common.zig").Range;
 
 pub const Function = union(enum) {
     function: struct {
-        locals: []const u8,
+        // locals: []const u8,
         locals_count: usize,
         code: []Instruction,
         params: []const ValueType,
@@ -22,7 +22,7 @@ pub const Function = union(enum) {
 };
 
 pub const Code = struct {
-    locals: []const u8,
+    // locals: []const u8,
     locals_count: usize,
     code: Range,
 };

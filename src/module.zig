@@ -492,7 +492,7 @@ pub const Module = struct {
             }
             code = self.module[offset .. offset + j + 1];
 
-            parsed_code = try self.parseCode(code orelse return error.NoCode, null);
+            parsed_code = try self.parseCode(code orelse return error.NoCode);
         }
 
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
@@ -608,7 +608,7 @@ pub const Module = struct {
                 };
             }
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1], null);
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
 
             try self.elements.list.append(Segment{
                 .index = table_index,
@@ -676,7 +676,7 @@ pub const Module = struct {
             const locals = self.local_types.items[locals_start .. locals_start + locals_count];
             const code = self.module[code_start..rd.context.pos];
 
-            const parsed_code = try self.parseCode(code, i);
+            const parsed_code = try self.parseFunction(locals, code, i);
 
             try self.codes.list.append(Code{
                 // .locals = locals,
@@ -725,7 +725,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1], null);
+            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
 
             try self.datas.list.append(Segment{
                 .index = mem_idx,
@@ -774,15 +774,36 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8, func_index: ?usize) !common.Range {
+    pub fn parseCode(self: *Module, code: []const u8) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
 
-        if (func_index) |index| {
-            try it.pushFunction(index);
+        // 1. Make a first pass allocating all of our Instructions
+        while (try it.next()) |instr| {
+            try self.parsed_code.append(instr);
         }
+
+        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
+
+        // 2. Make a second pass where we fix up the continuations for
+        //    blocks, loops and ifs
+        try function.calculateContinuations(code_start, parsed_code);
+
+        return common.Range{
+            .offset = code_start,
+            .count = self.parsed_code.items.len - code_start,
+        };
+    }
+
+    pub fn parseFunction(self: *Module, locals: []ValueType, code: []const u8, func_index: usize) !common.Range {
+        _ = try instruction.findFunctionEnd(code);
+
+        var it = ParseIterator.init(self, code);
+        const code_start = self.parsed_code.items.len;
+
+        try it.pushFunction(func_index);
 
         // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
