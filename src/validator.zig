@@ -129,9 +129,9 @@ pub const Validator = struct {
                 try v.pushControlFrame(.@"else", frame.start_types, frame.end_types);
             },
             .@"return" => {
-                // No idea if this is correct...
-                const frame = try v.popControlFrame();
-                _ = try v.pushOperands(frame.end_types);
+                const frame = v.ctrl_stack.items[0];
+                try v.popOperands(v.labelTypes(frame));
+                try v.setUnreachable();
             },
             .drop => {
                 _ = try v.popOperand();
