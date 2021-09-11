@@ -496,6 +496,9 @@ pub fn main() anyerror!void {
                     error.ValidatorPopControlFrameControlStackEmpty => continue,
                     error.ValidatorPopControlFrameMismatchedSizes => continue,
                     error.ControlStackEmpty => continue,
+                    error.ValidatorAttemptToMutateImmutableGlobal => continue,
+                    error.ValidatorConstantExpressionRequired => continue,
+                    error.ValidatorUnknownGlobal => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

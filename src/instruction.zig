@@ -330,6 +330,8 @@ pub const ParseIterator = struct {
             .@"global.get" => {
                 const index = try readULEB128Mem(u32, &self.code);
 
+                // TODO: add a getGlobal to module?
+                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
                 const global = self.module.globals.list.items[@intCast(usize, index)];
                 try self.validator.validateGlobalGet(global);
 
@@ -345,8 +347,8 @@ pub const ParseIterator = struct {
             },
             .@"local.get" => {
                 const index = try readULEB128Mem(u32, &self.code);
-                const params = self.params orelse return error.ParamsNotSetForLocalGet;
-                const locals = self.locals orelse return error.ParamsNotSetForLocalGet;
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
                 if (index < params.len) {
                     try self.validator.validateLocalGet(params[index]);
@@ -361,8 +363,8 @@ pub const ParseIterator = struct {
             .@"local.set" => {
                 const index = try readULEB128Mem(u32, &self.code);
 
-                const params = self.params orelse return error.ParamsNotSetForLocalGet;
-                const locals = self.locals orelse return error.ParamsNotSetForLocalGet;
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
                 if (index < params.len) {
                     try self.validator.validateLocalSet(params[index]);
@@ -377,8 +379,8 @@ pub const ParseIterator = struct {
             .@"local.tee" => {
                 const index = try readULEB128Mem(u32, &self.code);
 
-                const params = self.params orelse return error.ParamsNotSetForLocalGet;
-                const locals = self.locals orelse return error.ParamsNotSetForLocalGet;
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
                 if (index < params.len) {
                     try self.validator.validateLocalTee(params[index]);
