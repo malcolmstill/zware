@@ -492,7 +492,7 @@ pub const Module = struct {
             }
             code = self.module[offset .. offset + j + 1];
 
-            parsed_code = try self.parseCode(code orelse return error.NoCode);
+            parsed_code = try self.parseConstantCode(code orelse return error.NoCode, global_type);
         }
 
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
@@ -608,7 +608,7 @@ pub const Module = struct {
                 };
             }
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
             try self.elements.list.append(Segment{
                 .index = table_index,
@@ -729,7 +729,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
             try self.datas.list.append(Segment{
                 .index = mem_idx,
@@ -778,14 +778,32 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) !common.Range {
+    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
 
+        const in: [0]ValueType = [_]ValueType{} ** 0;
+        var out: [1]ValueType = [_]ValueType{.I32} ** 1;
+        out[0] = value_type;
+        try it.validator.pushControlFrame(
+            .block,
+            in[0..0],
+            out[0..1],
+        );
+
         // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
+            switch (instr) {
+                .@"i32.const" => |_| {},
+                .@"i64.const" => |_| {},
+                .@"f32.const" => |_| {},
+                .@"f64.const" => |_| {},
+                .@"global.get" => |_| {},
+                .end => |_| {},
+                else => return error.ValidatorConstantExpressionRequired,
+            }
             try self.parsed_code.append(instr);
         }
 
