@@ -313,6 +313,9 @@ pub const ParseIterator = struct {
                 const type_index = try readULEB128Mem(u32, &self.code);
                 const table_reserved = try readByte(&self.code);
 
+                const function_type = self.module.types.list.items[@intCast(usize, type_index)];
+                try self.validator.validateCallIndirect(function_type);
+
                 if (table_reserved != 0) return error.MalformedCallIndirectReserved;
 
                 rt_instr = Instruction{
@@ -850,6 +853,9 @@ pub const ParseIterator = struct {
             .br_if,
             .br_table,
             .call,
+            .call_indirect,
+            .@"global.get",
+            .@"global.set",
             .@"local.get",
             .@"local.set",
             .@"local.tee",

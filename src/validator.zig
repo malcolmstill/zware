@@ -82,6 +82,12 @@ pub const Validator = struct {
         try v.pushOperands(func_type.results);
     }
 
+    pub fn validateCallIndirect(v: *Validator, func_type: FuncType) !void {
+        try v.popOperands(func_type.params);
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+        try v.pushOperands(func_type.results);
+    }
+
     pub fn validateLocalGet(v: *Validator, local_type: ValueType) !void {
         try v.pushOperand(ValueTypeUnknown{ .Known = local_type });
     }
