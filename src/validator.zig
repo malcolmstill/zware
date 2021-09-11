@@ -4,6 +4,7 @@ const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
 const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("common.zig").ValueType;
+const Global = @import("common.zig").Global;
 const Opcode = @import("instruction.zig").Opcode;
 
 pub const Validator = struct {
@@ -101,6 +102,16 @@ pub const Validator = struct {
         const t = try v.popOperand();
         if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
         try v.pushOperand(t);
+    }
+
+    pub fn validateGlobalGet(v: *Validator, global: Global) !void {
+        try v.pushOperand(ValueTypeUnknown{ .Known = global.value_type });
+    }
+
+    pub fn validateGlobalSet(v: *Validator, global: Global) !void {
+        if (global.mutability == .Immutable) return error.ValidatorAttemptToMutateImmutableGlobal;
+        const t = try v.popOperand();
+        if (!valueTypeEqual(ValueTypeUnknown{ .Known = global.value_type }, t)) return error.ValidatorGlobalSetTypeMismatch;
     }
 
     pub fn validate(v: *Validator, opcode: Opcode) !void {

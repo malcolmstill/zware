@@ -328,12 +328,20 @@ pub const ParseIterator = struct {
             .drop => rt_instr = Instruction.drop,
             .select => rt_instr = Instruction.select,
             .@"global.get" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"global.get" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const global = self.module.globals.list.items[@intCast(usize, index)];
+                try self.validator.validateGlobalGet(global);
+
+                rt_instr = Instruction{ .@"global.get" = index };
             },
             .@"global.set" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"global.set" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const global = self.module.globals.list.items[@intCast(usize, index)];
+                try self.validator.validateGlobalSet(global);
+
+                rt_instr = Instruction{ .@"global.set" = index };
             },
             .@"local.get" => {
                 const index = try readULEB128Mem(u32, &self.code);
