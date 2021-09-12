@@ -535,6 +535,7 @@ pub fn main() anyerror!void {
                     error.ValidatorDuplicateExportName => continue,
                     error.ValidatorStartFunctionUnknown => continue,
                     error.ValidatorNotStartFunctionType => continue,
+                    error.ValidatorElemUnknownFunctionIndex => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

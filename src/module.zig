@@ -639,10 +639,12 @@ pub const Module = struct {
             while (j < data_length) : (j += 1) {
                 // When we pre-process all this data we can just store this
                 // but for the moment we're just using it to skip over
-                _ = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
             }
 
             const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
