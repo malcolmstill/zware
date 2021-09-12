@@ -317,6 +317,8 @@ pub const Module = struct {
             else => return err,
         };
 
+        if (type_index >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
+
         if (import == null and self.function_index_start == null) {
             self.function_index_start = self.functions.list.items.len;
         }
