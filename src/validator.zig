@@ -35,14 +35,14 @@ pub const Validator = struct {
     }
 
     pub fn validateBr(v: *Validator, label: usize) !void {
-        if (v.ctrl_stack.items.len < label) return error.ValidateBrInvalidLabel;
+        if (label >= v.ctrl_stack.items.len) return error.ValidateBrInvalidLabel;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
         try v.popOperands(v.labelTypes(frame));
         try v.setUnreachable();
     }
 
     pub fn validateBrIf(v: *Validator, label: usize) !void {
-        if (v.ctrl_stack.items.len < label) return error.ValidateBrIfInvalidLabel;
+        if (label >= v.ctrl_stack.items.len) return error.ValidateBrIfInvalidLabel;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
 
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });

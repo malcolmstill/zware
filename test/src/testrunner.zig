@@ -514,6 +514,7 @@ pub fn main() anyerror!void {
                     error.ValidatorMemoryMinGreaterThanMax => continue,
                     error.ValidatorMemoryMinTooLarge => continue,
                     error.ValidatorMemoryMaxTooLarge => continue,
+                    error.ValidateBrIfInvalidLabel => continue,
                     error.ValidateBrTableInvalidLabel => continue,
                     error.ValidatorSelect => continue,
                     else => {
