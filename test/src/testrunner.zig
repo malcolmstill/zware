@@ -487,6 +487,10 @@ pub fn main() anyerror!void {
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
                 module = Module.init(&arena.allocator, program);
 
+                errdefer {
+                    std.debug.warn("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
+                }
+
                 if (module.decode()) |x| {
                     return error.TestsuiteExpectedInvalid;
                 } else |err| switch (err) {
@@ -499,6 +503,9 @@ pub fn main() anyerror!void {
                     error.ValidatorAttemptToMutateImmutableGlobal => continue,
                     error.ValidatorConstantExpressionRequired => continue,
                     error.ValidatorUnknownGlobal => continue,
+                    error.ValidatorInvalidTypeIndex => continue,
+                    error.ValidatorMultipleTables => continue,
+                    error.ValidatorMultipleMemories => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

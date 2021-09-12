@@ -347,6 +347,8 @@ pub const Module = struct {
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
+        if (self.tables.list.items.len > 0) return error.ValidatorMultipleTables;
+
         const rd = self.buf.reader();
 
         const tag = rd.readByte() catch |err| switch (err) {
@@ -411,6 +413,7 @@ pub const Module = struct {
     }
 
     fn decodeMemory(self: *Module, import: ?u32) !void {
+        if (self.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
         const rd = self.buf.reader();
 
         const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
