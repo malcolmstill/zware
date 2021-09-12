@@ -149,6 +149,9 @@ pub const Validator = struct {
                     try v.pushOperand(t1);
                 }
             },
+            .@"memory.size" => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
             .@"i32.extend8_s",
             .@"i32.extend16_s",
             .@"i32.eqz",
