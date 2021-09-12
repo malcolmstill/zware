@@ -506,6 +506,7 @@ pub fn main() anyerror!void {
                     error.ValidatorInvalidTypeIndex => continue,
                     error.ValidatorMultipleTables => continue,
                     error.ValidatorMultipleMemories => continue,
+                    error.LocalGetIndexOutOfBounds => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
