@@ -191,6 +191,10 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
+            .@"i32.wrap_i64" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
             .@"i64.extend8_s",
             .@"i64.extend16_s",
             .@"i64.extend32_s",
