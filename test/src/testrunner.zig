@@ -677,6 +677,7 @@ pub fn main() anyerror!void {
                         error.CodesCountMismatch => continue,
                         error.DatasCountMismatch => continue,
                         error.InvalidValue => continue,
+                        error.MalformedSectionMismatchedSize => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;

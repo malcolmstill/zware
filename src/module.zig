@@ -138,6 +138,8 @@ pub const Module = struct {
             else => return err,
         };
 
+        const section_start = rd.context.pos;
+
         _ = switch (id) {
             .Custom => try self.decodeCustomSection(size),
             .Type => try self.decodeTypeSection(),
@@ -148,10 +150,13 @@ pub const Module = struct {
             .Global => try self.decodeGlobalSection(),
             .Export => try self.decodeExportSection(),
             .Start => try self.decodeStartSection(),
-            .Element => try self.decodeElementSection(size),
+            .Element => try self.decodeElementSection(),
             .Code => try self.decodeCodeSection(),
-            .Data => try self.decodeDataSection(size),
+            .Data => try self.decodeDataSection(),
         };
+
+        const section_end = rd.context.pos;
+        if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
 
         return id;
     }
@@ -601,7 +606,7 @@ pub const Module = struct {
         return 1;
     }
 
-    fn decodeElementSection(self: *Module, size: u32) !usize {
+    fn decodeElementSection(self: *Module) !usize {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -734,7 +739,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn decodeDataSection(self: *Module, size: u32) !usize {
+    fn decodeDataSection(self: *Module) !usize {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
 
