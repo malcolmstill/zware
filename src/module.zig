@@ -428,6 +428,8 @@ pub const Module = struct {
                     else => return err,
                 };
 
+                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
+
                 try self.memories.list.append(Limit{
                     .min = min,
                     .max = null,
@@ -444,6 +446,10 @@ pub const Module = struct {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
+                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
+                if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
 
                 try self.memories.list.append(Limit{
                     .min = min,

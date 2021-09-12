@@ -511,6 +511,9 @@ pub fn main() anyerror!void {
                     error.LocalSetIndexOutOfBounds => continue,
                     error.ValidatorDataMemoryReferenceInvalid => continue,
                     error.ValidatorUnknownMemory => continue,
+                    error.ValidatorMemoryMinGreaterThanMax => continue,
+                    error.ValidatorMemoryMinTooLarge => continue,
+                    error.ValidatorMemoryMaxTooLarge => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
