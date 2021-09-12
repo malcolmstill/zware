@@ -155,6 +155,9 @@ pub const Validator = struct {
             .@"memory.grow",
             .@"i32.load",
             .@"i32.load8_u",
+            .@"i32.load8_s",
+            .@"i32.load16_u",
+            .@"i32.load16_s",
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
@@ -263,6 +266,12 @@ pub const Validator = struct {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
             .@"i64.load",
+            .@"i64.load8_s",
+            .@"i64.load8_u",
+            .@"i64.load16_s",
+            .@"i64.load16_u",
+            .@"i64.load32_s",
+            .@"i64.load32_u",
             .@"i64.extend_i32_s",
             .@"i64.extend_i32_u",
             => {
@@ -307,6 +316,7 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
+            .@"f32.load",
             .@"f32.convert_i32_s",
             .@"f32.convert_i32_u",
             => {
@@ -351,6 +361,7 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
+            .@"f64.load",
             .@"f64.convert_i32_s",
             .@"f64.convert_i32_u",
             => {
