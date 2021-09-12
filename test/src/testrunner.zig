@@ -533,6 +533,8 @@ pub fn main() anyerror!void {
                     error.ValidatorExportUnknownMemory => continue,
                     error.ValidatorExportUnknownGlobal => continue,
                     error.ValidatorDuplicateExportName => continue,
+                    error.ValidatorStartFunctionUnknown => continue,
+                    error.ValidatorNotStartFunctionType => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

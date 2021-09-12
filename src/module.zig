@@ -591,6 +591,11 @@ pub const Module = struct {
             else => return err,
         };
 
+        if (index >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
+        const func = self.functions.list.items[index];
+        const function_type = self.types.list.items[func.typeidx];
+        if (function_type.params.len != 0 or function_type.results.len != 0) return error.ValidatorNotStartFunctionType;
+
         self.start = index;
 
         return 1;
