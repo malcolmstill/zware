@@ -278,6 +278,10 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
+            .@"i64.trunc_f64_s" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
             .@"f32.add",
             .@"f32.sub",
             .@"f32.mul",
