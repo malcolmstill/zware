@@ -210,8 +210,17 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            .@"i32.reinterpret_f32" => {
+            .@"i32.reinterpret_f32",
+            .@"i32.trunc_f32_s",
+            .@"i32.trunc_f32_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"i32.trunc_f64_s",
+            .@"i32.trunc_f64_u",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"i64.extend8_s",
@@ -285,8 +294,15 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
+            .@"i64.trunc_f32_s",
+            .@"i64.trunc_f32_u",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
             .@"i64.reinterpret_f64",
             .@"i64.trunc_f64_s",
+            .@"i64.trunc_f64_u",
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
@@ -335,6 +351,16 @@ pub const Validator = struct {
             .@"f32.reinterpret_i32",
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
+            },
+            .@"f32.demote_f64" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
+            },
+            .@"f32.convert_i64_s",
+            .@"f32.convert_i64_u",
+            => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I64 });
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F32 });
             },
             .@"f64.add",
