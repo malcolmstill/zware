@@ -526,6 +526,7 @@ pub fn main() anyerror!void {
                     error.ValidatorCallInvalidFunctionIndex => continue,
                     error.ValidatorCallIndirectNoTable => continue,
                     error.ValidatorCallIndirectInvalidTypeIndex => continue,
+                    error.ValidatorElemUnknownTable => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

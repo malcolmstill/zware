@@ -599,6 +599,8 @@ pub const Module = struct {
                 else => return err,
             };
 
+            if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(expr);
