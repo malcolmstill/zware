@@ -23,6 +23,7 @@ const Element = common.Element;
 const Code = function.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
+const LocalType = common.LocalType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
@@ -47,7 +48,7 @@ pub const Module = struct {
     codes: Section(Code),
     datas: Section(Segment),
     parsed_code: ArrayList(Instruction),
-    local_types: ArrayList(ValueType),
+    local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
 
@@ -69,7 +70,7 @@ pub const Module = struct {
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
-            .local_types = ArrayList(ValueType).init(alloc),
+            .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .function_index_start = null,
         };
@@ -707,13 +708,10 @@ pub const Module = struct {
                 };
 
                 locals_count += type_count;
-                if (locals_count > 0x100000000) return error.TooManyLocals;
 
-                var k: usize = 0;
-                while (k < type_count) : (k += 1) {
-                    try self.local_types.append(local_type);
-                }
+                try self.local_types.append(.{ .count = type_count, .value_type = local_type });
             }
+            if (locals_count > 0x100000000) return error.TooManyLocals;
 
             const code_start = rd.context.pos;
             const code_length = try math.sub(usize, size, code_start - offset);
@@ -723,7 +721,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const locals = self.local_types.items[locals_start .. locals_start + locals_count];
+            const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
             const code = self.module[code_start..rd.context.pos];
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
@@ -868,7 +866,7 @@ pub const Module = struct {
         };
     }
 
-    pub fn parseFunction(self: *Module, locals: []ValueType, code: []const u8, func_index: usize) !common.Range {
+    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);

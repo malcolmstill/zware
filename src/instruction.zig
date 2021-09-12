@@ -5,6 +5,7 @@ const Instruction = @import("function.zig").Instruction;
 const Range = @import("common.zig").Range;
 const Validator = @import("validator.zig").Validator;
 const ValueType = @import("common.zig").ValueType;
+const LocalType = @import("common.zig").LocalType;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 pub const OpcodeIterator = struct {
@@ -105,7 +106,7 @@ pub const ParseIterator = struct {
     module: *Module,
     validator: Validator,
     params: ?[]const ValueType,
-    locals: ?[]const ValueType,
+    locals: ?[]LocalType,
 
     pub fn init(module: *Module, function: []const u8) ParseIterator {
         return ParseIterator{
@@ -123,7 +124,7 @@ pub const ParseIterator = struct {
     }
 
     // pushFunction initiliase the validator for the current function
-    pub fn pushFunction(self: *ParseIterator, locals: []const ValueType, func_index: usize) !void {
+    pub fn pushFunction(self: *ParseIterator, locals: []LocalType, func_index: usize) !void {
         const function = self.module.functions.list.items[@intCast(usize, func_index)];
         const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
 
@@ -352,10 +353,23 @@ pub const ParseIterator = struct {
 
                 if (index < params.len) {
                     try self.validator.validateLocalGet(params[index]);
-                } else if (index >= params.len and index < (params.len + locals.len)) {
-                    try self.validator.validateLocalGet(locals[index - params.len]);
                 } else {
-                    return error.LocalGetIndexOutOfBounds;
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalGet(ltype);
+                    } else {
+                        return error.LocalGetIndexOutOfBounds;
+                    }
                 }
 
                 rt_instr = Instruction{ .@"local.get" = index };
@@ -368,10 +382,23 @@ pub const ParseIterator = struct {
 
                 if (index < params.len) {
                     try self.validator.validateLocalSet(params[index]);
-                } else if (index >= params.len and index < (params.len + locals.len)) {
-                    try self.validator.validateLocalSet(locals[index - params.len]);
                 } else {
-                    return error.LocalSetIndexOutOfBounds;
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalSet(ltype);
+                    } else {
+                        return error.LocalSetIndexOutOfBounds;
+                    }
                 }
 
                 rt_instr = Instruction{ .@"local.set" = index };
@@ -384,10 +411,23 @@ pub const ParseIterator = struct {
 
                 if (index < params.len) {
                     try self.validator.validateLocalTee(params[index]);
-                } else if (index >= params.len and index < (params.len + locals.len)) {
-                    try self.validator.validateLocalTee(locals[index - params.len]);
                 } else {
-                    return error.LocalTeeIndexOutOfBounds;
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalTee(ltype);
+                    } else {
+                        return error.LocalTeeIndexOutOfBounds;
+                    }
                 }
 
                 rt_instr = Instruction{ .@"local.tee" = index };

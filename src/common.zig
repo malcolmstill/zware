@@ -111,3 +111,8 @@ pub const Range = struct {
     offset: usize = 0,
     count: usize = 0,
 };
+
+pub const LocalType = struct {
+    count: u32,
+    value_type: ValueType,
+};
