@@ -49,6 +49,7 @@ pub const Module = struct {
     parsed_code: ArrayList(Instruction),
     local_types: ArrayList(ValueType),
     br_table_indices: ArrayList(u32),
+    function_index_start: ?usize,
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
@@ -70,6 +71,7 @@ pub const Module = struct {
             .parsed_code = ArrayList(Instruction).init(alloc),
             .local_types = ArrayList(ValueType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
+            .function_index_start = null,
         };
     }
 
@@ -314,6 +316,10 @@ pub const Module = struct {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
+
+        if (import == null and self.function_index_start == null) {
+            self.function_index_start = self.functions.list.items.len;
+        }
 
         try self.functions.list.append(common.Function{
             .typeidx = type_index,
@@ -630,6 +636,8 @@ pub const Module = struct {
         };
         self.codes.count = count;
 
+        const function_index_start = self.function_index_start orelse return error.FunctionIndexStartExpected;
+
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -680,7 +688,7 @@ pub const Module = struct {
             const locals = self.local_types.items[locals_start .. locals_start + locals_count];
             const code = self.module[code_start..rd.context.pos];
 
-            const parsed_code = try self.parseFunction(locals, code, i);
+            const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
 
             try self.codes.list.append(Code{
                 // .locals = locals,
