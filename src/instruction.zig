@@ -393,12 +393,14 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"local.tee" = index };
             },
             .@"memory.size" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
                 rt_instr = Instruction{ .@"memory.size" = memory_index };
             },
             .@"memory.grow" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
@@ -421,6 +423,8 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -434,6 +438,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -447,6 +452,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f32.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -460,6 +466,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f64.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -473,6 +480,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load8_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -486,6 +494,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load8_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -499,6 +508,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load16_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -512,6 +522,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load16_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -525,6 +536,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load8_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -538,6 +550,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load8_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -551,6 +564,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load16_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -564,6 +578,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load16_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -577,6 +592,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load32_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -590,6 +606,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load32_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -603,6 +620,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -616,6 +634,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -629,6 +648,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f32.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -642,6 +662,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f64.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -655,6 +676,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store8" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -668,6 +690,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store16" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -681,6 +704,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store8" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 
@@ -694,6 +718,7 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store16" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
 

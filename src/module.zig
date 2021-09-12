@@ -722,6 +722,8 @@ pub const Module = struct {
                 else => return err,
             };
 
+            if (mem_idx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
             const meta = try instruction.findExprEnd(expr);
