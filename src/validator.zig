@@ -136,6 +136,23 @@ pub const Validator = struct {
     pub fn validate(v: *Validator, opcode: Opcode) !void {
         std.log.info("validate {}\n", .{opcode});
         switch (opcode) {
+            .block,
+            .loop,
+            .@"if",
+            .br,
+            .br_if,
+            .br_table,
+            .call,
+            .call_indirect,
+            .@"global.get",
+            .@"global.set",
+            .@"local.get",
+            .@"local.set",
+            .@"local.tee",
+            .trunc_sat,
+            => {
+                // These instructions are handle separately
+            },
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
             .end => {
@@ -450,7 +467,6 @@ pub const Validator = struct {
             .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
             },
-            else => unreachable,
         }
     }
 
