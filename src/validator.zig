@@ -70,7 +70,7 @@ pub const Validator = struct {
             }
 
             for (v.labelTypes(frame_n)) |_, i| {
-                try v.pushOperand(temp[i]);
+                try v.pushOperand(temp[arity - 1 - i]);
             }
         }
 

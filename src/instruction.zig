@@ -126,7 +126,6 @@ pub const ParseIterator = struct {
     pub fn pushFunction(self: *ParseIterator, locals: []const ValueType, func_index: usize) !void {
         const function = self.module.functions.list.items[@intCast(usize, func_index)];
         const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
-        std.log.info("pushFunction {any} {any}\n", .{ function_type.params, function_type.results });
 
         self.params = function_type.params;
         self.locals = locals;
@@ -149,9 +148,6 @@ pub const ParseIterator = struct {
         std.debug.warn("instr = {}\n", .{instr});
 
         var rt_instr: Instruction = undefined;
-        defer {
-            std.debug.warn("val_stack = {any}\n", .{self.validator.op_stack.items});
-        }
 
         // 2. Find the start of the next instruction
         switch (instr) {
