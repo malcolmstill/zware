@@ -647,7 +647,7 @@ pub const Module = struct {
         };
         self.codes.count = count;
 
-        const function_index_start = self.function_index_start orelse return error.FunctionIndexStartExpected;
+        const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -699,6 +699,7 @@ pub const Module = struct {
             const locals = self.local_types.items[locals_start .. locals_start + locals_count];
             const code = self.module[code_start..rd.context.pos];
 
+            if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
             const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
 
             try self.codes.list.append(Code{
