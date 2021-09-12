@@ -146,8 +146,6 @@ pub const ParseIterator = struct {
         const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
-        std.debug.warn("instr = {}\n", .{instr});
-
         var rt_instr: Instruction = undefined;
 
         // 2. Find the start of the next instruction

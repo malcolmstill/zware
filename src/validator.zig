@@ -134,7 +134,6 @@ pub const Validator = struct {
     }
 
     pub fn validate(v: *Validator, opcode: Opcode) !void {
-        std.log.info("validate {}\n", .{opcode});
         switch (opcode) {
             .block,
             .loop,
