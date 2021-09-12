@@ -386,6 +386,8 @@ pub const Module = struct {
                     else => return err,
                 };
 
+                if (min > max) return error.ValidatorTableMinGreaterThanMax;
+
                 try self.tables.list.append(Limit{
                     .min = min,
                     .max = max,
@@ -549,6 +551,10 @@ pub const Module = struct {
             const name = self.module[name_start .. name_start + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
+            for (self.exports.list.items) |exprt| {
+                if (mem.eql(u8, name, exprt.name)) return error.ValidatorDuplicateExportName;
+            }
+
             const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
@@ -558,6 +564,13 @@ pub const Module = struct {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
+
+            switch (tag) {
+                .Func => if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction,
+                .Table => if (index >= self.tables.list.items.len) return error.ValidatorExportUnknownTable,
+                .Mem => if (index >= self.memories.list.items.len) return error.ValidatorExportUnknownMemory,
+                .Global => if (index >= self.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
+            }
 
             try self.exports.list.append(Export{
                 .name = name,

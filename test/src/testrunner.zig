@@ -527,6 +527,12 @@ pub fn main() anyerror!void {
                     error.ValidatorCallIndirectNoTable => continue,
                     error.ValidatorCallIndirectInvalidTypeIndex => continue,
                     error.ValidatorElemUnknownTable => continue,
+                    error.ValidatorTableMinGreaterThanMax => continue,
+                    error.ValidatorExportUnknownFunction => continue,
+                    error.ValidatorExportUnknownTable => continue,
+                    error.ValidatorExportUnknownMemory => continue,
+                    error.ValidatorExportUnknownGlobal => continue,
+                    error.ValidatorDuplicateExportName => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
