@@ -515,6 +515,7 @@ pub fn main() anyerror!void {
                     error.ValidatorMemoryMinTooLarge => continue,
                     error.ValidatorMemoryMaxTooLarge => continue,
                     error.ValidateBrTableInvalidLabel => continue,
+                    error.ValidatorSelect => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
