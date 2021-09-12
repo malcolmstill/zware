@@ -706,14 +706,14 @@ pub const Module = struct {
                     else => return err,
                 };
 
+                locals_count += type_count;
+                if (locals_count > 0x100000000) return error.TooManyLocals;
+
                 var k: usize = 0;
                 while (k < type_count) : (k += 1) {
                     try self.local_types.append(local_type);
                 }
-
-                locals_count += type_count;
             }
-            if (locals_count > 0x100000000) return error.TooManyLocals;
 
             const code_start = rd.context.pos;
             const code_length = try math.sub(usize, size, code_start - offset);
