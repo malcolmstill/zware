@@ -52,13 +52,13 @@ pub const Validator = struct {
 
     pub fn validateBrTable(v: *Validator, n_star: []u32, label: u32) !void {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-        if (v.ctrl_stack.items.len < label) return error.ValidateBrTableInvalidLabel;
+        if (label >= v.ctrl_stack.items.len) return error.ValidateBrTableInvalidLabel;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
 
         const arity = v.labelTypes(frame).len;
 
         for (n_star) |n| {
-            if (v.ctrl_stack.items.len < n) return error.ValidateBrTableInvalidLabelN;
+            if (n >= v.ctrl_stack.items.len) return error.ValidateBrTableInvalidLabelN;
             const frame_n = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - n];
             if (v.labelTypes(frame_n).len != arity) return error.ValidateBrTableInvalidLabelWrongArity;
 
@@ -94,13 +94,11 @@ pub const Validator = struct {
     }
 
     pub fn validateLocalSet(v: *Validator, local_type: ValueType) !void {
-        const t = try v.popOperand();
-        if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = local_type });
     }
 
     pub fn validateLocalTee(v: *Validator, local_type: ValueType) !void {
-        const t = try v.popOperand();
-        if (!valueTypeEqual(ValueTypeUnknown{ .Known = local_type }, t)) return error.ValidatorLocalSetTypeMismatch;
+        const t = try v.popOperandExpecting(ValueTypeUnknown{ .Known = local_type });
         try v.pushOperand(t);
     }
 
@@ -110,8 +108,7 @@ pub const Validator = struct {
 
     pub fn validateGlobalSet(v: *Validator, global: Global) !void {
         if (global.mutability == .Immutable) return error.ValidatorAttemptToMutateImmutableGlobal;
-        const t = try v.popOperand();
-        if (!valueTypeEqual(ValueTypeUnknown{ .Known = global.value_type }, t)) return error.ValidatorGlobalSetTypeMismatch;
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
     pub fn validate(v: *Validator, opcode: Opcode) !void {

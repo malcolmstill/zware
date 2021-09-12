@@ -243,6 +243,10 @@ pub fn main() anyerror!void {
                 std.debug.warn("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
+                errdefer {
+                    std.debug.warn("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
+                }
+
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
@@ -507,16 +511,21 @@ pub fn main() anyerror!void {
                     error.ValidatorMultipleTables => continue,
                     error.ValidatorMultipleMemories => continue,
                     error.LocalGetIndexOutOfBounds => continue,
-                    error.ValidatorLocalSetTypeMismatch => continue,
                     error.LocalSetIndexOutOfBounds => continue,
                     error.ValidatorDataMemoryReferenceInvalid => continue,
                     error.ValidatorUnknownMemory => continue,
                     error.ValidatorMemoryMinGreaterThanMax => continue,
                     error.ValidatorMemoryMinTooLarge => continue,
                     error.ValidatorMemoryMaxTooLarge => continue,
+                    error.ValidatorSelect => continue,
+                    error.ValidateBrInvalidLabel => continue,
                     error.ValidateBrIfInvalidLabel => continue,
                     error.ValidateBrTableInvalidLabel => continue,
-                    error.ValidatorSelect => continue,
+                    error.ValidateBrTableInvalidLabelWrongArity => continue,
+                    error.ValidateBrTableInvalidLabelN => continue,
+                    error.ValidatorCallInvalidFunctionIndex => continue,
+                    error.ValidatorCallIndirectNoTable => continue,
+                    error.ValidatorCallIndirectInvalidTypeIndex => continue,
                     else => {
                         std.debug.warn("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

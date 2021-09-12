@@ -302,6 +302,7 @@ pub const ParseIterator = struct {
             .@"return" => rt_instr = Instruction.@"return",
             .call => {
                 const function_index = try readULEB128Mem(u32, &self.code);
+                if (function_index >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
                 const function = self.module.functions.list.items[@intCast(usize, function_index)];
                 const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
 
@@ -312,6 +313,9 @@ pub const ParseIterator = struct {
             .call_indirect => {
                 const type_index = try readULEB128Mem(u32, &self.code);
                 const table_reserved = try readByte(&self.code);
+
+                if (type_index >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
+                if (self.module.tables.list.items.len != 1) return error.ValidatorCallIndirectNoTable;
 
                 const function_type = self.module.types.list.items[@intCast(usize, type_index)];
                 try self.validator.validateCallIndirect(function_type);
