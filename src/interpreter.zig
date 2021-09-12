@@ -1498,6 +1498,7 @@ pub const Interpreter = struct {
                     try self.pushOperand(i64, @truncate(i32, c1));
                     continue;
                 },
+                // TODO: do this statically
                 .trunc_sat => |trunc_type| {
                     switch (trunc_type) {
                         0 => {

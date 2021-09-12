@@ -111,6 +111,28 @@ pub const Validator = struct {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
+    pub fn validateTrunc(v: *Validator, trunc_type: u32) !void {
+        switch (trunc_type) {
+            0, 1 => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            2, 3 => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            4, 5 => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
+                try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            6, 7 => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
+                try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            else => return error.UnknownTruncType,
+        }
+    }
+
     pub fn validate(v: *Validator, opcode: Opcode) !void {
         std.log.info("validate {}\n", .{opcode});
         switch (opcode) {

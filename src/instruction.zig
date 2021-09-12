@@ -878,6 +878,8 @@ pub const ParseIterator = struct {
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .trunc_sat => {
                 const version = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateTrunc(version);
+
                 rt_instr = Instruction{ .trunc_sat = version };
             },
         }
@@ -898,6 +900,7 @@ pub const ParseIterator = struct {
             .@"local.get",
             .@"local.set",
             .@"local.tee",
+            .trunc_sat,
             => {},
             else => try self.validator.validate(instr),
         }
