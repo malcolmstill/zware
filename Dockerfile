@@ -1,4 +1,4 @@
-FROM ubuntu:20.10 AS base
+FROM ubuntu:21.04 AS base
 
 WORKDIR /base
 
@@ -17,7 +17,7 @@ RUN ./zig/zig build --build-file test/build.zig --prefix ./
 
 RUN rm zig-linux-x86_64-0.8.0.tar.xz
 
-FROM ubuntu:20.10 AS runner
+FROM ubuntu:21.04 AS runner
 WORKDIR /base
 
 RUN apt-get update
