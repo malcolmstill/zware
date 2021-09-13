@@ -10,6 +10,8 @@ function cleanup {
 
 trap cleanup EXIT
 
+wast2json --version
+
 wast2json test/testsuite/address.wast
 bin/testrunner address.json
 
