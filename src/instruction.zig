@@ -3,6 +3,10 @@ const leb = std.leb;
 const Module = @import("module.zig").Module;
 const Instruction = @import("function.zig").Instruction;
 const Range = @import("common.zig").Range;
+const Validator = @import("validator.zig").Validator;
+const ValueType = @import("common.zig").ValueType;
+const LocalType = @import("common.zig").LocalType;
+const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 pub const OpcodeIterator = struct {
     function: []const u8,
@@ -95,11 +99,20 @@ pub const OpcodeIterator = struct {
     }
 };
 
+const EMPTY = [0]ValueType{} ** 0;
+const I32_OUT = [1]ValueType{.I32} ** 1;
+const I64_OUT = [1]ValueType{.I64} ** 1;
+const F32_OUT = [1]ValueType{.F32} ** 1;
+const F64_OUT = [1]ValueType{.F64} ** 1;
+
 pub const ParseIterator = struct {
     function: []const u8,
     code: []const u8,
     parsed: []Instruction,
     module: *Module,
+    validator: Validator,
+    params: ?[]const ValueType,
+    locals: ?[]LocalType,
 
     pub fn init(module: *Module, function: []const u8) ParseIterator {
         return ParseIterator{
@@ -107,7 +120,28 @@ pub const ParseIterator = struct {
             .function = function,
             .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
             .module = module,
+            .params = null,
+            .locals = null,
+            // TODO: what type of allocator is this?
+            // we want to free this every function parse, so we
+            // want a general purpose allocator, not an arena allocator
+            .validator = Validator.init(module.alloc),
         };
+    }
+
+    // pushFunction initiliase the validator for the current function
+    pub fn pushFunction(self: *ParseIterator, locals: []LocalType, func_index: usize) !void {
+        const function = self.module.functions.list.items[@intCast(usize, func_index)];
+        const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+
+        self.params = function_type.params;
+        self.locals = locals;
+
+        try self.validator.pushControlFrame(
+            .nop, // block?
+            function_type.params[0..0],
+            function_type.results,
+        );
     }
 
     pub fn next(self: *ParseIterator) !?Instruction {
@@ -129,10 +163,23 @@ pub const ParseIterator = struct {
 
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
+
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateBlock(func_type.params, func_type.results);
+                } else {
+                    if (block_type == -0x40) {
+                        try self.validator.validateBlock(EMPTY[0..], EMPTY[0..]);
+                    } else {
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateBlock(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateBlock(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateBlock(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateBlock(EMPTY[0..], F64_OUT[0..]),
+                        }
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -152,6 +199,18 @@ pub const ParseIterator = struct {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateLoop(func_type.params, func_type.results);
+                } else {
+                    if (block_type == -0x40) {
+                        try self.validator.validateLoop(EMPTY[0..], EMPTY[0..]);
+                    } else {
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateLoop(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateLoop(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateLoop(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateLoop(EMPTY[0..], F64_OUT[0..]),
+                        }
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -165,12 +224,29 @@ pub const ParseIterator = struct {
             .@"if" => {
                 const block_type = try readILEB128Mem(i32, &self.code);
 
+                // 1. First assume the number of block params is 0
+                // 2. The number of return values is 0 if block_type == -0x40
+                //    otherwise assume temporarily that 1 value is returned
+                // 3. If block_type >= 0 then we reference a function type,
+                //    so look it up and update the params / returns count to match
                 var block_params: usize = 0;
                 var block_returns: usize = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
                     block_params = func_type.params.len;
                     block_returns = func_type.results.len;
+                    try self.validator.validateIf(func_type.params, func_type.results);
+                } else {
+                    if (block_type == -0x40) {
+                        try self.validator.validateIf(EMPTY[0..], EMPTY[0..]);
+                    } else {
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateIf(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateIf(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateIf(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateIf(EMPTY[0..], F64_OUT[0..]),
+                        }
+                    }
                 }
 
                 rt_instr = Instruction{
@@ -185,12 +261,14 @@ pub const ParseIterator = struct {
             .@"else" => rt_instr = Instruction.@"else",
             .end => rt_instr = Instruction.end,
             .br => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .br = immediate_u32 };
+                const label = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateBr(label);
+                rt_instr = Instruction{ .br = label };
             },
             .br_if => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .br_if = immediate_u32 };
+                const label = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateBrIf(label);
+                rt_instr = Instruction{ .br_if = label };
             },
             .br_table => {
                 const label_start = self.module.br_table_indices.items.len;
@@ -202,6 +280,9 @@ pub const ParseIterator = struct {
                     try self.module.br_table_indices.append(tmp_label);
                 }
                 const ln = try readULEB128Mem(u32, &self.code);
+                const l_star = self.module.br_table_indices.items[label_start .. label_start + j];
+
+                try self.validator.validateBrTable(l_star, ln);
 
                 rt_instr = Instruction{
                     .br_table = .{
@@ -213,11 +294,23 @@ pub const ParseIterator = struct {
             .@"return" => rt_instr = Instruction.@"return",
             .call => {
                 const function_index = try readULEB128Mem(u32, &self.code);
+                if (function_index >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
+                const function = self.module.functions.list.items[@intCast(usize, function_index)];
+                const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+
+                try self.validator.validateCall(function_type);
+
                 rt_instr = Instruction{ .call = function_index };
             },
             .call_indirect => {
                 const type_index = try readULEB128Mem(u32, &self.code);
                 const table_reserved = try readByte(&self.code);
+
+                if (type_index >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
+                if (self.module.tables.list.items.len != 1) return error.ValidatorCallIndirectNoTable;
+
+                const function_type = self.module.types.list.items[@intCast(usize, type_index)];
+                try self.validator.validateCallIndirect(function_type);
 
                 if (table_reserved != 0) return error.MalformedCallIndirectReserved;
 
@@ -231,32 +324,118 @@ pub const ParseIterator = struct {
             .drop => rt_instr = Instruction.drop,
             .select => rt_instr = Instruction.select,
             .@"global.get" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"global.get" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                // TODO: add a getGlobal to module?
+                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
+                const global = self.module.globals.list.items[@intCast(usize, index)];
+                try self.validator.validateGlobalGet(global);
+
+                rt_instr = Instruction{ .@"global.get" = index };
             },
             .@"global.set" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"global.set" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const global = self.module.globals.list.items[@intCast(usize, index)];
+                try self.validator.validateGlobalSet(global);
+
+                rt_instr = Instruction{ .@"global.set" = index };
             },
             .@"local.get" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"local.get" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
+
+                if (index < params.len) {
+                    try self.validator.validateLocalGet(params[index]);
+                } else {
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalGet(ltype);
+                    } else {
+                        return error.LocalGetIndexOutOfBounds;
+                    }
+                }
+
+                rt_instr = Instruction{ .@"local.get" = index };
             },
             .@"local.set" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"local.set" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
+
+                if (index < params.len) {
+                    try self.validator.validateLocalSet(params[index]);
+                } else {
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalSet(ltype);
+                    } else {
+                        return error.LocalSetIndexOutOfBounds;
+                    }
+                }
+
+                rt_instr = Instruction{ .@"local.set" = index };
             },
             .@"local.tee" => {
-                const immediate_u32 = try readULEB128Mem(u32, &self.code);
-                rt_instr = Instruction{ .@"local.tee" = immediate_u32 };
+                const index = try readULEB128Mem(u32, &self.code);
+
+                const params = self.params orelse return error.ValidatorConstantExpressionRequired;
+                const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
+
+                if (index < params.len) {
+                    try self.validator.validateLocalTee(params[index]);
+                } else {
+                    const local_index = index - params.len;
+                    var local_type: ?ValueType = null;
+                    var count: usize = 0;
+                    for (locals) |l| {
+                        if (local_index < count + l.count) {
+                            local_type = l.value_type;
+                            break;
+                        }
+                        count += l.count;
+                    }
+
+                    if (local_type) |ltype| {
+                        try self.validator.validateLocalTee(ltype);
+                    } else {
+                        return error.LocalTeeIndexOutOfBounds;
+                    }
+                }
+
+                rt_instr = Instruction{ .@"local.tee" = index };
             },
             .@"memory.size" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
                 rt_instr = Instruction{ .@"memory.size" = memory_index };
             },
             .@"memory.grow" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memory_index = try readByte(&self.code);
                 if (memory_index != 0) return error.MalformedMemoryReserved;
 
@@ -279,8 +458,13 @@ pub const ParseIterator = struct {
                 rt_instr = Instruction{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load" = .{
                         .alignment = alignment,
@@ -289,8 +473,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load" = .{
                         .alignment = alignment,
@@ -299,8 +487,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f32.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f32.load" = .{
                         .alignment = alignment,
@@ -309,8 +501,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f64.load" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f64.load" = .{
                         .alignment = alignment,
@@ -319,8 +515,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load8_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load8_s" = .{
                         .alignment = alignment,
@@ -329,8 +529,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load8_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load8_u" = .{
                         .alignment = alignment,
@@ -339,8 +543,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load16_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load16_s" = .{
                         .alignment = alignment,
@@ -349,8 +557,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.load16_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.load16_u" = .{
                         .alignment = alignment,
@@ -359,8 +571,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load8_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load8_s" = .{
                         .alignment = alignment,
@@ -369,8 +585,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load8_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load8_u" = .{
                         .alignment = alignment,
@@ -379,8 +599,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load16_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load16_s" = .{
                         .alignment = alignment,
@@ -389,8 +613,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load16_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load16_u" = .{
                         .alignment = alignment,
@@ -399,8 +627,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load32_s" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load32_s" = .{
                         .alignment = alignment,
@@ -409,8 +641,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.load32_u" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.load32_u" = .{
                         .alignment = alignment,
@@ -419,8 +655,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store" = .{
                         .alignment = alignment,
@@ -429,8 +669,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store" = .{
                         .alignment = alignment,
@@ -439,8 +683,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f32.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f32.store" = .{
                         .alignment = alignment,
@@ -449,8 +697,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"f64.store" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"f64.store" = .{
                         .alignment = alignment,
@@ -459,8 +711,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store8" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store8" = .{
                         .alignment = alignment,
@@ -469,8 +725,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i32.store16" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i32.store16" = .{
                         .alignment = alignment,
@@ -479,8 +739,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store8" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store8" = .{
                         .alignment = alignment,
@@ -489,8 +753,12 @@ pub const ParseIterator = struct {
                 };
             },
             .@"i64.store16" => {
+                if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store16" = .{
                         .alignment = alignment,
@@ -501,6 +769,9 @@ pub const ParseIterator = struct {
             .@"i64.store32" => {
                 const alignment = try readULEB128Mem(u32, &self.code);
                 const offset = try readULEB128Mem(u32, &self.code);
+
+                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+
                 rt_instr = Instruction{
                     .@"i64.store32" = .{
                         .alignment = alignment,
@@ -638,8 +909,31 @@ pub const ParseIterator = struct {
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .trunc_sat => {
                 const version = try readULEB128Mem(u32, &self.code);
+                try self.validator.validateTrunc(version);
+
                 rt_instr = Instruction{ .trunc_sat = version };
             },
+        }
+
+        // Validate the instruction. Some instructions, e.g. block, loop
+        // are validate separately above.
+        switch (instr) {
+            .block,
+            .loop,
+            .@"if",
+            .br,
+            .br_if,
+            .br_table,
+            .call,
+            .call_indirect,
+            .@"global.get",
+            .@"global.set",
+            .@"local.get",
+            .@"local.set",
+            .@"local.tee",
+            .trunc_sat,
+            => {},
+            else => try self.validator.validate(instr),
         }
 
         return rt_instr;

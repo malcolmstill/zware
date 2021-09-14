@@ -40,6 +40,16 @@ pub const ValueType = enum(u8) {
     F64 = 0x7C,
 };
 
+pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
+    return switch (block_type) {
+        -0x01 => .I32,
+        -0x02 => .I64,
+        -0x03 => .F32,
+        -0x04 => .F64,
+        else => error.UnexpectedBlockType,
+    };
+}
+
 pub fn toValueType(comptime t: type) ValueType {
     return switch (t) {
         i32 => .I32,
@@ -100,4 +110,9 @@ pub const Tag = enum(u8) {
 pub const Range = struct {
     offset: usize = 0,
     count: usize = 0,
+};
+
+pub const LocalType = struct {
+    count: u32,
+    value_type: ValueType,
 };

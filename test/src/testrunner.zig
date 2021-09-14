@@ -243,6 +243,10 @@ pub fn main() anyerror!void {
                 std.debug.warn("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
+                errdefer {
+                    std.debug.warn("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
+                }
+
                 // 4. Initialise our module
                 module = Module.init(&arena.allocator, program);
                 try module.decode();
@@ -480,6 +484,65 @@ pub fn main() anyerror!void {
 
                 return error.ExpectedTrapDidntOccur;
             },
+            .assert_invalid => {
+                wasm_filename = command.assert_invalid.filename;
+                std.debug.warn("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
+
+                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                module = Module.init(&arena.allocator, program);
+
+                errdefer {
+                    std.debug.warn("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
+                }
+
+                if (module.decode()) |x| {
+                    return error.TestsuiteExpectedInvalid;
+                } else |err| switch (err) {
+                    error.InvalidAlignment => continue,
+                    error.ValidatorPopOperandError => continue,
+                    error.MismatchedTypes => continue,
+                    error.ValidatorPopControlFrameControlStackEmpty => continue,
+                    error.ValidatorPopControlFrameMismatchedSizes => continue,
+                    error.ControlStackEmpty => continue,
+                    error.ValidatorAttemptToMutateImmutableGlobal => continue,
+                    error.ValidatorConstantExpressionRequired => continue,
+                    error.ValidatorUnknownGlobal => continue,
+                    error.ValidatorInvalidTypeIndex => continue,
+                    error.ValidatorMultipleTables => continue,
+                    error.ValidatorMultipleMemories => continue,
+                    error.LocalGetIndexOutOfBounds => continue,
+                    error.LocalSetIndexOutOfBounds => continue,
+                    error.ValidatorDataMemoryReferenceInvalid => continue,
+                    error.ValidatorUnknownMemory => continue,
+                    error.ValidatorMemoryMinGreaterThanMax => continue,
+                    error.ValidatorMemoryMinTooLarge => continue,
+                    error.ValidatorMemoryMaxTooLarge => continue,
+                    error.ValidatorSelect => continue,
+                    error.ValidateBrInvalidLabel => continue,
+                    error.ValidateBrIfInvalidLabel => continue,
+                    error.ValidateBrTableInvalidLabel => continue,
+                    error.ValidateBrTableInvalidLabelWrongArity => continue,
+                    error.ValidateBrTableInvalidLabelN => continue,
+                    error.ValidatorCallInvalidFunctionIndex => continue,
+                    error.ValidatorCallIndirectNoTable => continue,
+                    error.ValidatorCallIndirectInvalidTypeIndex => continue,
+                    error.ValidatorElemUnknownTable => continue,
+                    error.ValidatorTableMinGreaterThanMax => continue,
+                    error.ValidatorExportUnknownFunction => continue,
+                    error.ValidatorExportUnknownTable => continue,
+                    error.ValidatorExportUnknownMemory => continue,
+                    error.ValidatorExportUnknownGlobal => continue,
+                    error.ValidatorDuplicateExportName => continue,
+                    error.ValidatorStartFunctionUnknown => continue,
+                    error.ValidatorNotStartFunctionType => continue,
+                    error.ValidatorElemUnknownFunctionIndex => continue,
+                    error.ValidatorElseBranchExpected => continue,
+                    else => {
+                        std.debug.warn("Unexpected error: {}\n", .{err});
+                        return error.TestsuiteExpectedInvalidUnexpectedError;
+                    },
+                }
+            },
             .assert_malformed => {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
                 wasm_filename = command.assert_malformed.filename;
@@ -615,6 +678,7 @@ pub fn main() anyerror!void {
                         error.CodesCountMismatch => continue,
                         error.DatasCountMismatch => continue,
                         error.InvalidValue => continue,
+                        error.MalformedSectionMismatchedSize => continue,
                         else => {
                             std.debug.warn("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;

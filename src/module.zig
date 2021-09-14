@@ -23,6 +23,7 @@ const Element = common.Element;
 const Code = function.Code;
 const Segment = common.Segment;
 const Tag = common.Tag;
+const LocalType = common.LocalType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
@@ -47,7 +48,9 @@ pub const Module = struct {
     codes: Section(Code),
     datas: Section(Segment),
     parsed_code: ArrayList(Instruction),
+    local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
+    function_index_start: ?usize,
 
     pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
         return Module{
@@ -67,7 +70,9 @@ pub const Module = struct {
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
+            .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
+            .function_index_start = null,
         };
     }
 
@@ -134,6 +139,8 @@ pub const Module = struct {
             else => return err,
         };
 
+        const section_start = rd.context.pos;
+
         _ = switch (id) {
             .Custom => try self.decodeCustomSection(size),
             .Type => try self.decodeTypeSection(),
@@ -144,10 +151,13 @@ pub const Module = struct {
             .Global => try self.decodeGlobalSection(),
             .Export => try self.decodeExportSection(),
             .Start => try self.decodeStartSection(),
-            .Element => try self.decodeElementSection(size),
+            .Element => try self.decodeElementSection(),
             .Code => try self.decodeCodeSection(),
-            .Data => try self.decodeDataSection(size),
+            .Data => try self.decodeDataSection(),
         };
+
+        const section_end = rd.context.pos;
+        if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
 
         return id;
     }
@@ -313,6 +323,12 @@ pub const Module = struct {
             else => return err,
         };
 
+        if (type_index >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
+
+        if (import == null and self.function_index_start == null) {
+            self.function_index_start = self.functions.list.items.len;
+        }
+
         try self.functions.list.append(common.Function{
             .typeidx = type_index,
             .import = import,
@@ -337,6 +353,8 @@ pub const Module = struct {
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
+        if (self.tables.list.items.len > 0) return error.ValidatorMultipleTables;
+
         const rd = self.buf.reader();
 
         const tag = rd.readByte() catch |err| switch (err) {
@@ -374,6 +392,8 @@ pub const Module = struct {
                     else => return err,
                 };
 
+                if (min > max) return error.ValidatorTableMinGreaterThanMax;
+
                 try self.tables.list.append(Limit{
                     .min = min,
                     .max = max,
@@ -401,6 +421,7 @@ pub const Module = struct {
     }
 
     fn decodeMemory(self: *Module, import: ?u32) !void {
+        if (self.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
         const rd = self.buf.reader();
 
         const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
@@ -414,6 +435,8 @@ pub const Module = struct {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
 
                 try self.memories.list.append(Limit{
                     .min = min,
@@ -431,6 +454,10 @@ pub const Module = struct {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
+                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
+                if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
 
                 try self.memories.list.append(Limit{
                     .min = min,
@@ -490,7 +517,7 @@ pub const Module = struct {
             }
             code = self.module[offset .. offset + j + 1];
 
-            parsed_code = try self.parseCode(code orelse return error.NoCode);
+            parsed_code = try self.parseConstantCode(code orelse return error.NoCode, global_type);
         }
 
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
@@ -530,6 +557,10 @@ pub const Module = struct {
             const name = self.module[name_start .. name_start + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
+            for (self.exports.list.items) |exprt| {
+                if (mem.eql(u8, name, exprt.name)) return error.ValidatorDuplicateExportName;
+            }
+
             const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
@@ -539,6 +570,13 @@ pub const Module = struct {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
+
+            switch (tag) {
+                .Func => if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction,
+                .Table => if (index >= self.tables.list.items.len) return error.ValidatorExportUnknownTable,
+                .Mem => if (index >= self.memories.list.items.len) return error.ValidatorExportUnknownMemory,
+                .Global => if (index >= self.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
+            }
 
             try self.exports.list.append(Export{
                 .name = name,
@@ -559,12 +597,17 @@ pub const Module = struct {
             else => return err,
         };
 
+        if (index >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
+        const func = self.functions.list.items[index];
+        const function_type = self.types.list.items[func.typeidx];
+        if (function_type.params.len != 0 or function_type.results.len != 0) return error.ValidatorNotStartFunctionType;
+
         self.start = index;
 
         return 1;
     }
 
-    fn decodeElementSection(self: *Module, size: u32) !usize {
+    fn decodeElementSection(self: *Module) !usize {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -579,6 +622,8 @@ pub const Module = struct {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
+
+            if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
@@ -600,13 +645,15 @@ pub const Module = struct {
             while (j < data_length) : (j += 1) {
                 // When we pre-process all this data we can just store this
                 // but for the moment we're just using it to skip over
-                _ = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
+                if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
             }
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
             try self.elements.list.append(Segment{
                 .index = table_index,
@@ -628,6 +675,8 @@ pub const Module = struct {
         };
         self.codes.count = count;
 
+        const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
+
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -642,7 +691,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const locals_start = rd.context.pos;
+            const locals_start = self.local_types.items.len;
 
             // Iterate over local definitions counting them
             var j: usize = 0;
@@ -653,11 +702,14 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                const local_type = rd.readByte() catch |err| switch (err) {
+                const local_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
+
                 locals_count += type_count;
+
+                try self.local_types.append(.{ .count = type_count, .value_type = local_type });
             }
             if (locals_count > 0x100000000) return error.TooManyLocals;
 
@@ -669,13 +721,14 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const locals = self.module[locals_start..code_start];
+            const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
             const code = self.module[code_start..rd.context.pos];
 
-            const parsed_code = try self.parseCode(code);
+            if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+            const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
 
             try self.codes.list.append(Code{
-                .locals = locals,
+                // .locals = locals,
                 .locals_count = locals_count,
                 .code = parsed_code,
             });
@@ -684,7 +737,7 @@ pub const Module = struct {
         return count;
     }
 
-    fn decodeDataSection(self: *Module, size: u32) !usize {
+    fn decodeDataSection(self: *Module) !usize {
         const rd = self.buf.reader();
         var section_offset = rd.context.pos;
 
@@ -700,6 +753,8 @@ pub const Module = struct {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
+
+            if (mem_idx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
@@ -721,7 +776,7 @@ pub const Module = struct {
                 else => return err,
             };
 
-            const parsed_code = try self.parseCode(self.module[expr_start .. expr_start + meta.offset + 1]);
+            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
             try self.datas.list.append(Segment{
                 .index = mem_idx,
@@ -770,11 +825,54 @@ pub const Module = struct {
         return 1;
     }
 
-    pub fn parseCode(self: *Module, code: []const u8) !common.Range {
+    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
         _ = try instruction.findFunctionEnd(code);
 
         var it = ParseIterator.init(self, code);
         const code_start = self.parsed_code.items.len;
+
+        const in: [0]ValueType = [_]ValueType{} ** 0;
+        var out: [1]ValueType = [_]ValueType{.I32} ** 1;
+        out[0] = value_type;
+        try it.validator.pushControlFrame(
+            .block,
+            in[0..0],
+            out[0..1],
+        );
+
+        // 1. Make a first pass allocating all of our Instructions
+        while (try it.next()) |instr| {
+            switch (instr) {
+                .@"i32.const" => |_| {},
+                .@"i64.const" => |_| {},
+                .@"f32.const" => |_| {},
+                .@"f64.const" => |_| {},
+                .@"global.get" => |_| {},
+                .end => |_| {},
+                else => return error.ValidatorConstantExpressionRequired,
+            }
+            try self.parsed_code.append(instr);
+        }
+
+        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
+
+        // 2. Make a second pass where we fix up the continuations for
+        //    blocks, loops and ifs
+        try function.calculateContinuations(code_start, parsed_code);
+
+        return common.Range{
+            .offset = code_start,
+            .count = self.parsed_code.items.len - code_start,
+        };
+    }
+
+    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !common.Range {
+        _ = try instruction.findFunctionEnd(code);
+
+        var it = ParseIterator.init(self, code);
+        const code_start = self.parsed_code.items.len;
+
+        try it.pushFunction(locals, func_index);
 
         // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
