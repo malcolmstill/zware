@@ -310,6 +310,8 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
                 const end_offset = try findEnd(code[offset..]);
                 const optional_else_offset = try findElse(code[offset..]);
 
+                if (optional_else_offset == null and if_instr.param_arity -% if_instr.return_arity != 0) return error.ValidatorElseBranchExpected;
+
                 const continuation = code[offset + end_offset + 1 ..];
                 if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
                 if (optional_else_offset) |else_offset| {
@@ -363,7 +365,7 @@ pub fn findElse(code: []Instruction) !?usize {
         }
 
         switch (opcode) {
-            .block, .@"if" => i += 1,
+            .block, .loop, .@"if" => i += 1,
             .@"else" => {
                 if (i < 2) i -= 1;
             },
