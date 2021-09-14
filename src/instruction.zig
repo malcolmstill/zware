@@ -99,6 +99,12 @@ pub const OpcodeIterator = struct {
     }
 };
 
+const EMPTY = [0]ValueType{} ** 0;
+const I32_OUT = [1]ValueType{.I32} ** 1;
+const I64_OUT = [1]ValueType{.I64} ** 1;
+const F32_OUT = [1]ValueType{.F32} ** 1;
+const F64_OUT = [1]ValueType{.F64} ** 1;
+
 pub const ParseIterator = struct {
     function: []const u8,
     code: []const u8,
@@ -164,18 +170,15 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                     try self.validator.validateBlock(func_type.params, func_type.results);
                 } else {
-                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
                     if (block_type == -0x40) {
-                        var out_types = [0]ValueType{} ** 0;
-                        try self.validator.validateBlock(in_types[0..], out_types[0..]);
+                        try self.validator.validateBlock(EMPTY[0..], EMPTY[0..]);
                     } else {
-                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
-                            .I32 => [1]ValueType{.I32} ** 1,
-                            .I64 => [1]ValueType{.I64} ** 1,
-                            .F32 => [1]ValueType{.F32} ** 1,
-                            .F64 => [1]ValueType{.F64} ** 1,
-                        };
-                        try self.validator.validateBlock(in_types[0..], out_types[0..]);
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateBlock(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateBlock(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateBlock(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateBlock(EMPTY[0..], F64_OUT[0..]),
+                        }
                     }
                 }
 
@@ -198,18 +201,15 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                     try self.validator.validateLoop(func_type.params, func_type.results);
                 } else {
-                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
                     if (block_type == -0x40) {
-                        var out_types = [0]ValueType{} ** 0;
-                        try self.validator.validateLoop(in_types[0..], out_types[0..]);
+                        try self.validator.validateLoop(EMPTY[0..], EMPTY[0..]);
                     } else {
-                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
-                            .I32 => [1]ValueType{.I32} ** 1,
-                            .I64 => [1]ValueType{.I64} ** 1,
-                            .F32 => [1]ValueType{.F32} ** 1,
-                            .F64 => [1]ValueType{.F64} ** 1,
-                        };
-                        try self.validator.validateLoop(in_types[0..], out_types[0..]);
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateLoop(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateLoop(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateLoop(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateLoop(EMPTY[0..], F64_OUT[0..]),
+                        }
                     }
                 }
 
@@ -237,18 +237,15 @@ pub const ParseIterator = struct {
                     block_returns = func_type.results.len;
                     try self.validator.validateIf(func_type.params, func_type.results);
                 } else {
-                    var in_types: [0]ValueType = [_]ValueType{} ** 0;
                     if (block_type == -0x40) {
-                        var out_types = [0]ValueType{} ** 0;
-                        try self.validator.validateIf(in_types[0..], out_types[0..]);
+                        try self.validator.validateIf(EMPTY[0..], EMPTY[0..]);
                     } else {
-                        var out_types = switch (try valueTypeFromBlockType(block_type)) {
-                            .I32 => [1]ValueType{.I32} ** 1,
-                            .I64 => [1]ValueType{.I64} ** 1,
-                            .F32 => [1]ValueType{.F32} ** 1,
-                            .F64 => [1]ValueType{.F64} ** 1,
-                        };
-                        try self.validator.validateIf(in_types[0..], out_types[0..]);
+                        switch (try valueTypeFromBlockType(block_type)) {
+                            .I32 => try self.validator.validateIf(EMPTY[0..], I32_OUT[0..]),
+                            .I64 => try self.validator.validateIf(EMPTY[0..], I64_OUT[0..]),
+                            .F32 => try self.validator.validateIf(EMPTY[0..], F32_OUT[0..]),
+                            .F64 => try self.validator.validateIf(EMPTY[0..], F64_OUT[0..]),
+                        }
                     }
                 }
 

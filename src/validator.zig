@@ -151,6 +151,7 @@ pub const Validator = struct {
             .trunc_sat,
             => {
                 // These instructions are handle separately
+                unreachable;
             },
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
