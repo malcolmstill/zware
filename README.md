@@ -76,7 +76,7 @@ pub fn main() !void {
 ## Status
 
 - The project is very much alpha quality
-- The majority of the WebAssembly MVP spec testsuite passes (and is integrated into the CI) with a few exceptions and the type-checking validator code is not complete and so the `assert_invalid` tests are not included yet. See [#13](https://github.com/malcolmstill/foxwren/issues/13) and [#82](https://github.com/malcolmstill/foxwren/issues/82).
+- The majority of the WebAssembly MVP spec testsuite passes (and is integrated into the CI) with an exception around `binary-leb128.wast` tests (see https://github.com/malcolmstill/foxwren/issues/102)
 - Currently, only the MVP spec is implemented without any extensions other than multiple-return values.
 
 ## Running the testsuite
