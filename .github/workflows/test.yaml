@@ -36,7 +36,7 @@ jobs:
         with:
           name: testrunner-${{ env.runId }}
       - run: chmod u+x ./testrunner
-      - run: cd test/testsuite-generated
+      - run: cp test/testsuite-generated/* ./
       - run: ./testrunner address.json
   # testsuite:
   #   runs-on: ubuntu-latest
