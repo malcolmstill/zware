@@ -1,7 +1,5 @@
 name: foxwren tests
 on: push
-env:
-  runId: ${GITHUB_RUN_ID}
 jobs:
   source-code-tests:
     strategy:
@@ -14,7 +12,7 @@ jobs:
         with:
           version: 0.8.0
       - run: zig build test
-  build-testrunner:
+  testsuite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
@@ -23,19 +21,6 @@ jobs:
           version: 0.8.0
       - run: zig build --build-file test/build.zig --prefix ./
       - run: cp bin/testrunner testrunner
-      - uses: actions/upload-artifact@master
-        with:
-          name: testrunner-${{ env.runId }}
-          path: testrunner
-  testsuite:
-    needs: build-testrunner
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: actions/download-artifact@v2
-        with:
-          name: testrunner-${{ env.runId }}
-      - run: chmod u+x ./testrunner
       - run: cp test/testsuite-generated/* ./
       - run: ./testrunner address.json
       - run: ./testrunner align.json
