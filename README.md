@@ -81,16 +81,14 @@ pub fn main() !void {
 
 ## Running the testsuite
 
-The testsuite requires a relatively recent version of `wabt` (specifically the `wast2json` tool). A `Dockerfile` is provided to avoid manually installing the dependency:
-
-1. Build
+1. Build the test runner
 
 ```
-docker build -t foxwren-test .
+zig build --build-file test/build.zig --prefix ./
 ```
 
 2. Run
 
 ```
-docker run foxwren-test
+sh test/run-generated.sh
 ```
