@@ -22,10 +22,11 @@ jobs:
         with:
           version: 0.8.0
       - run: zig build --build-file test/build.zig --prefix ./
+      - run: cp bin/testrunner testrunner
       - uses: actions/upload-artifact@master
         with:
           name: testrunner-${{ env.runId }}
-          path: bin/testrunner
+          path: testrunner
   test-address:
     needs: build-testrunner
     runs-on: ubuntu-latest
@@ -33,7 +34,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: testrunner-${{ env.runId }}
-      - run: bin/testrunner test/testsuite-generated/address.json
+      - run: testrunner test/testsuite-generated/address.json
   # testsuite:
   #   runs-on: ubuntu-latest
   #   steps:
