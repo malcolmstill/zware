@@ -12,6 +12,19 @@ jobs:
         with:
           version: 0.8.0
       - run: zig build test
+  build-testrunner:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: 0.8.0
+      - run: zig build --build-file test/build.zig --prefix ./
+  test-address:
+    needs: build-testrunner
+    runs-on: ubuntu-latest
+    steps:
+      - run: bin/testrunner test/testsuite-generated/address.json
   testsuite:
     runs-on: ubuntu-latest
     steps:
