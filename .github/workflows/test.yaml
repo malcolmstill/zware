@@ -34,7 +34,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: testrunner-${{ env.runId }}
-      - run: testrunner test/testsuite-generated/address.json
+      - run: ./testrunner test/testsuite-generated/address.json
   # testsuite:
   #   runs-on: ubuntu-latest
   #   steps:
