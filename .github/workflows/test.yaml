@@ -3,7 +3,7 @@ on: push
 env:
   runId: ${GITHUB_RUN_ID}
 jobs:
-  test:
+  source-code-tests:
     strategy:
       matrix:
         os: [ubuntu-latest]
@@ -67,7 +67,7 @@ jobs:
       - run: ./testrunner float_memory.json
       - run: ./testrunner float_misc.json
       - run: ./testrunner forward.json
-      - run: ./testrunner func_prts.json
+      - run: ./testrunner func_ptrs.json
       - run: ./testrunner func.json
       - run: ./testrunner global.json
       - run: ./testrunner i32.json
