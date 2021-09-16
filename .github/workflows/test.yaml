@@ -34,37 +34,37 @@ jobs:
         with:
           name: testrunner-${{ env.runId }}
       - run: bin/testrunner test/testsuite-generated/address.json
-  testsuite:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - name: Set up Docker Buildx
-        id: buildx
-        uses: docker/setup-buildx-action@master
-      - name: Cache Docker layers
-        uses: actions/cache@v2
-        with:
-          path: /tmp/.buildx-cache
-          key: ${{ runner.os }}-single-buildx-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-single-buildx
-      - name: Build test image
-        uses: docker/build-push-action@v2
-        with:
-          context: .
-          builder: ${{ steps.buildx.outputs.name }}
-          file: Dockerfile
-          load: true
-          push: false
-          tags: foxwren-test
-          cache-from: type=local,src=/tmp/.buildx-cache
-          cache-to: type=local,dest=/tmp/.buildx-cache-new
-      - name: Run tests
-        run: docker run foxwren-test
-      - name: Move cache
-        run: |
-          rm -rf /tmp/.buildx-cache
-          mv /tmp/.buildx-cache-new /tmp/.buildx-cache        
+  # testsuite:
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - name: Set up Docker Buildx
+  #       id: buildx
+  #       uses: docker/setup-buildx-action@master
+  #     - name: Cache Docker layers
+  #       uses: actions/cache@v2
+  #       with:
+  #         path: /tmp/.buildx-cache
+  #         key: ${{ runner.os }}-single-buildx-${{ github.sha }}
+  #         restore-keys: |
+  #           ${{ runner.os }}-single-buildx
+  #     - name: Build test image
+  #       uses: docker/build-push-action@v2
+  #       with:
+  #         context: .
+  #         builder: ${{ steps.buildx.outputs.name }}
+  #         file: Dockerfile
+  #         load: true
+  #         push: false
+  #         tags: foxwren-test
+  #         cache-from: type=local,src=/tmp/.buildx-cache
+  #         cache-to: type=local,dest=/tmp/.buildx-cache-new
+  #     - name: Run tests
+  #       run: docker run foxwren-test
+  #     - name: Move cache
+  #       run: |
+  #         rm -rf /tmp/.buildx-cache
+  #         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
   lint:
     runs-on: ubuntu-latest
     steps:
