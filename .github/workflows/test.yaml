@@ -27,7 +27,7 @@ jobs:
         with:
           name: testrunner-${{ env.runId }}
           path: testrunner
-  test-address:
+  testsuite:
     needs: build-testrunner
     runs-on: ubuntu-latest
     steps:
@@ -38,37 +38,78 @@ jobs:
       - run: chmod u+x ./testrunner
       - run: cp test/testsuite-generated/* ./
       - run: ./testrunner address.json
-  # testsuite:
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - uses: actions/checkout@v2
-  #     - name: Set up Docker Buildx
-  #       id: buildx
-  #       uses: docker/setup-buildx-action@master
-  #     - name: Cache Docker layers
-  #       uses: actions/cache@v2
-  #       with:
-  #         path: /tmp/.buildx-cache
-  #         key: ${{ runner.os }}-single-buildx-${{ github.sha }}
-  #         restore-keys: |
-  #           ${{ runner.os }}-single-buildx
-  #     - name: Build test image
-  #       uses: docker/build-push-action@v2
-  #       with:
-  #         context: .
-  #         builder: ${{ steps.buildx.outputs.name }}
-  #         file: Dockerfile
-  #         load: true
-  #         push: false
-  #         tags: foxwren-test
-  #         cache-from: type=local,src=/tmp/.buildx-cache
-  #         cache-to: type=local,dest=/tmp/.buildx-cache-new
-  #     - name: Run tests
-  #       run: docker run foxwren-test
-  #     - name: Move cache
-  #       run: |
-  #         rm -rf /tmp/.buildx-cache
-  #         mv /tmp/.buildx-cache-new /tmp/.buildx-cache
+      - run: ./testrunner align.json
+      # - run: ./testrunner binary-leb128.json
+      - run: ./testrunner binary.json
+      - run: ./testrunner block.json
+      - run: ./testrunner br_if.json
+      - run: ./testrunner br.json
+      - run: ./testrunner br_table.json
+      - run: ./testrunner call_indirect.json
+      - run: ./testrunner call.json
+      - run: ./testrunner comments.json
+      - run: ./testrunner const.json
+      - run: ./testrunner conversions.json
+      - run: ./testrunner custom.json
+      - run: ./testrunner data.json
+      - run: ./testrunner elem.json
+      - run: ./testrunner endianness.json
+      - run: ./testrunner exports.json
+      - run: ./testrunner f32_bitwise.json
+      - run: ./testrunner f32_cmp.json
+      - run: ./testrunner f32.json
+      - run: ./testrunner f64_bitwise.json
+      - run: ./testrunner f64_cmp.json
+      - run: ./testrunner f64.json
+      - run: ./testrunner fac.json
+      - run: ./testrunner float_exprs.json
+      - run: ./testrunner float_literals.json
+      - run: ./testrunner float_memory.json
+      - run: ./testrunner float_misc.json
+      - run: ./testrunner forward.json
+      - run: ./testrunner func_prts.json
+      - run: ./testrunner func.json
+      - run: ./testrunner global.json
+      - run: ./testrunner i32.json
+      - run: ./testrunner i64.json
+      - run: ./testrunner if.json
+      - run: ./testrunner imports.json
+      - run: ./testrunner inline-module.json
+      - run: ./testrunner int_exprs.json
+      - run: ./testrunner int_literals.json
+      - run: ./testrunner labels.json
+      - run: ./testrunner left-to-right.json
+      - run: ./testrunner linking.json
+      - run: ./testrunner load.json
+      - run: ./testrunner local_get.json
+      - run: ./testrunner local_set.json
+      - run: ./testrunner local_tee.json
+      - run: ./testrunner loop.json
+      - run: ./testrunner memory_grow.json
+      - run: ./testrunner memory_redundancy.json
+      - run: ./testrunner memory_size.json
+      - run: ./testrunner memory_trap.json
+      - run: ./testrunner memory.json
+      - run: ./testrunner names.json
+      - run: ./testrunner nop.json
+      - run: ./testrunner return.json
+      - run: ./testrunner select.json
+      - run: ./testrunner skip-stack-guard-page.json
+      - run: ./testrunner stack.json
+      - run: ./testrunner start.json
+      - run: ./testrunner store.json
+      - run: ./testrunner switch.json
+      - run: ./testrunner table.json
+      - run: ./testrunner token.json
+      - run: ./testrunner traps.json
+      - run: ./testrunner type.json
+      - run: ./testrunner unreachable.json
+      - run: ./testrunner unreached-invalid.json
+      - run: ./testrunner unwind.json
+      - run: ./testrunner utf8-custom-section-id.json
+      - run: ./testrunner utf8-import-field.json
+      - run: ./testrunner utf8-import-module.json
+      - run: ./testrunner utf8-invalid-encoding.json
   lint:
     runs-on: ubuntu-latest
     steps:
