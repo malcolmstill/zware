@@ -36,7 +36,8 @@ jobs:
         with:
           name: testrunner-${{ env.runId }}
       - run: chmod u+x ./testrunner
-      - run: ./testrunner test/testsuite-generated/address.json
+      - run: cd test/testsuite-generated
+      - run: ./testrunner address.json
   # testsuite:
   #   runs-on: ubuntu-latest
   #   steps:
