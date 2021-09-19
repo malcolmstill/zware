@@ -988,6 +988,18 @@ pub fn readULEB128Mem(comptime T: type, ptr: *[]const u8) !T {
 pub fn readILEB128Mem(comptime T: type, ptr: *[]const u8) !T {
     var buf = std.io.fixedBufferStream(ptr.*);
     const value = try leb.readILEB128(T, buf.reader());
+
+    // The following is a bit of a kludge that should really
+    // be fixed in either the std lib readILEB128 or using a
+    // a fresh implementation. The issue is that the wasm spec
+    // expects the "unused" bits in a negative ILEB128 to all be
+    // one and the same bits in a positive ILEB128 to be zero.
+    switch (T) {
+        i32 => if (buf.pos == 5 and value < 0 and buf.buffer[4] & 0x70 != 0x70) return error.Overflow,
+        i64 => if (buf.pos == 10 and value < 0 and buf.buffer[9] & 0x7e != 0x7e) return error.Overflow,
+        else => @compileError("readILEB128Mem expects i32 or i64"),
+    }
+
     ptr.*.ptr += buf.pos;
     ptr.*.len -= buf.pos;
     return value;

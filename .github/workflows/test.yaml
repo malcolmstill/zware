@@ -24,7 +24,7 @@ jobs:
       - run: cp test/testsuite-generated/* ./
       - run: ./testrunner address.json
       - run: ./testrunner align.json
-      # - run: ./testrunner binary-leb128.json
+      - run: ./testrunner binary-leb128.json
       - run: ./testrunner binary.json
       - run: ./testrunner block.json
       - run: ./testrunner br_if.json
