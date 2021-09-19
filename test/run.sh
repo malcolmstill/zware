@@ -18,8 +18,8 @@ bin/testrunner address.json
 wast2json test/testsuite/align.wast
 bin/testrunner align.json
 
-# wast2json test/testsuite/binary-leb128.wast
-# bin/testrunner binary-leb128.json
+wast2json test/testsuite/binary-leb128.wast
+bin/testrunner binary-leb128.json
 
 wast2json test/testsuite/binary.wast
 bin/testrunner binary.json
