@@ -87,7 +87,7 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            var section = self.decodeSection() catch |err| {
+            _ = self.decodeSection() catch |err| {
                 switch (err) {
                     error.EndOfStream => {
                         break;
@@ -189,7 +189,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    const v = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -206,7 +206,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    const r = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -739,7 +739,6 @@ pub const Module = struct {
 
     fn decodeDataSection(self: *Module) !usize {
         const rd = self.buf.reader();
-        var section_offset = rd.context.pos;
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -899,7 +898,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn signaturesEqual(self: *Module, params: []const ValueType, results: []const ValueType, b: FuncType) bool {
+    pub fn signaturesEqual(params: []const ValueType, results: []const ValueType, b: FuncType) bool {
         if (params.len != b.params.len) return false;
         if (results.len != b.results.len) return false;
 

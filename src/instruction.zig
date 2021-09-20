@@ -51,7 +51,7 @@ pub const OpcodeIterator = struct {
                 const label_count = try readULEB128Mem(u32, &self.code);
                 var j: usize = 0;
                 while (j < label_count + 1) : (j += 1) {
-                    const tmp_label = try readULEB128Mem(u32, &self.code);
+                    _ = try readULEB128Mem(u32, &self.code);
                 }
             },
             .call_indirect => {
@@ -149,7 +149,6 @@ pub const ParseIterator = struct {
 
         // 1. Get the instruction we're going to return and increment code
         const instr = @intToEnum(Opcode, self.code[0]);
-        const instr_offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
         var rt_instr: Instruction = undefined;

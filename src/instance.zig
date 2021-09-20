@@ -53,7 +53,7 @@ pub const Instance = struct {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
         // 1. Initialise imports
-        for (self.module.imports.list.items) |import, i| {
+        for (self.module.imports.list.items) |import| {
             const import_handle = try self.store.import(import.module, import.name, import.desc_tag);
             switch (import.desc_tag) {
                 .Func => try self.funcaddrs.append(import_handle),
@@ -75,19 +75,19 @@ pub const Instance = struct {
         // For 2, we need to add the function to the store
         const imported_function_count = self.funcaddrs.items.len;
         for (self.module.functions.list.items) |function_def, i| {
-            if (function_def.import) |imported_function| {
+            if (function_def.import) |_| {
                 // Check that the function defintion (which this module expects)
                 // is the same as the function in the store
                 const func_type = self.module.types.list.items[function_def.typeidx];
                 const external_function = try self.getFunc(i);
                 switch (external_function) {
                     .function => |ef| {
-                        if (!self.module.signaturesEqual(ef.params, ef.results, func_type)) {
+                        if (!Module.signaturesEqual(ef.params, ef.results, func_type)) {
                             return error.ImportedFunctionTypeSignatureDoesNotMatch;
                         }
                     },
                     .host_function => |hef| {
-                        if (!self.module.signaturesEqual(hef.params, hef.results, func_type)) {
+                        if (!Module.signaturesEqual(hef.params, hef.results, func_type)) {
                             return error.ImportedFunctionTypeSignatureDoesNotMatch;
                         }
                     },
@@ -152,7 +152,7 @@ pub const Instance = struct {
         }
 
         // 4a. Check all data
-        for (self.module.datas.list.items) |data, i| {
+        for (self.module.datas.list.items) |data| {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
@@ -161,14 +161,14 @@ pub const Instance = struct {
         }
 
         // 4b. Check all elements
-        for (self.module.elements.list.items) |segment, i| {
+        for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
             const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
 
         // 5a. Mutate all data
-        for (self.module.datas.list.items) |data, i| {
+        for (self.module.datas.list.items) |data| {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
@@ -177,7 +177,7 @@ pub const Instance = struct {
         }
 
         // 5b. If all our elements were good, initialise them
-        for (self.module.elements.list.items) |segment, i| {
+        for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
             const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
 
@@ -251,7 +251,7 @@ pub const Instance = struct {
                 const locals_start = interp.op_stack.len;
 
                 // 7b. push params
-                for (in) |arg, i| {
+                for (in) |arg| {
                     try interp.pushOperand(u64, arg);
                 }
 
@@ -283,7 +283,7 @@ pub const Instance = struct {
                 try interp.invoke(f.code);
 
                 // 9.
-                for (out) |o, out_index| {
+                for (out) |_, out_index| {
                     out[out_index] = try interp.popOperand(u64);
                 }
             },

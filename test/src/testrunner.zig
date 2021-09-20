@@ -33,7 +33,7 @@ const ArrayList = std.ArrayList;
 
 var gpa = GeneralPurposeAllocator(.{}){};
 
-fn print(interp: *Interpreter) !void {
+fn print(_: *Interpreter) !void {
     std.debug.warn("print\n", .{});
 }
 
@@ -90,7 +90,6 @@ pub fn main() anyerror!void {
     var wasm_filename: []const u8 = undefined;
     var program: []const u8 = undefined;
     var module: Module = undefined;
-    var module_name: ?[]const u8 = null;
 
     // Initialise a store
     var store: Store = Store.init(&arena.allocator);
@@ -98,7 +97,7 @@ pub fn main() anyerror!void {
 
     // Init spectest memory
     const mem_handle = try store.addMemory(1, 2);
-    const memory = try store.memory(mem_handle);
+    _ = try store.memory(mem_handle);
 
     const spectest_memory_name = "memory";
     try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
@@ -327,8 +326,8 @@ pub fn main() anyerror!void {
                         if (action.get.module) |m| {
                             const registered_inst_offset = registered_names.get(m) orelse return error.NotRegistered;
                             const registered_inst = try store.instance(registered_inst_offset);
-                            var global_i: usize = 0;
-                            for (registered_inst.module.exports.list.items) |exprt, i| {
+
+                            for (registered_inst.module.exports.list.items) |exprt| {
                                 if (mem.eql(u8, exprt.name, field)) {
                                     const global = try registered_inst.getGlobal(exprt.index);
 
@@ -393,7 +392,7 @@ pub fn main() anyerror!void {
 
                         // Test the result
                         if (mem.eql(u8, trap, "integer divide by zero")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.DivisionByZero => continue,
@@ -402,7 +401,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "integer overflow")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.Overflow => continue,
@@ -411,7 +410,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.InvalidConversion => continue,
@@ -420,7 +419,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "out of bounds memory access")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.OutOfBoundsMemoryAccess => continue,
@@ -429,7 +428,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.IndirectCallTypeMismatch => continue,
@@ -438,7 +437,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.UndefinedElement => continue,
@@ -451,7 +450,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedTrap;
                             } else |err| switch (err) {
                                 error.UndefinedElement => continue,
@@ -465,7 +464,7 @@ pub fn main() anyerror!void {
                         }
 
                         if (mem.eql(u8, trap, "unreachable")) {
-                            if (instance.invoke(field, in, out, .{})) |x| {
+                            if (instance.invoke(field, in, out, .{})) |_| {
                                 return error.TestsuiteExpectedUnreachable;
                             } else |err| switch (err) {
                                 error.TrapUnreachable => continue,
@@ -495,7 +494,7 @@ pub fn main() anyerror!void {
                     std.debug.warn("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
                 }
 
-                if (module.decode()) |x| {
+                if (module.decode()) |_| {
                     return error.TestsuiteExpectedInvalid;
                 } else |err| switch (err) {
                     error.InvalidAlignment => continue,
@@ -557,7 +556,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "unexpected end") or mem.eql(u8, trap, "length out of bounds")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.TestsuiteExpectedUnexpectedEnd;
                     } else |err| switch (err) {
                         error.Overflow => continue,
@@ -575,7 +574,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "magic header not detected")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.MagicNumberNotFound => continue,
@@ -587,7 +586,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "unknown binary version")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.UnknownBinaryVersion => continue,
@@ -599,7 +598,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "malformed section id")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.UnknownSectionId => continue,
@@ -611,7 +610,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "integer representation too long")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
@@ -626,7 +625,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "zero flag expected")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.MalformedCallIndirectReserved => continue,
@@ -639,7 +638,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "too many locals")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.TooManyLocals => continue,
@@ -651,7 +650,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "function and code section have inconsistent lengths")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.FunctionCodeSectionsInconsistent => continue,
@@ -663,7 +662,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.UnexpectedEndOfInput => continue,
@@ -687,7 +686,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "malformed import kind")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
@@ -699,7 +698,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "integer too large")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.Overflow => continue,
@@ -713,7 +712,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "junk after last section")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.MultipleStartSections => continue,
@@ -725,7 +724,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "malformed mutability")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
@@ -737,7 +736,7 @@ pub fn main() anyerror!void {
                 }
 
                 if (mem.eql(u8, trap, "malformed UTF-8 encoding")) {
-                    if (module.decode()) |x| {
+                    if (module.decode()) |_| {
                         return error.ExpectedError;
                     } else |err| switch (err) {
                         error.NameNotUTF8 => continue,
@@ -793,7 +792,7 @@ pub fn main() anyerror!void {
                 const inst_index = try store.addInstance(new_inst);
                 inst = try store.instance(inst_index);
 
-                if (inst.instantiate(inst_index)) |x| {
+                if (inst.instantiate(inst_index)) |_| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
                     error.ImportedMemoryNotBigEnough => continue,
@@ -821,7 +820,7 @@ pub fn main() anyerror!void {
                 const inst_index = try store.addInstance(new_inst);
                 inst = try store.instance(inst_index);
 
-                if (inst.instantiate(inst_index)) |x| {
+                if (inst.instantiate(inst_index)) |_| {
                     return error.ExpectedUninstantiable;
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
@@ -837,7 +836,7 @@ pub fn main() anyerror!void {
                     const registered_inst_offset = registered_names.get(name) orelse return error.NotRegistered;
                     const registered_inst = try store.instance(registered_inst_offset);
 
-                    for (registered_inst.module.exports.list.items) |exprt, i| {
+                    for (registered_inst.module.exports.list.items) |exprt| {
                         switch (exprt.tag) {
                             .Table => {
                                 const handle = registered_inst.tableaddrs.items[exprt.index];
@@ -858,7 +857,7 @@ pub fn main() anyerror!void {
                         }
                     }
                 } else {
-                    for (inst.module.exports.list.items) |exprt, i| {
+                    for (inst.module.exports.list.items) |exprt| {
                         switch (exprt.tag) {
                             .Table => {
                                 const handle = inst.tableaddrs.items[exprt.index];
