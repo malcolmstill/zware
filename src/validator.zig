@@ -37,7 +37,7 @@ pub const Validator = struct {
     pub fn validateBr(v: *Validator, label: usize) !void {
         if (label >= v.ctrl_stack.items.len) return error.ValidateBrInvalidLabel;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
-        try v.popOperands(v.labelTypes(frame));
+        try v.popOperands(labelTypes(frame));
         try v.setUnreachable();
     }
 
@@ -46,8 +46,8 @@ pub const Validator = struct {
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
 
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-        try v.popOperands(v.labelTypes(frame));
-        try v.pushOperands(v.labelTypes(frame));
+        try v.popOperands(labelTypes(frame));
+        try v.pushOperands(labelTypes(frame));
     }
 
     pub fn validateBrTable(v: *Validator, n_star: []u32, label: u32) !void {
@@ -55,26 +55,26 @@ pub const Validator = struct {
         if (label >= v.ctrl_stack.items.len) return error.ValidateBrTableInvalidLabel;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - label];
 
-        const arity = v.labelTypes(frame).len;
+        const arity = labelTypes(frame).len;
 
         for (n_star) |n| {
             if (n >= v.ctrl_stack.items.len) return error.ValidateBrTableInvalidLabelN;
             const frame_n = v.ctrl_stack.items[v.ctrl_stack.items.len - 1 - n];
-            if (v.labelTypes(frame_n).len != arity) return error.ValidateBrTableInvalidLabelWrongArity;
+            if (labelTypes(frame_n).len != arity) return error.ValidateBrTableInvalidLabelWrongArity;
 
             if (!(arity <= 64)) return error.TODOAllocation;
 
             var temp = [_]ValueTypeUnknown{.{ .Known = .I32 }} ** 64; // TODO: allocate some memory for this
-            for (v.labelTypes(frame_n)) |_, i| {
-                temp[i] = try v.popOperandExpecting(ValueTypeUnknown{ .Known = v.labelTypes(frame_n)[arity - i - 1] });
+            for (labelTypes(frame_n)) |_, i| {
+                temp[i] = try v.popOperandExpecting(ValueTypeUnknown{ .Known = labelTypes(frame_n)[arity - i - 1] });
             }
 
-            for (v.labelTypes(frame_n)) |_, i| {
+            for (labelTypes(frame_n)) |_, i| {
                 try v.pushOperand(temp[arity - 1 - i]);
             }
         }
 
-        try v.popOperands(v.labelTypes(frame));
+        try v.popOperands(labelTypes(frame));
         try v.setUnreachable();
     }
 
@@ -166,7 +166,7 @@ pub const Validator = struct {
             },
             .@"return" => {
                 const frame = v.ctrl_stack.items[0];
-                try v.popOperands(v.labelTypes(frame));
+                try v.popOperands(labelTypes(frame));
                 try v.setUnreachable();
             },
             .drop => {
@@ -509,7 +509,7 @@ pub const Validator = struct {
 
     fn popOperands(v: *Validator, operands: []const ValueType) !void {
         const len = operands.len;
-        for (operands) |op, i| {
+        for (operands) |_, i| {
             _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = operands[len - i - 1] });
         }
     }
@@ -536,7 +536,7 @@ pub const Validator = struct {
         return frame;
     }
 
-    fn labelTypes(v: *Validator, frame: ControlFrame) []const ValueType {
+    fn labelTypes(frame: ControlFrame) []const ValueType {
         if (frame.opcode == Opcode.loop) {
             return frame.start_types;
         } else {
@@ -553,7 +553,7 @@ pub const Validator = struct {
     }
 };
 
-fn isNum(value_type: ValueTypeUnknown) bool {
+fn isNum(_: ValueTypeUnknown) bool {
     // TODO: for version 1.1 value type may be ref type
     // so we'll have to update this:
     return true;

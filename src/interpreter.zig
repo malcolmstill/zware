@@ -2,6 +2,7 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
+const Module = @import("module.zig").Module;
 const ValueType = @import("module.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
 const Instruction = @import("function.zig").Instruction;
@@ -180,7 +181,6 @@ pub const Interpreter = struct {
 
                     // TODO: we need to verify that we're okay to lookup this function.
                     //       we can (and probably should) do that at validation time.
-                    const module = self.inst.module;
                     const function = try self.inst.getFunc(function_index);
 
                     switch (function) {
@@ -232,7 +232,7 @@ pub const Interpreter = struct {
                             // Check that signatures match
                             // const func_type = module.types.list.items[function.typeidx];
                             const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                            if (!module.signaturesEqual(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+                            if (!Module.signaturesEqual(func.params, func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                             // Make space for locals (again, params already on stack)
                             var j: usize = 0;
@@ -259,7 +259,7 @@ pub const Interpreter = struct {
                         },
                         .host_function => |host_func| {
                             const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                            if (!module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
+                            if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) return error.IndirectCallTypeMismatch;
 
                             try host_func.func(self);
                         },
@@ -321,7 +321,6 @@ pub const Interpreter = struct {
                 .@"i32.load" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -333,7 +332,6 @@ pub const Interpreter = struct {
                 .@"i64.load" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -346,7 +344,6 @@ pub const Interpreter = struct {
                     // TODO: we need to check this / handle multiple memories
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -359,7 +356,6 @@ pub const Interpreter = struct {
                     // TODO: we need to check this / handle multiple memories
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -371,7 +367,6 @@ pub const Interpreter = struct {
                 .@"i32.load8_s" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -383,7 +378,6 @@ pub const Interpreter = struct {
                 .@"i32.load8_u" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -395,7 +389,6 @@ pub const Interpreter = struct {
                 .@"i32.load16_s" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -407,7 +400,6 @@ pub const Interpreter = struct {
                 .@"i32.load16_u" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -419,7 +411,6 @@ pub const Interpreter = struct {
                 .@"i64.load8_s" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -431,7 +422,6 @@ pub const Interpreter = struct {
                 .@"i64.load8_u" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -443,7 +433,6 @@ pub const Interpreter = struct {
                 .@"i64.load16_s" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -455,7 +444,6 @@ pub const Interpreter = struct {
                 .@"i64.load16_u" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -467,7 +455,6 @@ pub const Interpreter = struct {
                 .@"i64.load32_s" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -479,7 +466,6 @@ pub const Interpreter = struct {
                 .@"i64.load32_u" => |load_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = load_data.alignment;
                     const offset = load_data.offset;
 
                     const address = try self.popOperand(u32);
@@ -492,7 +478,6 @@ pub const Interpreter = struct {
                     // TODO: we need to check this / handle multiple memories
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = try self.popOperand(u32);
@@ -504,7 +489,6 @@ pub const Interpreter = struct {
                 .@"i64.store" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = try self.popOperand(u64);
@@ -516,7 +500,6 @@ pub const Interpreter = struct {
                 .@"f32.store" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = try self.popOperand(f32);
@@ -528,7 +511,6 @@ pub const Interpreter = struct {
                 .@"f64.store" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = try self.popOperand(f64);
@@ -540,7 +522,6 @@ pub const Interpreter = struct {
                 .@"i32.store8" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = @truncate(u8, try self.popOperand(u32));
@@ -552,7 +533,6 @@ pub const Interpreter = struct {
                 .@"i32.store16" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = @truncate(u16, try self.popOperand(u32));
@@ -564,7 +544,6 @@ pub const Interpreter = struct {
                 .@"i64.store8" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = @truncate(u8, try self.popOperand(u64));
@@ -576,7 +555,6 @@ pub const Interpreter = struct {
                 .@"i64.store16" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = @truncate(u16, try self.popOperand(u64));
@@ -588,7 +566,6 @@ pub const Interpreter = struct {
                 .@"i64.store32" => |store_data| {
                     const memory = try self.inst.getMemory(0);
 
-                    const alignment = store_data.alignment;
                     const offset = store_data.offset;
 
                     const value = @truncate(u32, try self.popOperand(u64));
@@ -609,7 +586,7 @@ pub const Interpreter = struct {
                     const num_pages = try self.popOperand(u32);
                     if (memory.grow(num_pages)) |old_size| {
                         try self.pushOperand(u32, @intCast(u32, old_size));
-                    } else |err| {
+                    } else |_| {
                         try self.pushOperand(i32, @as(i32, -1));
                     }
                     continue;
@@ -1874,7 +1851,7 @@ test "operand push / pop test" {
     try i.pushOperand(f64, 43.07);
 
     // stack overflow:
-    if (i.pushOperand(i32, 0)) |r| {
+    if (i.pushOperand(i32, 0)) |_| {
         return error.TestExpectedError;
     } else |err| {
         if (err != error.OperandStackOverflow) return error.TestUnexpectedError;
@@ -1888,7 +1865,7 @@ test "operand push / pop test" {
     try testing.expectEqual(@as(i32, 22), try i.popOperand(i32));
 
     // stack underflow:
-    if (i.popOperand(i32)) |r| {
+    if (i.popOperand(i32)) |_| {
         return error.TestExpectedError;
     } else |err| {
         if (err != error.OperandStackUnderflow) return error.TestUnexpectedError;
