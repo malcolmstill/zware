@@ -6,6 +6,7 @@ const Module = @import("module.zig").Module;
 const ValueType = @import("module.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
 const Instruction = @import("function.zig").Instruction;
+const WasmError = @import("function.zig").WasmError;
 const instruction = @import("instruction.zig");
 
 // Interpreter:
@@ -45,7 +46,331 @@ pub const Interpreter = struct {
         };
     }
 
+    fn impl_unreachable(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        err.* = error.TrapUnreachable;
+    }
+
+    fn impl_nop(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_block(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const block = instr.block;
+
+        self.pushLabel(Label{
+            .return_arity = block.return_arity,
+            .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
+            .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+        }) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_loop(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const block = instr.loop;
+
+        self.pushLabel(Label{
+            // note that we use block_params rather than block_returns for return arity:
+            .return_arity = block.param_arity,
+            .op_stack_len = self.op_stack.len - block.param_arity,
+            .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count],
+        }) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_if(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const block = instr.@"if";
+
+        const condition = self.popOperand(u32);
+
+        if (condition == 0) {
+            // We'll skip to end
+            self.continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count];
+            // unless we have an else branch
+            if (block.else_continuation) |else_continuation| {
+                self.continuation = self.inst.module.parsed_code.items[else_continuation.offset .. else_continuation.offset + else_continuation.count];
+
+                // We are inside the if branch
+                self.pushLabel(Label{
+                    .return_arity = block.return_arity,
+                    .op_stack_len = self.op_stack.len - block.param_arity,
+                    .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+                }) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            }
+        } else {
+            // We are inside the if branch
+            self.pushLabel(Label{
+                .return_arity = block.return_arity,
+                .op_stack_len = self.op_stack.len - block.param_arity,
+                .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
+            }) catch |e| {
+                err.* = e;
+                return;
+            };
+        }
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_end(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const label = self.popLabel();
+
+        // It seems like we need to special case end for a function call. This
+        // doesn't seem quite right because the spec doesn't mention it. On
+        // call we push a label containing a continuation which is the code to
+        // resume after the call has returned. We want to use that if we've run
+        // out of code in the current function, i.e. self.continuation is empty
+        if (self.continuation.len == 0) {
+            const frame = self.peekNthFrame(0);
+            const n = label.return_arity;
+            var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+            const src = self.op_stack[self.op_stack.len - n ..];
+            mem.copy(u64, dst, src);
+
+            self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+            self.label_stack = self.label_stack[0..frame.label_stack_len];
+            self.continuation = label.continuation;
+            _ = self.popFrame();
+            self.inst = frame.inst;
+        }
+
+        if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_local_get(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const local_index = instr.@"local.get";
+
+        const frame = self.peekNthFrame(0);
+        const local_value: u64 = frame.locals[local_index];
+        self.pushOperand(u64, local_value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_i32_const(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const x = instr.@"i32.const";
+
+        self.pushOperand2(i32, x);
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_i32_eq(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const c2 = self.popOperand(u32);
+        const c1 = self.popOperand(u32);
+
+        self.pushOperand(u32, @as(u32, if (c1 == c2) 1 else 0)) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_i32_sub(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const c2 = self.popOperand(u32);
+        const c1 = self.popOperand(u32);
+
+        self.pushOperand(u32, c1 -% c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_i32_add(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const c2 = self.popOperand(u32);
+        const c1 = self.popOperand(u32);
+
+        self.pushOperand(u32, c1 +% c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_return(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const frame = self.peekNthFrame(0);
+
+        const n = frame.return_arity;
+
+        const label = self.label_stack[frame.label_stack_len];
+        self.continuation = label.continuation;
+
+        // The mem copy is equivalent of popping n operands, doing everything
+        // up to and including popFrame and then repushing the n operands
+        var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+        const src = self.op_stack[self.op_stack.len - n ..];
+        mem.copy(u64, dst, src);
+
+        self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+        self.label_stack = self.label_stack[0..frame.label_stack_len];
+
+        _ = self.popFrame();
+        self.inst = frame.inst;
+
+        if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    fn impl_call(self: *Interpreter, instr: Instruction, err: *?WasmError) void {
+        const function_index = instr.call;
+        const function = self.inst.getFunc(function_index) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        switch (function) {
+            .function => |f| {
+                // Make space for locals (again, params already on stack)
+                var j: usize = 0;
+                while (j < f.locals_count) : (j += 1) {
+                    self.pushOperand(u64, 0) catch |e| {
+                        err.* = e;
+                        return;
+                    };
+                }
+
+                // Consume parameters from the stack
+                self.pushFrame(Frame{
+                    .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                    .label_stack_len = self.label_stack.len,
+                    .return_arity = f.results.len,
+                    .inst = self.inst,
+                }, f.locals_count + f.params.len) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                // Our continuation is the code after call
+                self.pushLabel(Label{
+                    .return_arity = f.results.len,
+                    .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                    .continuation = self.continuation,
+                }) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                self.continuation = f.code;
+                self.inst = self.inst.store.instance(f.instance) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+            .host_function => |hf| {
+                hf.func(self) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+        }
+
+        // if (self.continuation.len == 0) return;
+        const next_instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+        return @call(.{ .modifier = .always_tail }, dispatch[@enumToInt(next_instr)], .{ self, next_instr, err });
+    }
+
+    const InstructionFunction = fn (*Interpreter, Instruction, *?WasmError) void;
+
+    // fn dispatj(instr: Instruction) InstructionFunction {
+    //     return switch (instr) {
+    //         .@"unreachable" => impl_unreachable,
+    //         .nop => impl_nop,
+    //         .block => impl_block,
+    //         .loop => impl_loop,
+    //         .@"if" => impl_if,
+    //         .end => impl_end,
+    //         .@"local.get" => impl_local_get,
+    //         .@"i32.const" => impl_i32_const,
+    //         .@"return" => impl_return,
+    //         .@"i32.eq" => impl_i32_eq,
+    //         .@"i32.sub" => impl_i32_sub,
+    //         .@"i32.add" => impl_i32_add,
+    //         .call => impl_call,
+    //         else => unreachable,
+    //     };
+    // }
+
+    const dispatch: [256]InstructionFunction = [_]InstructionFunction{
+        impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if,  impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_end,     impl_nop, impl_nop, impl_nop, impl_return,
+        impl_call,        impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_local_get,   impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_i32_const, impl_nop,   impl_nop,  impl_nop, impl_nop, impl_i32_eq, impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_i32_add, impl_i32_sub, impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+    };
+
     pub fn invoke(self: *Interpreter, code: []Instruction) !void {
+        self.continuation = code;
+        const instr = self.continuation[0];
+        self.continuation = self.continuation[1..];
+
+        var err: ?WasmError = null;
+
+        // @call(.{}, dispatj(instr), .{ self, instr, &err });
+        @call(.{}, dispatch[@enumToInt(instr)], .{ self, instr, &err });
+        if (err) |e| return e;
+    }
+
+    pub fn invoke2(self: *Interpreter, code: []Instruction) !void {
         self.continuation = code;
         while (self.continuation.len > 0) {
             const instr = self.continuation[0];
@@ -1678,8 +2003,8 @@ pub const Interpreter = struct {
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
-    pub fn branch(self: *Interpreter, target: u32) !void {
-        const label = try self.peekNthLabel(target);
+    pub fn branch(self: *Interpreter, target: u32) void {
+        const label = self.peekNthLabel(target);
         const n = label.return_arity;
 
         var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
@@ -1688,9 +2013,25 @@ pub const Interpreter = struct {
         mem.copy(u64, dest, src);
 
         self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-        _ = try self.popLabels(target);
+        _ = self.popLabels(target);
 
         self.continuation = label.continuation;
+    }
+
+    pub fn pushOperand2(self: *Interpreter, comptime T: type, value: T) void {
+        // if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
+
+        self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
+
+        self.op_stack[self.op_stack.len - 1] = switch (T) {
+            i32 => @as(u64, @bitCast(u32, value)),
+            i64 => @bitCast(u64, value),
+            f32 => @as(u64, @bitCast(u32, value)),
+            f64 => @bitCast(u64, value),
+            u32 => @as(u64, value), // TODO: figure out types
+            u64 => value,
+            else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
+        };
     }
 
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
@@ -1709,9 +2050,9 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn popOperand(self: *Interpreter, comptime T: type) !T {
+    pub fn popOperand(self: *Interpreter, comptime T: type) T {
         // TODO: if we've validated the wasm, do we need to perform this check:
-        if (self.op_stack.len == 0) return error.OperandStackUnderflow;
+        // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
         defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
 
         const value = self.op_stack[self.op_stack.len - 1];
@@ -1734,15 +2075,15 @@ pub const Interpreter = struct {
         self.op_stack[self.op_stack.len - 1] = value;
     }
 
-    pub fn popAnyOperand(self: *Interpreter) !u64 {
-        if (self.op_stack.len == 0) return error.OperandStackUnderflow;
+    pub fn popAnyOperand(self: *Interpreter) u64 {
+        // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
         defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
 
         return self.op_stack[self.op_stack.len - 1];
     }
 
-    fn peekNthOperand(self: *Interpreter, index: u32) !u64 {
-        if (index + 1 > self.op_stack.len) return error.OperandStackUnderflow;
+    fn peekNthOperand(self: *Interpreter, index: u32) u64 {
+        // if (index + 1 > self.op_stack.len) return error.OperandStackUnderflow;
         return self.op_stack[self.op_stack.len - index - 1];
     }
 
@@ -1759,8 +2100,8 @@ pub const Interpreter = struct {
         current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
-    pub fn popFrame(self: *Interpreter) !Frame {
-        if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
+    pub fn popFrame(self: *Interpreter) Frame {
+        // if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
         defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
 
         return self.frame_stack[self.frame_stack.len - 1];
@@ -1770,20 +2111,20 @@ pub const Interpreter = struct {
     //
     // Returns nth label on the Label stack relative to the top of the stack
     //
-    fn peekNthFrame(self: *Interpreter, index: u32) !*Frame {
-        if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
+    fn peekNthFrame(self: *Interpreter, index: u32) *Frame {
+        // if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
         return &self.frame_stack[self.frame_stack.len - index - 1];
     }
 
     pub fn pushLabel(self: *Interpreter, label: Label) !void {
         if (self.label_stack.len == self.label_stack_mem.len) return error.LabelStackOverflow;
         self.label_stack = self.label_stack_mem[0 .. self.label_stack.len + 1];
-        const current_label = try self.peekNthLabel(0);
+        const current_label = self.peekNthLabel(0);
         current_label.* = label;
     }
 
-    pub fn popLabel(self: *Interpreter) !Label {
-        if (self.label_stack.len == 0) return error.ControlStackUnderflow;
+    pub fn popLabel(self: *Interpreter) Label {
+        // if (self.label_stack.len == 0) return error.ControlStackUnderflow;
         defer self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
 
         return self.label_stack[self.label_stack.len - 1];
@@ -1793,8 +2134,8 @@ pub const Interpreter = struct {
     //
     // Returns nth label on the Label stack relative to the top of the stack
     //
-    fn peekNthLabel(self: *Interpreter, index: u32) !*Label {
-        if (index + 1 > self.label_stack.len) return error.LabelStackUnderflow;
+    fn peekNthLabel(self: *Interpreter, index: u32) *Label {
+        // if (index + 1 > self.label_stack.len) return error.LabelStackUnderflow;
         return &self.label_stack[self.label_stack.len - index - 1];
     }
 
@@ -1804,8 +2145,8 @@ pub const Interpreter = struct {
     //
     // popLabels pops labels up to and including `target`. Returns the
     // the label at `target`.
-    pub fn popLabels(self: *Interpreter, target: u32) !Label {
-        if (target >= self.label_stack.len) return error.LabelStackUnderflow;
+    pub fn popLabels(self: *Interpreter, target: u32) Label {
+        // if (target >= self.label_stack.len) return error.LabelStackUnderflow;
         const target_label = self.label_stack[self.label_stack.len - target - 1];
 
         self.label_stack = self.label_stack[0 .. self.label_stack.len - target - 1];

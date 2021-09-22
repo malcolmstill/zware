@@ -5,6 +5,19 @@ const Instance = @import("instance.zig").Instance;
 const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
 
+pub const WasmError = error{
+    TrapUnreachable,
+    LabelStackUnderflow,
+    LabelStackOverflow,
+    OperandStackUnderflow,
+    ControlStackUnderflow,
+    OperandStackOverflow,
+    FunctionIndexOutOfBounds,
+    BadFunctionIndex,
+    ControlStackOverflow,
+    BadInstanceIndex,
+};
+
 pub const Function = union(enum) {
     function: struct {
         // locals: []const u8,
@@ -15,7 +28,7 @@ pub const Function = union(enum) {
         instance: usize,
     },
     host_function: struct {
-        func: fn (*Interpreter) anyerror!void,
+        func: fn (*Interpreter) WasmError!void,
         params: []const ValueType,
         results: []const ValueType,
     },

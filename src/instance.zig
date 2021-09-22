@@ -284,7 +284,7 @@ pub const Instance = struct {
 
                 // 9.
                 for (out) |_, out_index| {
-                    out[out_index] = try interp.popOperand(u64);
+                    out[out_index] = interp.popOperand(u64);
                 }
             },
             .host_function => |host_func| {
@@ -358,8 +358,8 @@ pub const Instance = struct {
         try interp.invoke(expr);
 
         switch (Result) {
-            u64 => return try interp.popAnyOperand(),
-            else => return try interp.popOperand(Result),
+            u64 => return interp.popAnyOperand(),
+            else => return interp.popOperand(Result),
         }
     }
 };
