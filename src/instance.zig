@@ -99,7 +99,9 @@ pub const Instance = struct {
                 const func_type = self.module.types.list.items[func.typeidx];
                 const handle = try self.store.addFunction(Function{
                     .function = .{
-                        .code = self.module.parsed_code.items[code.code.offset .. code.code.offset + code.code.count],
+                        // .code = self.module.parsed_code.items[code.code.offset .. code.code.offset + code.code.count],
+                        .ip_start = code.code.offset,
+                        .ip_end = code.code.offset + code.code.count,
                         // .locals = code.locals,
                         .locals_count = code.locals_count,
                         .params = func_type.params,
@@ -275,12 +277,15 @@ pub const Instance = struct {
                 try interp.pushLabel(Interpreter.Label{
                     .return_arity = f.results.len,
                     .op_stack_len = locals_start,
-                    .continuation = f.code[0..0],
+                    // .continuation = f.code[0..0],
+                    .ip_start = f.ip_start,
+                    .ip_end = f.ip_end,
                 });
 
                 // std.debug.warn("invoke[{}, {}] = {x}\n", .{ index, handle, f.code });
                 // 8. Execute our function
-                try interp.invoke(f.code);
+                interp.function_start = f.ip_start;
+                try interp.invoke(f.ip_start);
 
                 // 9.
                 for (out) |_, out_index| {
@@ -322,10 +327,12 @@ pub const Instance = struct {
                 try interp.pushLabel(Interpreter.Label{
                     .return_arity = 0,
                     .op_stack_len = locals_start,
-                    .continuation = f.code[0..0],
+                    // .continuation = f.code[0..0],
+                    .ip_start = 0,
+                    .ip_end = 0,
                 });
 
-                try interp.invoke(f.code);
+                try interp.invoke(f.ip_start);
             },
             .host_function => |host_func| {
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
@@ -352,10 +359,10 @@ pub const Instance = struct {
         try interp.pushLabel(Interpreter.Label{
             .return_arity = 1,
             .op_stack_len = locals_start,
-            .continuation = expr[0..0],
+            // .continuation = expr[0..0],
         });
 
-        try interp.invoke(expr);
+        try interp.invoke(0);
 
         switch (Result) {
             u64 => return interp.popAnyOperand(),

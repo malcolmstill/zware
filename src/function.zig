@@ -22,7 +22,9 @@ pub const Function = union(enum) {
     function: struct {
         // locals: []const u8,
         locals_count: usize,
-        code: []Instruction,
+        // code: []Instruction,
+        ip_start: usize,
+        ip_end: usize,
         params: []const ValueType,
         results: []const ValueType,
         instance: usize,
@@ -47,17 +49,25 @@ pub const Instruction = union(Opcode) {
         param_arity: usize,
         return_arity: usize,
         continuation: Range,
+        ip: usize,
+        ip_end: usize,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
         continuation: Range,
+        ip: usize,
+        ip_end: usize,
     },
     @"if": struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
-        else_continuation: ?Range,
+        // continuation: Range,
+        // else_continuation: ?Range,
+        ip: usize,
+        ip_end: usize,
+        else_ip: usize,
+        else_ip_end: usize,
     },
     @"else": void,
     end: void,
@@ -318,6 +328,8 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
 
                 const continuation = code[offset + end_offset + 1 ..];
                 block_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                block_instr.ip = parsed_code_offset + offset + end_offset + 1;
+                block_instr.ip_end = block_instr.ip + continuation.len;
             },
             .@"if" => |*if_instr| {
                 const end_offset = try findEnd(code[offset..]);
@@ -326,16 +338,23 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
                 if (optional_else_offset == null and if_instr.param_arity -% if_instr.return_arity != 0) return error.ValidatorElseBranchExpected;
 
                 const continuation = code[offset + end_offset + 1 ..];
-                if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                // if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                if_instr.ip = parsed_code_offset + offset + end_offset + 1;
+                std.debug.warn("if_instr.ip = {}\n", .{if_instr.ip});
+                if_instr.ip_end = if_instr.ip + continuation.len;
                 if (optional_else_offset) |else_offset| {
-                    const else_continuation = code[offset + else_offset + 1 ..];
-                    if_instr.else_continuation = Range{ .offset = parsed_code_offset + offset + else_offset + 1, .count = else_continuation.len };
+                    // const else_continuation = code[offset + else_offset + 1 ..];
+                    // if_instr.else_continuation = Range{ .offset = parsed_code_offset + offset + else_offset + 1, .count = else_continuation.len };
+                    if_instr.else_ip = parsed_code_offset + offset + else_offset + 1;
+                    if_instr.else_ip_end = if_instr.else_ip + continuation.len;
                 }
             },
             .loop => |*loop_instr| {
                 // const end_offset = try findEnd(code[offset..]);
                 const continuation = code[offset..];
                 loop_instr.continuation = Range{ .offset = parsed_code_offset + offset, .count = continuation.len };
+                loop_instr.ip = parsed_code_offset + offset;
+                loop_instr.ip_end = loop_instr.ip + continuation.len;
             },
             else => {},
         }
