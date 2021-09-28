@@ -218,9 +218,11 @@ pub const Interpreter = struct {
     fn impl_i32_const(self: *Interpreter, ip: usize, err: *?WasmError) void {
         const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const x = instr.@"i32.const";
 
-        self.pushOperand2(i32, x);
+        self.pushOperand(i32, instr.@"i32.const") catch |e| {
+            err.* = e;
+            return;
+        };
 
         // if (self.continuation.len == 0) return;
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });

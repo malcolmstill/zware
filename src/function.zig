@@ -48,14 +48,14 @@ pub const Instruction = union(Opcode) {
     block: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
+        // continuation: Range,
         ip: usize,
         ip_end: usize,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
+        // continuation: Range,
         ip: usize,
         ip_end: usize,
     },
@@ -327,7 +327,7 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
                 const end_offset = try findEnd(code[offset..]);
 
                 const continuation = code[offset + end_offset + 1 ..];
-                block_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                // block_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
                 block_instr.ip = parsed_code_offset + offset + end_offset + 1;
                 block_instr.ip_end = block_instr.ip + continuation.len;
             },
@@ -352,7 +352,7 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
             .loop => |*loop_instr| {
                 // const end_offset = try findEnd(code[offset..]);
                 const continuation = code[offset..];
-                loop_instr.continuation = Range{ .offset = parsed_code_offset + offset, .count = continuation.len };
+                // loop_instr.continuation = Range{ .offset = parsed_code_offset + offset, .count = continuation.len };
                 loop_instr.ip = parsed_code_offset + offset;
                 loop_instr.ip_end = loop_instr.ip + continuation.len;
             },
