@@ -340,7 +340,7 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
                 const continuation = code[offset + end_offset + 1 ..];
                 // if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
                 if_instr.ip = parsed_code_offset + offset + end_offset + 1;
-                std.debug.warn("if_instr.ip = {}\n", .{if_instr.ip});
+                // std.debug.warn("if_instr.ip = {}\n", .{if_instr.ip});
                 if_instr.ip_end = if_instr.ip + continuation.len;
                 if (optional_else_offset) |else_offset| {
                     // const else_continuation = code[offset + else_offset + 1 ..];

@@ -51,24 +51,26 @@ pub const Interpreter = struct {
         };
     }
 
-    inline fn dispatch(self: *Interpreter, next_ip: usize, instr: Instruction, err: *?WasmError) void {
+    inline fn dispatch(self: *Interpreter, next_ip: usize, err: *?WasmError) void {
         const next_instr = self.inst.module.parsed_code.items[next_ip];
         // std.debug.warn("NEXT INSTR = {}\n", .{@as(Opcode, next_instr)});
         // self.continuation = self.continuation[1..];
         // self.ip += 1;
-        return @call(.{ .modifier = .always_tail }, lookup(next_instr), .{ self, next_ip, next_instr, err });
+        // return @call(.{ .modifier = .always_tail }, lookup(next_instr), .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, err });
     }
 
-    fn impl_unreachable(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_unreachable(self: *Interpreter, ip: usize, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         err.* = error.TrapUnreachable;
     }
 
-    fn impl_nop(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+    fn impl_nop(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_block(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_block(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.block;
 
@@ -84,10 +86,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_loop(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_loop(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.loop;
 
@@ -104,10 +107,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_if(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_if(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.@"if";
         var next_ip = ip;
@@ -160,11 +164,11 @@ pub const Interpreter = struct {
 
         // if (self.continuation.len == 0) return;
         // std.debug.warn("IF: next ip = {}\n", .{next_ip});
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
     }
 
-    fn impl_end(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
-        std.debug.warn("impl_end: instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
+    fn impl_end(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        // std.debug.warn("impl_end: instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const label = self.popLabel();
         var next_ip = ip + 1;
 
@@ -192,10 +196,11 @@ pub const Interpreter = struct {
         }
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
     }
 
-    fn impl_local_get(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_local_get(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         const local_index = instr.@"local.get";
 
         const frame = self.peekNthFrame(0);
@@ -207,20 +212,21 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_i32_const(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_i32_const(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const x = instr.@"i32.const";
 
         self.pushOperand2(i32, x);
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_i32_eq(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_i32_eq(self: *Interpreter, ip: usize, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
@@ -231,10 +237,10 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_i32_sub(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_i32_sub(self: *Interpreter, ip: usize, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
@@ -245,10 +251,10 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_i32_add(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_i32_add(self: *Interpreter, ip: usize, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
@@ -259,10 +265,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
     }
 
-    fn impl_return(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_return(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const frame = self.peekNthFrame(0);
 
@@ -289,10 +296,11 @@ pub const Interpreter = struct {
         if (self.frame_stack.len == 0) return;
         // if (self.continuation.len == 0) return;
         // if (next_ip == self.function_start) return; // if our label is the
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
     }
 
-    fn impl_call(self: *Interpreter, ip: usize, instr: Instruction, err: *?WasmError) void {
+    fn impl_call(self: *Interpreter, ip: usize, err: *?WasmError) void {
+        const instr = self.inst.module.parsed_code.items[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const function_index = instr.call;
         const function = self.inst.getFunc(function_index) catch |e| {
@@ -354,10 +362,10 @@ pub const Interpreter = struct {
 
         // std.debug.warn("\n", .{});
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, instr, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
     }
 
-    const InstructionFunction = fn (*Interpreter, usize, Instruction, *?WasmError) void;
+    const InstructionFunction = fn (*Interpreter, usize, *?WasmError) void;
 
     // inline fn lookup(instr: Instruction) InstructionFunction {
     //     return switch (instr) {
@@ -378,6 +386,25 @@ pub const Interpreter = struct {
     //     };
     // }
 
+    const lookup = [256]InstructionFunction{
+        impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if,  impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_end,     impl_nop, impl_nop, impl_nop, impl_return,
+        impl_call,        impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_local_get,   impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_i32_const, impl_nop,   impl_nop,  impl_nop, impl_nop, impl_i32_eq, impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_i32_add, impl_i32_sub, impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+    };
+
     pub fn invoke(self: *Interpreter, ip: usize) !void {
         // self.continuation = code;
         // const instr = self.continuation[0];
@@ -387,7 +414,9 @@ pub const Interpreter = struct {
         var err: ?WasmError = null;
 
         // @call(.{}, dispatj(instr), .{ self, instr, &err });
-        @call(.{}, lookup(instr), .{ self, ip, instr, &err });
+        // @call(.{}, lookup(instr), .{ self, ip, &err });
+
+        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, &err });
         if (err) |e| return e;
     }
 
