@@ -53,15 +53,11 @@ pub const Interpreter = struct {
 
     inline fn dispatch(self: *Interpreter, next_ip: usize, err: *?WasmError) void {
         const next_instr = self.inst.module.parsed_code.items[next_ip];
-        // std.debug.warn("NEXT INSTR = {}\n", .{@as(Opcode, next_instr)});
-        // self.continuation = self.continuation[1..];
-        // self.ip += 1;
-        // return @call(.{ .modifier = .always_tail }, lookup(next_instr), .{ self, next_ip, err });
+
         return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, err });
     }
 
     fn impl_unreachable(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         err.* = error.TrapUnreachable;
     }
 
