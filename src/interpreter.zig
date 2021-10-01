@@ -48,22 +48,22 @@ pub const Interpreter = struct {
         };
     }
 
-    inline fn dispatch(self: *Interpreter, next_ip: usize, err: *?WasmError) void {
-        const next_instr = self.inst.module.parsed_code.items[next_ip];
+    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, err: *?WasmError) void {
+        const next_instr = code[next_ip];
 
-        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, err });
     }
 
-    fn impl_unreachable(self: *Interpreter, ip: usize, err: *?WasmError) void {
+    fn impl_unreachable(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         err.* = error.TrapUnreachable;
     }
 
-    fn impl_nop(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+    fn impl_nop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_block(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_block(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.block;
 
@@ -79,11 +79,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_loop(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_loop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.loop;
 
@@ -100,11 +100,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_if(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_if(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const block = instr.@"if";
         var next_ip = ip;
@@ -157,10 +157,10 @@ pub const Interpreter = struct {
 
         // if (self.continuation.len == 0) return;
         // std.debug.warn("IF: next ip = {}\n", .{next_ip});
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
-    fn impl_end(self: *Interpreter, ip: usize, err: *?WasmError) void {
+    fn impl_end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         // std.debug.warn("impl_end: instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const label = self.popLabel();
         var next_ip = ip + 1;
@@ -191,11 +191,11 @@ pub const Interpreter = struct {
         }
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
-    fn impl_local_get(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         const local_index = instr.@"local.get";
 
         const frame = self.peekNthFrame(0);
@@ -207,11 +207,11 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_i32_const(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
 
         self.pushOperand(i32, instr.@"i32.const") catch |e| {
@@ -220,10 +220,10 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_i32_eq(self: *Interpreter, ip: usize, err: *?WasmError) void {
+    fn impl_i32_eq(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
@@ -234,10 +234,10 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_i32_sub(self: *Interpreter, ip: usize, err: *?WasmError) void {
+    fn impl_i32_sub(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
@@ -248,11 +248,10 @@ pub const Interpreter = struct {
         };
 
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_i32_add(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
+    fn impl_i32_add(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -261,12 +260,11 @@ pub const Interpreter = struct {
             return;
         };
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
-    fn impl_return(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_return(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const frame = self.peekNthFrame(0);
 
@@ -295,11 +293,11 @@ pub const Interpreter = struct {
         if (self.frame_ptr == 0) return;
         // if (self.continuation.len == 0) return;
         // if (next_ip == self.function_start) return; // if our label is the
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
-    fn impl_call(self: *Interpreter, ip: usize, err: *?WasmError) void {
-        const instr = self.inst.module.parsed_code.items[ip];
+    fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const instr = code[ip];
         //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
         const function_index = instr.call;
         const function = self.inst.getFunc(function_index) catch |e| {
@@ -361,10 +359,10 @@ pub const Interpreter = struct {
 
         // std.debug.warn("\n", .{});
         // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
-    const InstructionFunction = fn (*Interpreter, usize, *?WasmError) void;
+    const InstructionFunction = fn (*Interpreter, usize, []Instruction, *?WasmError) void;
 
     // inline fn lookup(instr: Instruction) InstructionFunction {
     //     return switch (instr) {
@@ -415,7 +413,7 @@ pub const Interpreter = struct {
         // @call(.{}, dispatj(instr), .{ self, instr, &err });
         // @call(.{}, lookup(instr), .{ self, ip, &err });
 
-        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, &err });
+        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items, &err });
         if (err) |e| return e;
     }
 
