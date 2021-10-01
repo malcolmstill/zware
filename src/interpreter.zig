@@ -25,12 +25,12 @@ const Opcode = @import("instruction.zig").Opcode;
 // there own stack, but I don't think that's necessary.
 //
 pub const Interpreter = struct {
-    op_stack: []u64 = undefined,
     op_stack_mem: []u64 = undefined,
+    op_ptr: usize = 0,
     frame_stack_mem: []Frame = undefined,
-    frame_stack: []Frame = undefined,
+    frame_ptr: usize = 0,
     label_stack_mem: []Label = undefined,
-    label_stack: []Label = undefined,
+    label_ptr: usize = 0,
 
     // continuation: []Instruction = undefined,
     inst: *Instance = undefined,
@@ -42,11 +42,8 @@ pub const Interpreter = struct {
     pub fn init(op_stack_mem: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, inst: *Instance) Interpreter {
         return Interpreter{
             .op_stack_mem = op_stack_mem,
-            .op_stack = op_stack_mem[0..0],
             .frame_stack_mem = frame_stack_mem,
-            .frame_stack = frame_stack_mem[0..0],
             .label_stack_mem = label_stack_mem,
-            .label_stack = label_stack_mem[0..0],
             .inst = inst,
         };
     }
@@ -72,7 +69,7 @@ pub const Interpreter = struct {
 
         self.pushLabel(Label{
             .return_arity = block.return_arity,
-            .op_stack_len = self.op_stack.len - block.param_arity, // equivalent to pop and push
+            .op_stack_len = self.op_ptr - block.param_arity, // equivalent to pop and push
             // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
             .ip_start = block.ip,
             .ip_end = block.ip_end,
@@ -93,7 +90,7 @@ pub const Interpreter = struct {
         self.pushLabel(Label{
             // note that we use block_params rather than block_returns for return arity:
             .return_arity = block.param_arity,
-            .op_stack_len = self.op_stack.len - block.param_arity,
+            .op_stack_len = self.op_ptr - block.param_arity,
             // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count],
             .ip_start = block.ip,
             .ip_end = block.ip_end,
@@ -148,7 +145,7 @@ pub const Interpreter = struct {
             next_ip = ip + 1;
             self.pushLabel(Label{
                 .return_arity = block.return_arity,
-                .op_stack_len = self.op_stack.len - block.param_arity,
+                .op_stack_len = self.op_ptr - block.param_arity,
                 // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
                 .ip_start = block.ip,
                 .ip_end = block.ip_end,
@@ -177,12 +174,14 @@ pub const Interpreter = struct {
         if (self.ip == self.continuation_end) {
             const frame = self.peekNthFrame(0);
             const n = label.return_arity;
-            var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-            const src = self.op_stack[self.op_stack.len - n ..];
+            var dst = self.op_stack_mem[label.op_stack_len .. label.op_stack_len + n];
+            const src = self.op_stack_mem[self.op_ptr - n ..];
             mem.copy(u64, dst, src);
 
-            self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-            self.label_stack = self.label_stack[0..frame.label_stack_len];
+            // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+            self.op_ptr = label.op_stack_len + n;
+            // self.label_stack = self.label_stack[0..frame.label_stack_len];
+            self.label_ptr = frame.label_stack_len;
             // self.continuation = label.continuation;
             // self.ip = label.ip_start;
             next_ip = label.ip_start;
@@ -273,7 +272,7 @@ pub const Interpreter = struct {
 
         const n = frame.return_arity;
 
-        const label = self.label_stack[frame.label_stack_len];
+        const label = self.label_stack_mem[frame.label_stack_len];
         // self.continuation = label.continuation; FIX
         var next_ip = label.ip_start;
         self.continuation_end = label.ip_end;
@@ -281,17 +280,19 @@ pub const Interpreter = struct {
 
         // The mem copy is equivalent of popping n operands, doing everything
         // up to and including popFrame and then repushing the n operands
-        var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-        const src = self.op_stack[self.op_stack.len - n ..];
+        var dst = self.op_stack_mem[label.op_stack_len .. label.op_stack_len + n];
+        const src = self.op_stack_mem[self.op_ptr - n .. self.op_ptr];
         mem.copy(u64, dst, src);
 
-        self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-        self.label_stack = self.label_stack[0..frame.label_stack_len];
+        // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+        self.op_ptr = label.op_stack_len + n;
+        // self.label_stack = self.label_stack[0..frame.label_stack_len];
+        self.label_ptr = frame.label_stack_len;
 
         _ = self.popFrame();
         self.inst = frame.inst;
 
-        if (self.frame_stack.len == 0) return;
+        if (self.frame_ptr == 0) return;
         // if (self.continuation.len == 0) return;
         // if (next_ip == self.function_start) return; // if our label is the
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, err });
@@ -320,8 +321,8 @@ pub const Interpreter = struct {
 
                 // Consume parameters from the stack
                 self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
-                    .label_stack_len = self.label_stack.len,
+                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
+                    .label_stack_len = self.label_ptr,
                     .return_arity = f.results.len,
                     .inst = self.inst,
                 }, f.locals_count + f.params.len) catch |e| {
@@ -332,7 +333,7 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 self.pushLabel(Label{
                     .return_arity = f.results.len,
-                    .op_stack_len = self.op_stack.len - f.params.len - f.locals_count,
+                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
                     // .continuation = self.continuation,
                     .ip_start = ip + 1,
                     .ip_end = self.continuation_end,
@@ -473,11 +474,12 @@ pub const Interpreter = struct {
     }
 
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
-        if (self.op_stack.len == self.op_stack_mem.len) return error.OperandStackOverflow;
+        if (self.op_ptr == self.op_stack_mem.len) return error.OperandStackOverflow;
 
-        self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
+        // self.op_stack = self.op_stack_mem[0 .. self.op_stack.len + 1];
+        self.op_ptr += 1;
 
-        self.op_stack[self.op_stack.len - 1] = switch (T) {
+        self.op_stack_mem[self.op_ptr - 1] = switch (T) {
             i32 => @as(u64, @bitCast(u32, value)),
             i64 => @bitCast(u64, value),
             f32 => @as(u64, @bitCast(u32, value)),
@@ -491,9 +493,10 @@ pub const Interpreter = struct {
     pub fn popOperand(self: *Interpreter, comptime T: type) T {
         // TODO: if we've validated the wasm, do we need to perform this check:
         // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
-        defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
+        // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
+        defer self.op_ptr -= 1;
 
-        const value = self.op_stack[self.op_stack.len - 1];
+        const value = self.op_stack_mem[self.op_ptr - 1];
         return switch (T) {
             i32 => @bitCast(i32, @truncate(u32, value)),
             i64 => @bitCast(i64, value),
@@ -515,9 +518,10 @@ pub const Interpreter = struct {
 
     pub fn popAnyOperand(self: *Interpreter) u64 {
         // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
-        defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
+        // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
+        defer self.op_ptr -= 1;
 
-        return self.op_stack[self.op_stack.len - 1];
+        return self.op_stack_mem[self.op_ptr - 1];
     }
 
     fn peekNthOperand(self: *Interpreter, index: u32) u64 {
@@ -529,20 +533,22 @@ pub const Interpreter = struct {
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
     pub fn pushFrame(self: *Interpreter, frame: Frame, params_and_locals_count: usize) !void {
-        if (self.frame_stack.len == self.frame_stack_mem.len) return error.ControlStackOverflow;
-        self.frame_stack = self.frame_stack_mem[0 .. self.frame_stack.len + 1];
+        if (self.frame_ptr == self.frame_stack_mem.len) return error.ControlStackOverflow;
+        // self.frame_stack = self.frame_stack_mem[0 .. self.frame_ptr + 1];
+        self.frame_ptr += 1;
 
-        const current_frame = &self.frame_stack[self.frame_stack.len - 1];
+        const current_frame = &self.frame_stack_mem[self.frame_ptr - 1];
         current_frame.* = frame;
         // TODO: index out of bounds (error if we've run out of operand stack space):
-        current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
+        current_frame.locals = self.op_stack_mem[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
     pub fn popFrame(self: *Interpreter) Frame {
         // if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
-        defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
+        // defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
+        defer self.frame_ptr -= 1;
 
-        return self.frame_stack[self.frame_stack.len - 1];
+        return self.frame_stack_mem[self.frame_ptr - 1];
     }
 
     // peekNthFrame
@@ -551,21 +557,23 @@ pub const Interpreter = struct {
     //
     fn peekNthFrame(self: *Interpreter, index: u32) *Frame {
         // if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
-        return &self.frame_stack[self.frame_stack.len - index - 1];
+        return &self.frame_stack_mem[self.frame_ptr - index - 1];
     }
 
     pub fn pushLabel(self: *Interpreter, label: Label) !void {
-        if (self.label_stack.len == self.label_stack_mem.len) return error.LabelStackOverflow;
-        self.label_stack = self.label_stack_mem[0 .. self.label_stack.len + 1];
+        if (self.label_ptr == self.label_stack_mem.len) return error.LabelStackOverflow;
+        // self.label_stack = self.label_stack_mem[0 .. self.label_stack.len + 1];
+        self.label_ptr += 1;
         const current_label = self.peekNthLabel(0);
         current_label.* = label;
     }
 
     pub fn popLabel(self: *Interpreter) Label {
         // if (self.label_stack.len == 0) return error.ControlStackUnderflow;
-        defer self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
+        // defer self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
+        defer self.label_ptr -= 1;
 
-        return self.label_stack[self.label_stack.len - 1];
+        return self.label_stack_mem[self.label_ptr - 1];
     }
 
     // peekNthLabel
@@ -574,7 +582,7 @@ pub const Interpreter = struct {
     //
     fn peekNthLabel(self: *Interpreter, index: u32) *Label {
         // if (index + 1 > self.label_stack.len) return error.LabelStackUnderflow;
-        return &self.label_stack[self.label_stack.len - index - 1];
+        return &self.label_stack_mem[self.label_ptr - index - 1];
     }
 
     // popLabels

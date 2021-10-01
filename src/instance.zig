@@ -250,7 +250,7 @@ pub const Instance = struct {
                 // 6. set up our stacks
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
 
-                const locals_start = interp.op_stack.len;
+                const locals_start = interp.op_ptr;
 
                 // 7b. push params
                 for (in) |arg| {
@@ -266,7 +266,7 @@ pub const Instance = struct {
                 // 7a. push control frame
                 try interp.pushFrame(Interpreter.Frame{
                     .op_stack_len = locals_start,
-                    .label_stack_len = interp.label_stack.len,
+                    .label_stack_len = interp.label_ptr,
                     .return_arity = f.results.len,
                     .inst = self,
                 }, f.locals_count + f.params.len);
@@ -310,7 +310,7 @@ pub const Instance = struct {
             .function => |f| {
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
 
-                const locals_start = interp.op_stack.len;
+                const locals_start = interp.op_ptr;
 
                 var i: usize = 0;
                 while (i < f.locals_count) : (i += 1) {
@@ -319,7 +319,7 @@ pub const Instance = struct {
 
                 try interp.pushFrame(Interpreter.Frame{
                     .op_stack_len = locals_start,
-                    .label_stack_len = interp.label_stack.len,
+                    .label_stack_len = interp.label_ptr,
                     .return_arity = 0,
                     .inst = self,
                 }, f.locals_count);
@@ -347,11 +347,11 @@ pub const Instance = struct {
         var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
         var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
 
-        const locals_start = interp.op_stack.len;
+        const locals_start = interp.op_ptr;
 
         try interp.pushFrame(Interpreter.Frame{
             .op_stack_len = locals_start,
-            .label_stack_len = interp.label_stack.len,
+            .label_stack_len = interp.label_ptr,
             .return_arity = 1,
             .inst = self,
         }, 0);
