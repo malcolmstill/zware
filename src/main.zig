@@ -6,6 +6,7 @@ pub const Function = @import("function.zig").Function;
 pub const Global = @import("global.zig").Global;
 pub const Memory = @import("memory.zig").Memory;
 pub const ValueType = @import("common.zig").ValueType;
+pub const WasmError = @import("function.zig").WasmError;
 
 test "" {
     _ = @import("validator.zig");

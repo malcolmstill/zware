@@ -18,6 +18,7 @@ const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.hash_map.StringHashMap;
 const ArrayList = std.ArrayList;
+const WasmError = foxwren.WasmError;
 
 // testrunner
 //
@@ -33,37 +34,37 @@ const ArrayList = std.ArrayList;
 
 var gpa = GeneralPurposeAllocator(.{}){};
 
-fn print(_: *Interpreter) !void {
+fn print(_: *Interpreter) WasmError!void {
     std.debug.warn("print\n", .{});
 }
 
-fn print_i32(interp: *Interpreter) !void {
+fn print_i32(interp: *Interpreter) WasmError!void {
     const value = try interp.popOperand(i32);
     std.debug.warn("print_i32: {}\n", .{value});
 }
 
-fn print_i64(interp: *Interpreter) !void {
+fn print_i64(interp: *Interpreter) WasmError!void {
     const value = try interp.popOperand(i64);
     std.debug.warn("print_i64: {}\n", .{value});
 }
 
-fn print_f32(interp: *Interpreter) !void {
+fn print_f32(interp: *Interpreter) WasmError!void {
     const value = try interp.popOperand(f32);
     std.debug.warn("print_f32: {}\n", .{value});
 }
 
-fn print_f64(interp: *Interpreter) !void {
+fn print_f64(interp: *Interpreter) WasmError!void {
     const value = try interp.popOperand(f64);
     std.debug.warn("print_f64: {}\n", .{value});
 }
 
-fn print_i32_f32(interp: *Interpreter) !void {
+fn print_i32_f32(interp: *Interpreter) WasmError!void {
     const value_f32 = try interp.popOperand(f32);
     const value_i32 = try interp.popOperand(i32);
     std.debug.warn("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
 }
 
-fn print_f64_f64(interp: *Interpreter) !void {
+fn print_f64_f64(interp: *Interpreter) WasmError!void {
     const value_f64_2 = try interp.popOperand(f64);
     const value_f64_1 = try interp.popOperand(f64);
     std.debug.warn("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });

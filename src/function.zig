@@ -6,6 +6,8 @@ const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
 
 pub const WasmError = error{
+    NotImplemented,
+    StackUnderflow,
     StackOverflow,
     TrapUnreachable,
     LabelStackUnderflow,
@@ -17,6 +19,15 @@ pub const WasmError = error{
     BadFunctionIndex,
     ControlStackOverflow,
     BadInstanceIndex,
+    DivisionByZero,
+    Overflow,
+    InvalidConversion,
+    OutOfBoundsMemoryAccess,
+    IndirectCallTypeMismatch,
+    UndefinedElement,
+    //
+    BadMemoryIndex, // TODO: I think we won't see this with validation
+    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
 };
 
 pub const Function = union(enum) {

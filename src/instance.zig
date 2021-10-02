@@ -121,7 +121,7 @@ pub const Instance = struct {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
             } else {
-                const value = if (global_def.code) |code| try self.invokeExpression(self.module.parsed_code.items[code.offset .. code.offset + code.count], u64, .{}) else 0;
+                const value = if (global_def.code) |code| try self.invokeExpression(code.offset, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
                     .value = value,
                     .mutability = global_def.mutability,
@@ -158,14 +158,14 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(self.module.parsed_code.items[data.offset.offset .. data.offset.offset + data.offset.count], u32, .{});
+            const offset = try self.invokeExpression(data.offset.offset, u32, .{});
             try memory.check(offset, data.data);
         }
 
         // 4b. Check all elements
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
+            const offset = try self.invokeExpression(segment.offset.offset, u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
 
@@ -174,14 +174,14 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(self.module.parsed_code.items[data.offset.offset .. data.offset.offset + data.offset.count], u32, .{});
+            const offset = try self.invokeExpression(data.offset.offset, u32, .{});
             try memory.copy(offset, data.data);
         }
 
         // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(self.module.parsed_code.items[segment.offset.offset .. segment.offset.offset + segment.offset.count], u32, .{});
+            const offset = try self.invokeExpression(segment.offset.offset, u32, .{});
 
             var data = segment.data;
             var j: usize = 0;
@@ -232,6 +232,7 @@ pub const Instance = struct {
     //
     // Similar to invoke, but without some type checking
     pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
+        std.debug.warn("invoke\n", .{});
         // 1.
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
@@ -265,7 +266,7 @@ pub const Instance = struct {
 
                 // 9.
                 for (out) |_, out_index| {
-                    out[out_index] = interp.popOperand(u64);
+                    out[out_index] = try interp.popOperand(u64);
                 }
             },
             .host_function => |host_func| {
@@ -302,14 +303,15 @@ pub const Instance = struct {
         }
     }
 
-    pub fn invokeExpression(self: *Instance, expr: []Instruction, comptime Result: type, comptime options: InterpreterOptions) !Result {
+    pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: InterpreterOptions) !Result {
+        std.debug.warn("invokeExpression\n", .{});
         var stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
         var interp = Interpreter.init(stack[0..], self);
 
         try interp.pushFrame(0, 1, self);
         try interp.pushLabel(1, 0, 0);
 
-        try interp.invoke(0);
+        try interp.invoke(start);
 
         switch (Result) {
             // u64 => return interp.popAnyOperand(),

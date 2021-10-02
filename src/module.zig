@@ -853,6 +853,9 @@ pub const Module = struct {
             try self.parsed_code.append(instr);
         }
 
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
+
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
         // 2. Make a second pass where we fix up the continuations for
@@ -877,6 +880,9 @@ pub const Module = struct {
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
+
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 

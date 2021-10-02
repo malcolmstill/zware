@@ -47,13 +47,18 @@ pub const Interpreter = struct {
 
             var buf: [10]u8 = undefined;
 
-            stdout.print("Continue:", .{}) catch |e| return;
-            _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
+            // stdout.print("Continue:", .{}) catch |e| return;
+            // _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
 
             std.debug.warn("next instruction = {}\n", .{next_instr});
         }
 
         return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, sp, stack, err });
+    }
+
+    fn impl_ni(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        std.debug.warn("not implemented: {any}\n", .{code[ip]});
+        err.* = error.NotImplemented;
     }
 
     fn impl_unreachable(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -184,6 +189,95 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
     }
 
+    fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.load8_s";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+
+        const address = peekOperand(u32, stack, sp, 0);
+        std.debug.warn("offset = {}, address = {}\n", .{ offset, address });
+
+        const value = memory.read(u8, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.load8_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.load8_u";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u8, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.load16_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.load16_s";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u16, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.load16_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.load16_u";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u16, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
 
@@ -227,28 +321,24 @@ pub const Interpreter = struct {
     }
 
     fn impl_return(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
-
-        // const frame = peekFrame(stack, self.fp);
-        const frame_previous_fp = stack[self.fp];
-        const frame_locals_count = stack[self.fp + 1];
-        // const label = peekLabel(stack, self.fp + 4);
-        // const n = label.return_arity;
-        const label_previous_lp = stack[self.fp + 4];
-        const n = stack[self.fp + 4 + 1];
-        const label_ip_start = stack[self.fp + 4 + 2];
+        const frame = peekFrame(stack, self.fp);
+        // const frame_previous_fp = stack[self.fp];
+        // const frame_locals_count = stack[self.fp + 1];
+        const label = peekLabel(stack, self.fp + 4);
+        const n = label.return_arity;
 
         var i: usize = 0;
         while (i < n) : (i += 1) {
-            stack[self.fp - frame_locals_count + i] = stack[sp - n + i];
+            stack[self.fp - frame.locals_count + i] = stack[sp - n + i];
         }
 
-        const next_sp = self.fp - frame_locals_count + n;
-        self.fp = frame_previous_fp;
-        self.lp = label_previous_lp;
-        const next_ip = label_ip_start;
-        // self.continuation_end = label.ip_end;
+        const next_sp = self.fp - frame.locals_count + n;
+        self.fp = frame.previous_fp;
+        self.lp = label.previous_lp;
+        const next_ip = label.ip_start;
+        self.continuation_end = label.ip_end;
 
-        if (frame_previous_fp == 0xFFFFFFFFFFFFFFFF) {
+        if (frame.previous_fp == 0xFFFFFFFFFFFFFFFF) {
             self.sp = sp;
             return;
         }
@@ -312,22 +402,22 @@ pub const Interpreter = struct {
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
-        impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if,  impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_end,     impl_nop, impl_nop, impl_nop, impl_return,
-        impl_call,        impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_local_get,   impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_i32_const, impl_nop,   impl_nop,  impl_nop, impl_nop, impl_i32_eq, impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_i32_add, impl_i32_sub, impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
-        impl_nop,         impl_nop,       impl_nop,   impl_nop,  impl_nop, impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_nop,     impl_nop, impl_nop, impl_nop, impl_nop,
+        impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_end,     impl_ni,        impl_ni,        impl_ni,         impl_return,
+        impl_call,        impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_local_get,   impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_i32_const, impl_ni,    impl_ni,   impl_ni, impl_ni, impl_i32_eq, impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_i32_add, impl_i32_sub, impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
     };
 
     pub fn invoke(self: *Interpreter, ip: usize) !void {
@@ -429,9 +519,9 @@ pub const Interpreter = struct {
     //     return sp + 1;
     // }
 
-    pub fn popOperand(self: *Interpreter, comptime T: type) T {
+    pub fn popOperand(self: *Interpreter, comptime T: type) WasmError!T {
         // TODO: if we've validated the wasm, do we need to perform this check:
-        // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
+        if (self.stack.len == 0) return error.StackUnderflow;
         // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
         defer self.sp -= 1;
         std.debug.warn("popOperand sp = {}\n", .{self.sp});
@@ -466,8 +556,21 @@ pub const Interpreter = struct {
     //     return stack
     // }
 
-    fn peekNthOperand(self: *Interpreter, index: u32) u64 {
-        return self.op_stack[self.op_stack.len - index - 1];
+    // fn peekNthOperand(self: *Interpreter, index: u32) u64 {
+    // return self.op_stack[self.op_stack.len - index - 1];
+    // }
+
+    pub fn peekOperand(comptime T: type, stack: []u64, sp: usize, n: usize) T {
+        const value = stack[sp - 1 - n];
+        return switch (T) {
+            i32 => @bitCast(i32, @truncate(u32, value)),
+            i64 => @bitCast(i64, value),
+            f32 => @bitCast(f32, @truncate(u32, value)),
+            f64 => @bitCast(f64, value),
+            u32 => @truncate(u32, value), // TODO: figure out types
+            u64 => value,
+            else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
+        };
     }
 
     pub fn pushFrame(self: *Interpreter, locals_count: usize, return_arity: usize, inst: *Instance) !void {
