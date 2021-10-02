@@ -6,6 +6,7 @@ const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
 
 pub const WasmError = error{
+    StackOverflow,
     TrapUnreachable,
     LabelStackUnderflow,
     LabelStackOverflow,

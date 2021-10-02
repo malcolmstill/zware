@@ -10,108 +10,90 @@ const WasmError = @import("function.zig").WasmError;
 const instruction = @import("instruction.zig");
 const Opcode = @import("instruction.zig").Opcode;
 
-// Interpreter:
-//
-// The Interpreter interprets WebAssembly bytecode, i.e. it
-// is the engine of execution and the whole reason we're here.
-//
-// Whilst executing code, the Interpreter maintains three stacks.
-// An operand stack, a control stack and a label stack.
-// The WebAssembly spec models execution as a single stack where operands,
-// activation frames, and labels are all interleaved. Here we split
-// those out for convenience.
-//
-// Note: I had considered four stacks (separating out the params / locals) to
-// there own stack, but I don't think that's necessary.
-//
 pub const Interpreter = struct {
-    op_stack: []u64 = undefined,
-    op_ptr: usize = 0,
-    frame_stack_mem: []Frame = undefined,
-    frame_ptr: usize = 0,
-    label_stack_mem: []Label = undefined,
-    label_ptr: usize = 0,
+    stack: []u64 = undefined,
+    sp: usize = 0,
+    lp: usize = 0,
+    fp: usize = 0,
 
-    // continuation: []Instruction = undefined,
     inst: *Instance = undefined,
-    // code: []Instruction = undefined,
     ip: usize = 0,
     continuation_end: usize = 0,
     function_start: usize = 0,
 
-    pub fn init(op_stack: []u64, frame_stack_mem: []Frame, label_stack_mem: []Label, inst: *Instance) Interpreter {
+    pub fn init(stack: []u64, inst: *Instance) Interpreter {
         return Interpreter{
-            .op_stack = op_stack,
-            .frame_stack_mem = frame_stack_mem,
-            .label_stack_mem = label_stack_mem,
+            .stack = stack,
             .inst = inst,
         };
     }
 
-    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const next_instr = code[next_ip];
-
-        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, op_ptr, op_stack, err });
+    fn print_stack(stack: []u64, sp: usize) void {
+        std.debug.warn("=stack===============\n", .{});
+        for (stack[0..sp]) |s, i| {
+            std.debug.warn("{}: {x}\n", .{ i, s });
+        }
+        std.debug.warn("=====================\n\n", .{});
     }
 
-    fn impl_unreachable(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
+    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const next_instr = code[next_ip];
+
+        if (std.builtin.mode == .Debug) {
+            std.debug.warn("fp = {}, lp = {}, sp = {}\n", .{ fp, lp, sp });
+            print_stack(stack, sp);
+            const stdin = std.io.getStdIn().reader();
+            const stdout = std.io.getStdOut().writer();
+
+            var buf: [10]u8 = undefined;
+
+            stdout.print("Continue:", .{}) catch |e| return;
+            _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
+
+            std.debug.warn("next instruction = {}\n", .{next_instr});
+        }
+
+        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, fp, lp, sp, stack, err });
+    }
+
+    fn impl_unreachable(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
         err.* = error.TrapUnreachable;
     }
 
-    fn impl_nop(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr, op_stack, err });
+    fn impl_nop(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp, stack, err });
     }
 
-    fn impl_block(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const block = instr.block;
+    fn impl_block(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const block = code[ip].block;
 
-        self.pushLabel(Label{
-            .return_arity = block.return_arity,
-            .op_stack_len = op_ptr - block.param_arity, // equivalent to pop and push
-            // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
-            .ip_start = block.ip,
-            .ip_end = block.ip_end,
-        }) catch |e| {
+        const new_sp = pushLabelInternal(stack, lp, sp, block.return_arity, block.ip, block.ip_end) catch |e| {
             err.* = e;
             return;
         };
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp, stack, err });
     }
 
-    fn impl_loop(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const block = instr.loop;
+    fn impl_loop(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const loop = code[ip].loop;
 
-        self.pushLabel(Label{
-            // note that we use block_params rather than block_returns for return arity:
-            .return_arity = block.param_arity,
-            .op_stack_len = op_ptr - block.param_arity,
-            // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count],
-            .ip_start = block.ip,
-            .ip_end = block.ip_end,
-        }) catch |e| {
+        const new_sp = pushLabelInternal(stack, lp, sp, loop.param_arity, loop.ip, loop.ip_end) catch |e| {
             err.* = e;
             return;
         };
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp, stack, err });
     }
 
-    fn impl_if(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const block = instr.@"if";
+    fn impl_if(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const block = code[ip].@"if";
         var next_ip = ip;
+        var next_sp = sp;
+        var next_lp = lp;
 
-        // const condition = self.popOperand(u32);
-        const condition = op_stack[op_ptr - 1];
-        // std.debug.warn("condition = {}, next_ip = {}\n", .{ condition, next_ip });
+        const condition = stack[next_sp - 1];
+        next_sp -= 1;
 
         if (condition == 0) {
             // std.debug.warn("IF == FALSE\n", .{});
@@ -141,31 +123,23 @@ pub const Interpreter = struct {
             //     };
             // }
         } else {
-            // std.debug.warn("IF == TRUE\n", .{});
-            // We are inside the if branch
             next_ip = ip + 1;
-            self.pushLabel(Label{
-                .return_arity = block.return_arity,
-                .op_stack_len = op_ptr - block.param_arity,
-                // .continuation = self.inst.module.parsed_code.items[block.continuation.offset .. block.continuation.offset + block.continuation.count], // block.continuation,
-                .ip_start = block.ip,
-                .ip_end = block.ip_end,
-            }) catch |e| {
+            next_lp = sp;
+            next_sp = pushLabelInternal(stack, lp, next_sp, block.return_arity, block.ip, block.ip_end) catch |e| {
                 err.* = e;
                 return;
             };
         }
 
-        // if (self.continuation.len == 0) return;
-        // std.debug.warn("IF: next ip = {}\n", .{next_ip});
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, op_ptr - 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, fp, next_lp, next_sp, stack, err });
     }
 
-    fn impl_end(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        // std.debug.warn("impl_end: instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const label = self.popLabel();
+    fn impl_end(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const label = peekLabel(stack, lp);
         var next_ip = ip + 1;
-        var next_op_ptr = op_ptr;
+        var next_sp = sp;
+        var next_lp = lp;
+        var next_fp = fp;
 
         // It seems like we need to special case end for a function call. This
         // doesn't seem quite right because the spec doesn't mention it. On
@@ -174,157 +148,141 @@ pub const Interpreter = struct {
         // out of code in the current function, i.e. self.continuation is empty
         // if (self.continuation.len == 0) {
         if (self.ip == self.continuation_end) {
-            const frame = self.peekNthFrame(0);
+            // const frame = self.peekNthFrame(0);
+            const frame = peekFrame(stack, fp);
             const n = label.return_arity;
-            var dst = op_stack[label.op_stack_len .. label.op_stack_len + n];
-            const src = op_stack[op_ptr - n ..];
+            var dst = stack[fp .. fp + n];
+            const src = stack[sp - n .. sp];
             mem.copy(u64, dst, src);
 
             // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-            next_op_ptr = label.op_stack_len + n;
-            // self.label_stack = self.label_stack[0..frame.label_stack_len];
-            self.label_ptr = frame.label_stack_len;
-            // self.continuation = label.continuation;
-            // self.ip = label.ip_start;
+            next_sp = fp + n;
+            next_fp = frame.previous_fp;
+            next_lp = label.previous_lp;
             next_ip = label.ip_start;
             self.continuation_end = label.ip_end;
-            _ = self.popFrame();
-            self.inst = frame.inst;
-        }
+            // _ = self.popFrame();
+            self.inst = frame.instance;
+        } else {}
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_op_ptr, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, fp, lp, sp, stack, err });
     }
 
-    fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const instr = code[ip];
-        const local_index = instr.@"local.get";
+    fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const local_index = code[ip].@"local.get";
 
-        const frame = self.peekNthFrame(0);
-        const local_value: u64 = frame.locals[local_index];
-        // std.debug.warn("instr = {}, ip = {}, value = {}\n", .{ @as(Opcode, instr), ip, local_value });
-        _ = self.pushOperand2(u64, op_ptr, local_value) catch |e| {
+        // std.debug.warn("fp = {}, lp = {}, sp = {}\n", .{ fp, lp, sp });
+        // print_stack(stack, sp);
+
+        const frame = peekFrame(stack, fp);
+        const local_value: u64 = stack[fp - frame.locals_count + local_index]; //frame.locals[local_index];
+
+        _ = pushOperand3(u64, stack, sp, local_value) catch |e| {
             err.* = e;
             return;
         };
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr + 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp + 1, stack, err });
     }
 
-    fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
+    fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
 
-        _ = self.pushOperand2(i32, op_ptr, instr.@"i32.const") catch |e| {
+        _ = pushOperand3(i32, stack, sp, instr.@"i32.const") catch |e| {
             err.* = e;
             return;
         };
 
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr + 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp + 1, stack, err });
     }
 
-    fn impl_i32_eq(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const c2 = op_stack[op_ptr - 1];
-        const c1 = op_stack[op_ptr - 2];
+    fn impl_i32_eq(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = stack[sp - 1];
+        const c1 = stack[sp - 2];
 
-        op_stack[op_ptr - 2] = @as(u32, if (c1 == c2) 1 else 0);
-        // op_ptr -= 1;
+        stack[sp - 2] = @as(u32, if (c1 == c2) 1 else 0);
+        // sp -= 1;
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr - 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp - 1, stack, err });
     }
 
-    fn impl_i32_sub(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const c2 = op_stack[op_ptr - 1];
-        const c1 = op_stack[op_ptr - 2];
+    fn impl_i32_sub(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = stack[sp - 1];
+        const c1 = stack[sp - 2];
 
-        op_stack[op_ptr - 2] = c1 -% c2;
-        // op_ptr -= 1;
+        stack[sp - 2] = c1 -% c2;
+        // sp -= 1;
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr - 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp - 1, stack, err });
     }
 
-    fn impl_i32_add(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
-        const c2 = op_stack[op_ptr - 1];
-        const c1 = op_stack[op_ptr - 2];
+    fn impl_i32_add(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = stack[sp - 1];
+        const c1 = stack[sp - 2];
 
-        op_stack[op_ptr - 2] = c1 +% c2;
-        // op_ptr -= 1;
+        stack[sp - 2] = c1 +% c2;
+        // sp -= 1;
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, op_ptr - 1, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, fp, lp, sp - 1, stack, err });
     }
 
-    fn impl_return(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
+    fn impl_return(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
-        const frame = self.peekNthFrame(0);
+        var next_ip = ip;
+        var next_sp = sp;
+        var next_lp = lp;
+        var next_fp = fp;
 
-        const n = frame.return_arity;
+        const frame = peekFrame(stack, fp);
+        const label = peekLabel(stack, fp + 4);
+        const n = label.return_arity;
+        var dst = stack[fp - frame.locals_count .. fp - frame.locals_count + n];
+        const src = stack[sp - n .. sp];
+        mem.copy(u64, dst, src);
 
-        const label = self.label_stack_mem[frame.label_stack_len];
-        // self.continuation = label.continuation; FIX
-        var next_ip = label.ip_start;
+        next_sp = fp - frame.locals_count + n;
+        next_fp = frame.previous_fp;
+        next_lp = label.previous_lp;
+        next_ip = label.ip_start;
         self.continuation_end = label.ip_end;
-        // std.debug.warn("return next_ip = {}, continuation-end = {}\n", .{ next_ip, self.continuation_end });
 
-        var i: usize = 0;
-        while (i < n) : (i += 1) {
-            op_stack[label.op_stack_len + i] = op_stack[op_ptr - n + i];
+        if (frame.previous_fp == 0xFFFFFFFFFFFFFFFF) {
+            self.sp = sp;
+            return;
         }
-
-        // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-        const next_op_ptr = label.op_stack_len + n;
-        // self.label_stack = self.label_stack[0..frame.label_stack_len];
-        self.label_ptr = frame.label_stack_len;
-
-        _ = self.popFrame();
-        self.inst = frame.inst;
-
-        if (self.frame_ptr == 0) return;
-        // if (self.continuation.len == 0) return;
-        // if (next_ip == self.function_start) return; // if our label is the
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_op_ptr, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_fp, lp, next_sp, stack, err });
     }
 
-    fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, op_ptr: usize, op_stack: []u64, err: *?WasmError) void {
+    fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, fp: usize, lp: usize, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
-        //std.debug.warn("instr = {}, ip = {}\n", .{ @as(Opcode, instr), ip });
+
         const function_index = instr.call;
         const function = self.inst.getFunc(function_index) catch |e| {
             err.* = e;
             return;
         };
         var next_ip = ip;
-        var next_op_ptr = op_ptr;
+        var next_sp = sp;
+        var next_lp = lp;
+        var next_fp = fp;
 
         switch (function) {
             .function => |f| {
-                self.pushNOperands(u64, f.locals_count, 0) catch |e| {
-                    err.* = e;
-                    return;
-                };
-                next_op_ptr += f.locals_count;
+                // self.pushNOperands(u64, f.locals_count, 0) catch |e| {
+                //     err.* = e;
+                //     return;
+                // };
+                next_sp += f.locals_count;
 
                 // Consume parameters from the stack
-                self.pushFrame(Frame{
-                    .op_stack_len = op_ptr - f.params.len - f.locals_count,
-                    .label_stack_len = self.label_ptr,
-                    .return_arity = f.results.len,
-                    .inst = self.inst,
-                }, f.locals_count + f.params.len) catch |e| {
+                next_fp = next_sp;
+                next_sp = pushFrameInternal(stack, fp, next_sp, f.params.len + f.locals_count, f.results.len, self.inst) catch |e| {
                     err.* = e;
                     return;
                 };
 
                 // Our continuation is the code after call
-                self.pushLabel(Label{
-                    .return_arity = f.results.len,
-                    .op_stack_len = op_ptr - f.params.len - f.locals_count,
-                    // .continuation = self.continuation,
-                    .ip_start = ip + 1,
-                    .ip_end = self.continuation_end,
-                }) catch |e| {
+                next_sp = pushLabelInternal(stack, next_lp, next_sp, f.results.len, ip + 1, self.continuation_end) catch |e| {
                     err.* = e;
                     return;
                 };
@@ -346,31 +304,10 @@ pub const Interpreter = struct {
             },
         }
 
-        // std.debug.warn("\n", .{});
-        // if (self.continuation.len == 0) return;
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_op_ptr, op_stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_fp, lp, next_sp, stack, err });
     }
 
-    const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
-
-    // inline fn lookup(instr: Instruction) InstructionFunction {
-    //     return switch (instr) {
-    //         .@"unreachable" => impl_unreachable,
-    //         .nop => impl_nop,
-    //         .block => impl_block,
-    //         .loop => impl_loop,
-    //         .@"if" => impl_if,
-    //         .end => impl_end,
-    //         .@"local.get" => impl_local_get,
-    //         .@"i32.const" => impl_i32_const,
-    //         .@"return" => impl_return,
-    //         .@"i32.eq" => impl_i32_eq,
-    //         .@"i32.sub" => impl_i32_sub,
-    //         .@"i32.add" => impl_i32_add,
-    //         .call => impl_call,
-    //         else => unreachable,
-    //     };
-    // }
+    const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, usize, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
         impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if,  impl_nop, impl_nop,    impl_nop, impl_nop, impl_nop, impl_nop,     impl_end,     impl_nop, impl_nop, impl_nop, impl_return,
@@ -392,40 +329,14 @@ pub const Interpreter = struct {
     };
 
     pub fn invoke(self: *Interpreter, ip: usize) !void {
-        // self.continuation = code;
-        // const instr = self.continuation[0];
         const instr = self.inst.module.parsed_code.items[ip];
-        // self.continuation = self.continuation[1..];
-
         var err: ?WasmError = null;
 
-        // @call(.{}, dispatj(instr), .{ self, instr, &err });
-        // @call(.{}, lookup(instr), .{ self, ip, &err });
+        std.debug.warn("fp = {}, lp = {}, sp = {}\n", .{ self.fp, self.lp, self.sp });
+        print_stack(self.stack, self.sp);
 
-        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items, self.op_ptr, self.op_stack, &err });
+        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items, self.fp, self.lp, self.sp, self.stack, &err });
         if (err) |e| return e;
-    }
-
-    fn debug(self: *Interpreter, opcode: Instruction) void {
-        std.debug.warn("\n=====================================================\n", .{});
-        std.debug.warn("after: {}\n", .{opcode});
-        var i: usize = 0;
-        while (i < self.op_stack.len) : (i += 1) {
-            std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        }
-        std.debug.warn("\n", .{});
-
-        i = 0;
-        while (i < self.label_stack.len) : (i += 1) {
-            std.debug.warn("label_stack[{}] = [{}, {}, {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].continuation });
-        }
-        std.debug.warn("\n", .{});
-
-        i = 0;
-        while (i < self.frame_stack.len) : (i += 1) {
-            std.debug.warn("frame_stack[{}] = [{}, {}, {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
-        }
-        std.debug.warn("=====================================================\n", .{});
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
@@ -445,12 +356,12 @@ pub const Interpreter = struct {
     }
 
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
-        if (self.op_ptr == self.op_stack.len) return error.OperandStackOverflow;
+        if (self.sp == self.stack.len) return error.OperandStackOverflow;
 
         // self.op_stack = self.op_stack[0 .. self.op_stack.len + 1];
-        self.op_ptr += 1;
+        self.sp += 1;
 
-        self.op_stack[self.op_ptr - 1] = switch (T) {
+        self.stack[self.sp - 1] = switch (T) {
             i32 => @as(u64, @bitCast(u32, value)),
             i64 => @bitCast(u64, value),
             f32 => @as(u64, @bitCast(u32, value)),
@@ -459,38 +370,55 @@ pub const Interpreter = struct {
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
+    }
+
+    pub fn pushOperand3(comptime T: type, stack: []u64, sp: usize, value: T) !usize {
+        if (sp == stack.len) return error.StackOverflow;
+
+        stack[sp] = switch (T) {
+            i32 => @as(u64, @bitCast(u32, value)),
+            i64 => @bitCast(u64, value),
+            f32 => @as(u64, @bitCast(u32, value)),
+            f64 => @bitCast(u64, value),
+            u32 => @as(u64, value), // TODO: figure out types
+            u64 => value,
+            else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
+        };
+
+        return sp + 1;
     }
 
     pub fn pushNOperands(self: *Interpreter, comptime T: type, count: usize) !void {
-        if (self.op_ptr + count > self.op_stack.len) return error.OperandStackOverflow;
+        if (self.sp + count > self.op_stack.len) return error.OperandStackOverflow;
 
-        self.op_ptr += count;
+        self.sp += count;
     }
 
-    pub fn pushOperand2(self: *Interpreter, comptime T: type, op_ptr: usize, value: T) !usize {
-        if (op_ptr == self.op_stack.len) return error.OperandStackOverflow;
+    // pub fn pushOperand2(self: *Interpreter, comptime T: type, sp: usize, value: T) !usize {
+    //     if (sp == self.op_stack.len) return error.OperandStackOverflow;
 
-        // self.op_stack = self.op_stack[0 .. self.op_stack.len + 1];
+    //     // self.op_stack = self.op_stack[0 .. self.op_stack.len + 1];
 
-        self.op_stack[op_ptr] = switch (T) {
-            i32 => @as(u64, @bitCast(u32, value)),
-            i64 => @bitCast(u64, value),
-            f32 => @as(u64, @bitCast(u32, value)),
-            f64 => @bitCast(u64, value),
-            u32 => @as(u64, value), // TODO: figure out types
-            u64 => value,
-            else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
-        };
-        return op_ptr + 1;
-    }
+    //     self.op_stack[sp] = switch (T) {
+    //         i32 => @as(u64, @bitCast(u32, value)),
+    //         i64 => @bitCast(u64, value),
+    //         f32 => @as(u64, @bitCast(u32, value)),
+    //         f64 => @bitCast(u64, value),
+    //         u32 => @as(u64, value), // TODO: figure out types
+    //         u64 => value,
+    //         else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
+    //     };
+    //     return sp + 1;
+    // }
 
     pub fn popOperand(self: *Interpreter, comptime T: type) T {
         // TODO: if we've validated the wasm, do we need to perform this check:
         // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
         // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
-        defer self.op_ptr -= 1;
+        defer self.sp -= 1;
+        std.debug.warn("popOperand sp = {}\n", .{self.sp});
 
-        const value = self.op_stack[self.op_ptr - 1];
+        const value = self.stack[self.sp - 1];
         return switch (T) {
             i32 => @bitCast(i32, @truncate(u32, value)),
             i64 => @bitCast(i64, value),
@@ -510,36 +438,52 @@ pub const Interpreter = struct {
         self.op_stack[self.op_stack.len - 1] = value;
     }
 
-    pub fn popAnyOperand(self: *Interpreter) u64 {
-        // if (self.op_stack.len == 0) return error.OperandStackUnderflow;
-        // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
-        defer self.op_ptr -= 1;
+    // pub fn popAnyOperand(self: *Interpreter) u64 {
+    //     defer self.sp -= 1;
 
-        return self.op_stack[self.op_ptr - 1];
-    }
+    //     return self.op_stack[self.sp - 1];
+    // }
+
+    // pub fn peekAnyOperand(stack: []u64, sp: usize) u64 {
+    //     return stack
+    // }
 
     fn peekNthOperand(self: *Interpreter, index: u32) u64 {
-        // if (index + 1 > self.op_stack.len) return error.OperandStackUnderflow;
         return self.op_stack[self.op_stack.len - index - 1];
     }
 
-    // TODO: if the code is validated, do we need to know the params count
-    //       i.e. can we get rid of the dependency on params so that we don't
-    //       have to lookup a function (necessarily)
-    pub fn pushFrame(self: *Interpreter, frame: Frame, params_and_locals_count: usize) !void {
-        if (self.frame_ptr == self.frame_stack_mem.len) return error.ControlStackOverflow;
-        // self.frame_stack = self.frame_stack_mem[0 .. self.frame_ptr + 1];
-        self.frame_ptr += 1;
+    pub fn pushFrame(self: *Interpreter, locals_count: usize, return_arity: usize, inst: *Instance) !void {
+        self.fp = self.sp;
+        self.sp = try pushFrameInternal(self.stack, 0xFFFFFFFFFFFFFFFF, self.sp, locals_count, return_arity, inst);
+    }
 
-        const current_frame = &self.frame_stack_mem[self.frame_ptr - 1];
-        current_frame.* = frame;
-        // TODO: index out of bounds (error if we've run out of operand stack space):
-        current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
+    fn pushFrameInternal(stack: []u64, fp: usize, sp: usize, locals_count: usize, return_arity: usize, inst: *Instance) !usize {
+        var new_sp = sp;
+
+        // 1. Push previous frame pointer
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = fp;
+
+        // 2. Push locals count (params + locals) for this function
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = locals_count;
+
+        // 3. Push return arity for this function
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = return_arity;
+
+        // 4. Push instance for this function
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = @ptrToInt(inst); // TODO: make inst an index into a list of instances?
+
+        return new_sp;
     }
 
     pub fn popFrame(self: *Interpreter) Frame {
-        // if (self.frame_stack.len == 0) return error.ControlStackUnderflow;
-        // defer self.frame_stack = self.frame_stack[0 .. self.frame_stack.len - 1];
         defer self.frame_ptr -= 1;
 
         return self.frame_stack_mem[self.frame_ptr - 1];
@@ -550,21 +494,60 @@ pub const Interpreter = struct {
     // Returns nth label on the Label stack relative to the top of the stack
     //
     fn peekNthFrame(self: *Interpreter, index: u32) *Frame {
-        // if (index + 1 > self.frame_stack.len) return error.ControlStackUnderflow;
         return &self.frame_stack_mem[self.frame_ptr - index - 1];
     }
 
-    pub fn pushLabel(self: *Interpreter, label: Label) !void {
-        if (self.label_ptr == self.label_stack_mem.len) return error.LabelStackOverflow;
-        // self.label_stack = self.label_stack_mem[0 .. self.label_stack.len + 1];
-        self.label_ptr += 1;
-        const current_label = self.peekNthLabel(0);
-        current_label.* = label;
+    pub fn pushLabel(self: *Interpreter, return_arity: usize, ip_start: usize, ip_end: usize) !void {
+        const new_lp = self.sp;
+        self.sp = try pushLabelInternal(self.stack, self.lp, self.sp, return_arity, ip_start, ip_end);
+        self.lp = new_lp;
     }
 
-    pub fn popLabel(self: *Interpreter) Label {
-        // if (self.label_stack.len == 0) return error.ControlStackUnderflow;
-        // defer self.label_stack = self.label_stack[0 .. self.label_stack.len - 1];
+    pub fn pushLabelInternal(stack: []u64, lp: usize, sp: usize, return_arity: usize, ip_start: usize, ip_end: usize) !usize {
+        var new_sp = sp;
+
+        // 1. Push previous label pointer
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = lp;
+
+        // 2. Push return arity of label
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = return_arity;
+
+        // 3. Push ip start
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = ip_start;
+
+        // 4. Push ip end
+        if (new_sp == stack.len) return error.StackOverflow;
+        new_sp += 1;
+        stack[new_sp - 1] = ip_end;
+
+        return new_sp;
+    }
+
+    pub fn peekFrame(stack: []u64, fp: usize) Frame {
+        return Frame{
+            .previous_fp = stack[fp],
+            .locals_count = stack[fp + 1],
+            .return_arity = stack[fp + 2],
+            .instance = @intToPtr(*Instance, stack[fp + 3]),
+        };
+    }
+
+    pub fn peekLabel(stack: []u64, lp: usize) Label {
+        return Label{
+            .previous_lp = stack[lp],
+            .return_arity = stack[lp + 1],
+            .ip_start = stack[lp + 2],
+            .ip_end = stack[lp + 3],
+        };
+    }
+
+    pub fn popLabel(stack: []u64, lp: usize, sp: usize) Label {
         defer self.label_ptr -= 1;
 
         return self.label_stack_mem[self.label_ptr - 1];
@@ -586,7 +569,6 @@ pub const Interpreter = struct {
     // popLabels pops labels up to and including `target`. Returns the
     // the label at `target`.
     pub fn popLabels(self: *Interpreter, target: u32) Label {
-        // if (target >= self.label_stack.len) return error.LabelStackUnderflow;
         const target_label = self.label_stack[self.label_stack.len - target - 1];
 
         self.label_stack = self.label_stack[0 .. self.label_stack.len - target - 1];
@@ -595,80 +577,17 @@ pub const Interpreter = struct {
         return target_label;
     }
 
-    pub const Frame = struct {
-        locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
-        return_arity: usize = 0,
-        op_stack_len: usize,
-        label_stack_len: usize,
-        inst: *Instance,
+    const Frame = struct {
+        previous_fp: usize,
+        locals_count: usize, // params + locals
+        return_arity: usize,
+        instance: *Instance,
     };
 
-    // Label
-    //
-    // - code: the code we should interpret after `end`
-    pub const Label = struct {
-        return_arity: usize = 0,
-        // continuation: []Instruction = undefined,
-        ip_start: usize = 0,
-        ip_end: usize = 0,
-        op_stack_len: usize, // u32?
+    const Label = struct {
+        previous_lp: usize,
+        return_arity: usize,
+        ip_start: usize,
+        ip_end: usize,
     };
 };
-
-const testing = std.testing;
-
-test "operand push / pop test" {
-    var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
-    var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
-
-    var inst: Instance = undefined;
-
-    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &inst);
-
-    try i.pushOperand(i32, 22);
-    try i.pushOperand(i32, -23);
-    try i.pushOperand(i64, 44);
-    try i.pushOperand(i64, -43);
-    try i.pushOperand(f32, 22.07);
-    try i.pushOperand(f64, 43.07);
-
-    // stack overflow:
-    if (i.pushOperand(i32, 0)) |_| {
-        return error.TestExpectedError;
-    } else |err| {
-        if (err != error.OperandStackOverflow) return error.TestUnexpectedError;
-    }
-
-    try testing.expectEqual(@as(f64, 43.07), try i.popOperand(f64));
-    try testing.expectEqual(@as(f32, 22.07), try i.popOperand(f32));
-    try testing.expectEqual(@as(i64, -43), try i.popOperand(i64));
-    try testing.expectEqual(@as(i64, 44), try i.popOperand(i64));
-    try testing.expectEqual(@as(i32, -23), try i.popOperand(i32));
-    try testing.expectEqual(@as(i32, 22), try i.popOperand(i32));
-
-    // stack underflow:
-    if (i.popOperand(i32)) |_| {
-        return error.TestExpectedError;
-    } else |err| {
-        if (err != error.OperandStackUnderflow) return error.TestUnexpectedError;
-    }
-}
-
-test "simple interpret tests" {
-    var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
-    var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
-
-    var inst: Instance = undefined;
-    var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &inst);
-
-    try i.pushOperand(i32, 22);
-    try i.pushOperand(i32, -23);
-
-    var code = [_]Instruction{Instruction.@"i32.add"};
-
-    try i.invoke(code[0..]);
-
-    try testing.expectEqual(@as(i32, -1), try i.popOperand(i32));
-}
