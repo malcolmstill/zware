@@ -29,7 +29,7 @@ pub const Interpreter = struct {
     }
 
     fn print_stack(stack: []u64, sp: usize) void {
-        std.debug.warn("=stack===============\n", .{});
+        std.debug.warn("======= stack =======\n", .{});
         for (stack[0..sp]) |s, i| {
             std.debug.warn("{}: {x}\n", .{ i, s });
         }
@@ -171,22 +171,161 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, sp, stack, err });
     }
 
+    fn br_table(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const meta = code[ip].br_table;
+
+        const j = peekOperand(u32, stack, sp, 0);
+        const ls = self.inst.module.br_table_indices.items[meta.ls.offset .. meta.ls.offset + meta.ls.count];
+
+        const target = if (j >= ls.len) meta.ln else ls[j];
+
+        const lp = self.lp;
+        const lp_target = labelOffset(stack, lp, target);
+        const label = peekLabel(stack, lp);
+        const n = label.return_arity;
+
+        // Copy return values
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[lp + i] = stack[sp - n + i];
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
+    }
+
+    fn @"return"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const frame = peekFrame(stack, self.fp);
+        // const frame_previous_fp = stack[self.fp];
+        // const frame_locals_count = stack[self.fp + 1];
+        const label = peekLabel(stack, self.fp + 4);
+        const n = label.return_arity;
+
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[self.fp - frame.locals_count + i] = stack[sp - n + i];
+        }
+
+        const next_sp = self.fp - frame.locals_count + n;
+        self.fp = frame.previous_fp;
+        self.lp = label.previous_lp;
+        const next_ip = label.ip_start;
+        self.continuation_end = label.ip_end;
+
+        if (frame.previous_fp == 0xFFFFFFFFFFFFFFFF) {
+            self.sp = sp;
+            return;
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+    }
+
     fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const local_index = code[ip].@"local.get";
 
-        // std.debug.warn("fp = {}, lp = {}, sp = {}\n", .{ fp, lp, sp });
-        // print_stack(stack, sp);
-
         const frame = peekFrame(stack, self.fp);
-        const local_value: u64 = stack[self.fp - frame.locals_count + local_index]; //frame.locals[local_index];
+        const local_value: u64 = stack[self.fp - frame.locals_count + local_index];
 
-        // _ = pushOperand3(u64, stack, sp, local_value) catch |e| {
-        //     err.* = e;
-        //     return;
-        // };
-        _ = pushOperand4(u64, stack, sp, local_value);
+        _ = pushOperand3(u64, stack, sp, local_value) catch |e| {
+            err.* = e;
+            return;
+        };
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
+    }
+
+    fn @"local.set"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const local_index = code[ip].@"local.set";
+        const frame = peekFrame(stack, self.fp);
+
+        stack[self.fp - frame.locals_count + local_index] = peekOperand(u64, stack, sp, 0);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.load"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.load";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u32, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u64, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f32.load"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"f32.load";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(f32, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        std.debug.warn("value = {}, {x}, {x}\n", .{ value, value, @bitCast(u32, value) });
+
+        putOperand(f32, stack, sp, 0, value);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.load"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"f64.load";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(f64, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(f64, stack, sp, 0, value);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
     fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -198,9 +337,7 @@ pub const Interpreter = struct {
         };
 
         const offset = load_data.offset;
-
         const address = peekOperand(u32, stack, sp, 0);
-        std.debug.warn("offset = {}, address = {}\n", .{ offset, address });
 
         const value = memory.read(u8, offset, address) catch |e| {
             err.* = e;
@@ -221,7 +358,6 @@ pub const Interpreter = struct {
         };
 
         const offset = load_data.offset;
-
         const address = peekOperand(u32, stack, sp, 0);
 
         const value = memory.read(u8, offset, address) catch |e| {
@@ -243,7 +379,6 @@ pub const Interpreter = struct {
         };
 
         const offset = load_data.offset;
-
         const address = peekOperand(u32, stack, sp, 0);
 
         const value = memory.read(u16, offset, address) catch |e| {
@@ -265,7 +400,6 @@ pub const Interpreter = struct {
         };
 
         const offset = load_data.offset;
-
         const address = peekOperand(u32, stack, sp, 0);
 
         const value = memory.read(u16, offset, address) catch |e| {
@@ -278,14 +412,150 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
+    fn @"i64.load8_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load8_s";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u8, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load8_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load8_u";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u8, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load16_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load16_s";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u16, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load16_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load16_u";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u16, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load32_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load32_s";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u32, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.load32_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.load32_u";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const address = peekOperand(u32, stack, sp, 0);
+
+        const value = memory.read(u32, offset, address) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        stack[sp - 1] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
 
-        // _ = pushOperand3(i32, stack, sp, instr.@"i32.const") catch |e| {
-        //     err.* = e;
-        //     return;
-        // };
-        _ = pushOperand4(i32, stack, sp, instr.@"i32.const");
+        _ = pushOperand3(i32, stack, sp, instr.@"i32.const") catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
+    }
+
+    fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const instr = code[ip];
+
+        _ = pushOperand3(f32, stack, sp, instr.@"f32.const") catch |e| {
+            err.* = e;
+            return;
+        };
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
     }
@@ -318,32 +588,6 @@ pub const Interpreter = struct {
         // sp -= 1;
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
-    }
-
-    fn impl_return(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
-        const frame = peekFrame(stack, self.fp);
-        // const frame_previous_fp = stack[self.fp];
-        // const frame_locals_count = stack[self.fp + 1];
-        const label = peekLabel(stack, self.fp + 4);
-        const n = label.return_arity;
-
-        var i: usize = 0;
-        while (i < n) : (i += 1) {
-            stack[self.fp - frame.locals_count + i] = stack[sp - n + i];
-        }
-
-        const next_sp = self.fp - frame.locals_count + n;
-        self.fp = frame.previous_fp;
-        self.lp = label.previous_lp;
-        const next_ip = label.ip_start;
-        self.continuation_end = label.ip_end;
-
-        if (frame.previous_fp == 0xFFFFFFFFFFFFFFFF) {
-            self.sp = sp;
-            return;
-        }
-
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
     }
 
     fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -402,22 +646,22 @@ pub const Interpreter = struct {
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
-        impl_unreachable, impl_nop,       impl_block, impl_loop, impl_if, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_end,     impl_ni,        impl_ni,        impl_ni,         impl_return,
-        impl_call,        impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_local_get,   impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_i32_const, impl_ni,    impl_ni,   impl_ni, impl_ni, impl_i32_eq, impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_i32_add, impl_i32_sub, impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,    impl_ni,   impl_ni, impl_ni, impl_ni,     impl_ni, impl_ni, impl_ni, impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_end,     impl_ni,        impl_ni,        br_table,        @"return",
+        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, @"i32.load", @"i64.load", @"f32.load",  @"f64.load",  @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
+        @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_i32_const, impl_ni,         @"f32.const",    impl_ni,         impl_ni,         impl_i32_eq, impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_i32_add, impl_i32_sub, impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
     };
 
     pub fn invoke(self: *Interpreter, ip: usize) !void {
@@ -432,17 +676,22 @@ pub const Interpreter = struct {
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
-    pub fn branch(self: *Interpreter, target: u32) void {
-        const label = self.peekNthLabel(target);
+    pub fn branch(stack: []u64, sp: usize, lp: usize, target: u32) void {
+        const lp_target = labelOffset(stack, lp, target);
+        const label = peekLabel(stack, lp);
         const n = label.return_arity;
 
-        var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-        const src = self.op_stack[self.op_stack.len - n ..];
+        // var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+        // const src = self.op_stack[self.op_stack.len - n ..];
 
-        mem.copy(u64, dest, src);
+        // mem.copy(u64, dest, src);
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[lp + i] = stack[sp - n + i];
+        }
 
-        self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-        _ = self.popLabels(target);
+        // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
+        // _ = self.popLabels(target);
 
         self.continuation = label.continuation;
     }
@@ -573,6 +822,18 @@ pub const Interpreter = struct {
         };
     }
 
+    pub fn putOperand(comptime T: type, stack: []u64, sp: usize, n: usize, value: T) void {
+        stack[sp - 1 - n] = switch (T) {
+            i32 => @as(u64, @bitCast(u32, value)),
+            i64 => @bitCast(u64, value),
+            f32 => @as(u64, @bitCast(u32, value)),
+            f64 => @bitCast(u64, value),
+            u32 => @as(u64, value), // TODO: figure out types
+            u64 => value,
+            else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
+        };
+    }
+
     pub fn pushFrame(self: *Interpreter, locals_count: usize, return_arity: usize, inst: *Instance) !void {
         self.fp = self.sp;
         self.sp = try pushFrameInternal(self.stack, 0xFFFFFFFFFFFFFFFF, self.sp, locals_count, return_arity, inst);
@@ -649,6 +910,18 @@ pub const Interpreter = struct {
     fn peekNthLabel(self: *Interpreter, index: u32) *Label {
         // if (index + 1 > self.label_stack.len) return error.LabelStackUnderflow;
         return &self.label_stack_mem[self.label_ptr - index - 1];
+    }
+
+    fn labelOffset(stack: []u64, lp: usize, target: usize) usize {
+        if (target == 0) return lp;
+
+        var previous_lp = peekLabel(stack, lp).previous_lp;
+        var i: usize = 1;
+        while (i < target) : (i += 1) {
+            previous_lp = peekLabel(stack, previous_lp).previous_lp;
+        }
+
+        return previous_lp;
     }
 
     // popLabels
