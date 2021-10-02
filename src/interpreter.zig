@@ -72,12 +72,16 @@ pub const Interpreter = struct {
     fn impl_block(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const block = code[ip].block;
 
+        const new_lp = sp;
+
         const new_sp = pushLabelInternal(stack, self.lp, sp, block.return_arity, block.ip, block.ip_end) catch |e| {
             err.* = e;
             return;
         };
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+        self.lp = new_lp;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, new_sp, stack, err });
     }
 
     fn impl_loop(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -129,8 +133,9 @@ pub const Interpreter = struct {
             // }
         } else {
             next_ip = ip + 1;
-            self.lp = sp;
-            next_sp = pushLabelInternal(stack, self.lp, next_sp, block.return_arity, block.ip, block.ip_end) catch |e| {
+            const lp = self.lp;
+            self.lp = sp - 1;
+            next_sp = pushLabelInternal(stack, lp, next_sp, block.return_arity, block.ip, block.ip_end) catch |e| {
                 err.* = e;
                 return;
             };
@@ -140,44 +145,26 @@ pub const Interpreter = struct {
     }
 
     fn impl_end(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
-        const label = peekLabel(stack, self.lp);
         var next_ip = ip + 1;
         var next_sp = sp;
 
-        // It seems like we need to special case end for a function call. This
-        // doesn't seem quite right because the spec doesn't mention it. On
-        // call we push a label containing a continuation which is the code to
-        // resume after the call has returned. We want to use that if we've run
-        // out of code in the current function, i.e. self.continuation is empty
-        // if (self.continuation.len == 0) {
-        if (self.ip == self.continuation_end) {
-            // const frame = self.peekNthFrame(0);
-            const frame = peekFrame(stack, self.fp);
-            const n = label.return_arity;
-            var dst = stack[self.fp .. self.fp + n];
-            const src = stack[sp - n .. sp];
-            mem.copy(u64, dst, src);
+        const lp = self.lp;
+        const label = peekLabel(stack, lp);
+        const n = label.return_arity;
 
-            // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
-            next_sp = self.fp + n;
-            self.fp = frame.previous_fp;
-            self.lp = label.previous_lp;
-            next_ip = label.ip_start;
-            self.continuation_end = label.ip_end;
-            // _ = self.popFrame();
-            self.inst = frame.instance;
-        } else {}
+        // Copy return values
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[lp + i] = stack[sp - n + i];
+        }
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, sp, stack, err });
+        self.lp = label.previous_lp;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, lp + n, stack, err });
     }
 
-    fn br_table(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
-        const meta = code[ip].br_table;
-
-        const j = peekOperand(u32, stack, sp, 0);
-        const ls = self.inst.module.br_table_indices.items[meta.ls.offset .. meta.ls.offset + meta.ls.count];
-
-        const target = if (j >= ls.len) meta.ln else ls[j];
+    fn br(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const target = code[ip].br;
 
         const lp = self.lp;
         const lp_target = labelOffset(stack, lp, target);
@@ -189,6 +176,33 @@ pub const Interpreter = struct {
         while (i < n) : (i += 1) {
             stack[lp + i] = stack[sp - n + i];
         }
+
+        self.lp = label.previous_lp;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
+    }
+
+    fn br_table(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const meta = code[ip].br_table;
+
+        const j = peekOperand(u32, stack, sp, 0);
+        const ls = self.inst.module.br_table_indices.items[meta.ls.offset .. meta.ls.offset + meta.ls.count];
+
+        const target = if (j >= ls.len) meta.ln else ls[j];
+        std.debug.warn("br_table target = {}\n", .{target});
+
+        const lp = self.lp;
+        const lp_target = labelOffset(stack, lp, target);
+        const label = peekLabel(stack, lp);
+        const n = label.return_arity;
+
+        // Copy return values
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[lp + i] = stack[sp - n + i];
+        }
+
+        self.lp = label.previous_lp;
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
     }
@@ -538,10 +552,201 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
-    fn impl_i32_const(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+    fn @"i32.store"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.store";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i32, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i32, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i64.store"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.store";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i64, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i64, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"f32.store"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"f32.store";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(f32, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(f32, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"f64.store"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"f64.store";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(f64, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(f64, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i32.store8"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.store8";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i32, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i32, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i32.store16"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i32.store16";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i32, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i32, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i64.store8"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.store8";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i64, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i64, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i64.store16"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.store16";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i64, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i64, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i64.store32"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const load_data = code[ip].@"i64.store32";
+
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const offset = load_data.offset;
+        const value = peekOperand(i64, stack, sp, 0);
+        const address = peekOperand(u32, stack, sp, 1);
+
+        memory.write(i64, offset, address, value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
 
         _ = pushOperand3(i32, stack, sp, instr.@"i32.const") catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
+    }
+
+    fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const instr = code[ip];
+
+        _ = pushOperand3(i64, stack, sp, instr.@"i64.const") catch |e| {
             err.* = e;
             return;
         };
@@ -553,6 +758,17 @@ pub const Interpreter = struct {
         const instr = code[ip];
 
         _ = pushOperand3(f32, stack, sp, instr.@"f32.const") catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
+    }
+
+    fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const instr = code[ip];
+
+        _ = pushOperand3(f64, stack, sp, instr.@"f64.const") catch |e| {
             err.* = e;
             return;
         };
@@ -646,22 +862,22 @@ pub const Interpreter = struct {
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
-        impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_end,     impl_ni,        impl_ni,        br_table,        @"return",
-        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, @"i32.load", @"i64.load", @"f32.load",  @"f64.load",  @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
-        @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_i32_const, impl_ni,         @"f32.const",    impl_ni,         impl_ni,         impl_i32_eq, impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_i32_add, impl_i32_sub, impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,     impl_ni, impl_ni,     impl_ni,     impl_ni,      impl_ni,      impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_end,       br,             impl_ni,        br_table,        @"return",
+        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
+        @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  impl_ni,
+        impl_ni,          @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    impl_ni,         impl_i32_eq,  impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_i32_add,  impl_i32_sub,   impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
     };
 
     pub fn invoke(self: *Interpreter, ip: usize) !void {
@@ -773,7 +989,6 @@ pub const Interpreter = struct {
         if (self.stack.len == 0) return error.StackUnderflow;
         // defer self.op_stack = self.op_stack[0 .. self.op_stack.len - 1];
         defer self.sp -= 1;
-        std.debug.warn("popOperand sp = {}\n", .{self.sp});
 
         const value = self.stack[self.sp - 1];
         return switch (T) {

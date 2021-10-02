@@ -232,7 +232,6 @@ pub const Instance = struct {
     //
     // Similar to invoke, but without some type checking
     pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
-        std.debug.warn("invoke\n", .{});
         // 1.
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
