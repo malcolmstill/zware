@@ -233,6 +233,77 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
     }
 
+    fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const instr = code[ip];
+
+        const function_index = instr.call;
+        const function = self.inst.getFunc(function_index) catch |e| {
+            err.* = e;
+            return;
+        };
+        var next_ip = ip;
+        var next_sp = sp;
+
+        switch (function) {
+            .function => |f| {
+                // self.pushNOperands(u64, f.locals_count, 0) catch |e| {
+                //     err.* = e;
+                //     return;
+                // };
+                next_sp += f.locals_count;
+
+                // Consume parameters from the stack
+                const previous_fp = self.fp;
+                self.fp = next_sp;
+                next_sp = pushFrameInternal(stack, previous_fp, next_sp, f.params.len + f.locals_count, f.results.len, self.inst) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                // Our continuation is the code after call
+                next_sp = pushLabelInternal(stack, self.lp, next_sp, f.results.len, ip + 1, self.continuation_end) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                // self.continuation = f.code;
+                next_ip = f.ip_start;
+                self.continuation_end = f.ip_end;
+
+                self.inst = self.inst.store.instance(f.instance) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+            .host_function => |hf| {
+                hf.func(self) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+    }
+
+    fn drop(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn select(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const condition = peekOperand(u32, stack, sp, 0);
+        const c2 = peekOperand(u64, stack, sp, 1);
+        const c1 = peekOperand(u64, stack, sp, 2);
+
+        if (condition != 0) {
+            putOperand(u64, stack, sp, 2, c1);
+        } else {
+            putOperand(u64, stack, sp, 2, c2);
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
     fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const local_index = code[ip].@"local.get";
 
@@ -806,64 +877,11 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
-    fn impl_call(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
-        const instr = code[ip];
-
-        const function_index = instr.call;
-        const function = self.inst.getFunc(function_index) catch |e| {
-            err.* = e;
-            return;
-        };
-        var next_ip = ip;
-        var next_sp = sp;
-
-        switch (function) {
-            .function => |f| {
-                // self.pushNOperands(u64, f.locals_count, 0) catch |e| {
-                //     err.* = e;
-                //     return;
-                // };
-                next_sp += f.locals_count;
-
-                // Consume parameters from the stack
-                const previous_fp = self.fp;
-                self.fp = next_sp;
-                next_sp = pushFrameInternal(stack, previous_fp, next_sp, f.params.len + f.locals_count, f.results.len, self.inst) catch |e| {
-                    err.* = e;
-                    return;
-                };
-
-                // Our continuation is the code after call
-                next_sp = pushLabelInternal(stack, self.lp, next_sp, f.results.len, ip + 1, self.continuation_end) catch |e| {
-                    err.* = e;
-                    return;
-                };
-
-                // self.continuation = f.code;
-                next_ip = f.ip_start;
-                self.continuation_end = f.ip_end;
-
-                self.inst = self.inst.store.instance(f.instance) catch |e| {
-                    err.* = e;
-                    return;
-                };
-            },
-            .host_function => |hf| {
-                hf.func(self) catch |e| {
-                    err.* = e;
-                    return;
-                };
-            },
-        }
-
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
-    }
-
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
         impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_end,       br,             impl_ni,        br_table,        @"return",
-        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      drop,          select,         impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
         @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  impl_ni,
         impl_ni,          @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    impl_ni,         impl_i32_eq,  impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
