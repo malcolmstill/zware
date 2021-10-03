@@ -1884,11 +1884,169 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, math.fabs(c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, -c1);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, @ceil(c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, @floor(c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, @trunc(c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.nearest"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+        const floor = @floor(c1);
+        const ceil = @ceil(c1);
+
+        if (ceil - c1 == c1 - floor) {
+            if (@mod(ceil, 2) == 0) {
+                putOperand(f64, stack, sp, 1, ceil);
+            } else {
+                putOperand(f64, stack, sp, 1, floor);
+            }
+        } else {
+            putOperand(f64, stack, sp, 1, @round(c1));
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f64, stack, sp, 1, math.sqrt(c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f64.add"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(f64, stack, sp, 1, c1 + c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"f64.sub"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(f64, stack, sp, 0);
         const c1 = peekOperand(f64, stack, sp, 1);
 
         putOperand(f64, stack, sp, 1, c1 - c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.mul"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(f64, stack, sp, 1, c1 * c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.div"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(f64, stack, sp, 1, c1 / c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.min"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        if (math.isNan(c1)) {
+            putOperand(f64, stack, sp, 1, math.nan_f32);
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+        }
+        if (math.isNan(c2)) {
+            putOperand(f64, stack, sp, 1, math.nan_f32);
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+        }
+
+        if (c1 == 0.0 and c2 == 0.0) {
+            if (math.signbit(c1)) {
+                putOperand(f64, stack, sp, 1, c1);
+            } else {
+                putOperand(f64, stack, sp, 1, c2);
+            }
+        } else {
+            putOperand(f64, stack, sp, 1, math.min(c1, c2));
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.max"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        if (math.isNan(c1)) {
+            putOperand(f64, stack, sp, 1, math.nan_f32);
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+        }
+        if (math.isNan(c2)) {
+            putOperand(f64, stack, sp, 1, math.nan_f32);
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+        }
+
+        if (c1 == 0.0 and c2 == 0.0) {
+            if (math.signbit(c1)) {
+                putOperand(f64, stack, sp, 1, c2);
+            } else {
+                putOperand(f64, stack, sp, 1, c1);
+            }
+        } else {
+            putOperand(f64, stack, sp, 1, math.max(c1, c2));
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.copysign"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        if (math.signbit(c2)) {
+            putOperand(f64, stack, sp, 1, -math.fabs(c1));
+        } else {
+            putOperand(f64, stack, sp, 1, math.fabs(c1));
+        }
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
