@@ -14,7 +14,7 @@ const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
 
 const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 1024,
+    operand_stack_size: comptime_int = 4096,
     control_stack_size: comptime_int = 1024,
     label_stack_size: comptime_int = 1024,
 };
