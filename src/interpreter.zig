@@ -1084,6 +1084,15 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f32.eq"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 == c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(u32, stack, sp, 0);
         const c1 = peekOperand(u32, stack, sp, 1);
@@ -1162,7 +1171,7 @@ pub const Interpreter = struct {
         @"local.get",     @"local.set",   @"local.tee",    @"global.get",   @"global.set",   impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
         @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  @"memory.size",
         @"memory.grow",   @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    @"i32.eqz",      @"i32.eq",    impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        @"i32.le_u",    impl_ni,         impl_ni,
-        @"i64.eqz",       impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i64.le_u",  impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        @"f32.gt",       impl_ni,
+        @"i64.eqz",       impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i64.le_u",  impl_ni,      impl_ni,       @"f32.eq",      impl_ni,        impl_ni,        @"f32.gt",       impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.ctz",   impl_ni,      @"i32.add",    @"i32.sub",     @"i32.mul",     impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        @"i64.add",     @"i64.sub",     @"i64.mul",      impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
