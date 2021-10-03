@@ -1991,11 +1991,11 @@ pub const Interpreter = struct {
         const c1 = peekOperand(f64, stack, sp, 1);
 
         if (math.isNan(c1)) {
-            putOperand(f64, stack, sp, 1, math.nan_f32);
+            putOperand(f64, stack, sp, 1, math.nan_f64);
             return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
         }
         if (math.isNan(c2)) {
-            putOperand(f64, stack, sp, 1, math.nan_f32);
+            putOperand(f64, stack, sp, 1, math.nan_f64);
             return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
         }
 
@@ -2017,11 +2017,11 @@ pub const Interpreter = struct {
         const c1 = peekOperand(f64, stack, sp, 1);
 
         if (math.isNan(c1)) {
-            putOperand(f64, stack, sp, 1, math.nan_f32);
+            putOperand(f64, stack, sp, 1, math.nan_f64);
             return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
         }
         if (math.isNan(c2)) {
-            putOperand(f64, stack, sp, 1, math.nan_f32);
+            putOperand(f64, stack, sp, 1, math.nan_f64);
             return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
         }
 
