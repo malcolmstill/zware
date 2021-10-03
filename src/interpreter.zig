@@ -1153,7 +1153,7 @@ pub const Interpreter = struct {
         const c2 = peekOperand(u64, stack, sp, 0);
         const c1 = peekOperand(u64, stack, sp, 1);
 
-        putOperand(u64, stack, sp, 0, @as(u64, if (c1 == c1) 1 else 0));
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 == c2) 1 else 0));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
@@ -1162,7 +1162,7 @@ pub const Interpreter = struct {
         const c2 = peekOperand(u64, stack, sp, 0);
         const c1 = peekOperand(u64, stack, sp, 1);
 
-        putOperand(u64, stack, sp, 0, @as(u64, if (c1 != c1) 1 else 0));
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 != c2) 1 else 0));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
