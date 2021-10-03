@@ -330,10 +330,14 @@ pub const Interpreter = struct {
                 };
             },
             .host_function => |hf| {
+                self.sp = next_sp;
+
                 hf.func(self) catch |e| {
                     err.* = e;
                     return;
                 };
+                next_sp = self.sp;
+                next_ip = ip + 1;
             },
         }
 
@@ -402,11 +406,14 @@ pub const Interpreter = struct {
                     err.* = error.IndirectCallTypeMismatch;
                     return;
                 }
+                self.sp = next_sp;
 
                 host_func.func(self) catch |e| {
                     err.* = e;
                     return;
                 };
+                next_sp = self.sp;
+                next_ip = ip + 1;
             },
         }
 
