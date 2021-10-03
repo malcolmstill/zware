@@ -2387,6 +2387,46 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
+    fn @"i32.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i32, stack, sp, 0);
+
+        putOperand(i32, stack, sp, 0, @truncate(i8, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i32, stack, sp, 0);
+
+        putOperand(i32, stack, sp, 0, @truncate(i16, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(i64, stack, sp, 0, @truncate(i8, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(i64, stack, sp, 0, @truncate(i16, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.extend32_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(i64, stack, sp, 0, @truncate(i32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
