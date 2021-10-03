@@ -1667,6 +1667,56 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"i64.shl"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u64, stack, sp, 0);
+        const c1 = peekOperand(u64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, math.shl(u64, c1, c2 % 64));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i64.shr_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(i64, stack, sp, 0);
+        const c1 = peekOperand(i64, stack, sp, 1);
+
+        const mod = math.mod(i64, c2, 64) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(i64, stack, sp, 1, math.shr(i64, c1, mod));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i64.shr_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u64, stack, sp, 0);
+        const c1 = peekOperand(u64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, math.shr(u64, c1, c2 % 64));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i64.rotl"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u64, stack, sp, 0);
+        const c1 = peekOperand(u64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, math.rotl(u64, c1, c2 % 64));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i64.rotr"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u64, stack, sp, 0);
+        const c1 = peekOperand(u64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, math.rotr(u64, c1, c2 % 64));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"f32.add"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(f32, stack, sp, 0);
         const c1 = peekOperand(f32, stack, sp, 1);
