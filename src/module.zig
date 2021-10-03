@@ -853,14 +853,14 @@ pub const Module = struct {
             try self.parsed_code.append(instr);
         }
 
-        // Patch last end so that it is return
-        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
-
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
         // 2. Make a second pass where we fix up the continuations for
         //    blocks, loops and ifs
         try function.calculateContinuations(code_start, parsed_code);
+
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
         return common.Range{
             .offset = code_start,
@@ -881,14 +881,14 @@ pub const Module = struct {
             try self.parsed_code.append(instr);
         }
 
-        // Patch last end so that it is return
-        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
-
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
         // 2. Make a second pass where we fix up the continuations for
         //    blocks, loops and ifs
         try function.calculateContinuations(code_start, parsed_code);
+
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
         return common.Range{
             .offset = code_start,

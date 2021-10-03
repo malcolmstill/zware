@@ -101,7 +101,7 @@ pub const Instance = struct {
                     .function = .{
                         // .code = self.module.parsed_code.items[code.code.offset .. code.code.offset + code.code.count],
                         .ip_start = code.code.offset,
-                        .ip_end = code.code.offset + code.code.count,
+                        .ip_end = code.code.offset + code.code.count, // TODO: add - 1?
                         // .locals = code.locals,
                         .locals_count = code.locals_count,
                         .params = func_type.params,
@@ -258,7 +258,8 @@ pub const Instance = struct {
 
                 try interp.pushFrame(f.params.len + f.locals_count, f.results.len, self);
 
-                try interp.pushLabel(f.results.len, f.ip_start, f.ip_end);
+                // push block
+                try interp.pushLabel(f.results.len, f.ip_end - 1);
 
                 interp.function_start = f.ip_start;
                 try interp.invoke(f.ip_start);
@@ -291,7 +292,7 @@ pub const Instance = struct {
 
                 try interp.pushFrame(f.locals_count, 0, self);
 
-                try interp.pushLabel(0, 0, 0);
+                try interp.pushLabel(0, 0);
 
                 try interp.invoke(f.ip_start);
             },
@@ -308,7 +309,7 @@ pub const Instance = struct {
         var interp = Interpreter.init(stack[0..], self);
 
         try interp.pushFrame(0, 1, self);
-        try interp.pushLabel(1, 0, 0);
+        try interp.pushLabel(1, 0);
 
         try interp.invoke(start);
 
