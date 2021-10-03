@@ -32,6 +32,7 @@ pub const WasmError = error{
     TableIndexOutOfBounds,
     BadGlobalIndex,
     GlobalIndexOutOfBounds,
+    NegativeDenominator,
 };
 
 pub const Function = union(enum) {

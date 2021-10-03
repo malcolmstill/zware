@@ -1393,6 +1393,144 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"i32.div_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(i32, stack, sp, 0);
+        const c1 = peekOperand(i32, stack, sp, 1);
+
+        const div = math.divTrunc(i32, c1, c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(i32, stack, sp, 1, div);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.div_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        const div = math.divTrunc(u32, c1, c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(u32, stack, sp, 1, div);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.rem_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(i32, stack, sp, 0);
+        const c1 = peekOperand(i32, stack, sp, 1);
+
+        const abs = math.absInt(c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const rem = math.rem(i32, c1, abs) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(i32, stack, sp, 1, rem);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.rem_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        const rem = math.rem(u32, c1, c2) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(u32, stack, sp, 1, rem);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.and"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, c1 & c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.or"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, c1 | c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.xor"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, c1 ^ c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.shl"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, math.shl(u32, c1, c2 % 32));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.shr_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(i32, stack, sp, 0);
+        const c1 = peekOperand(i32, stack, sp, 1);
+
+        const mod = math.mod(i32, c2, 32) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        putOperand(i32, stack, sp, 1, math.shr(i32, c1, mod));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.shr_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, math.shr(u32, c1, c2 % 32));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.rotl"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, math.rotl(u32, c1, c2 % 32));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.rotr"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(u32, stack, sp, 0);
+        const c1 = peekOperand(u32, stack, sp, 1);
+
+        putOperand(u32, stack, sp, 1, math.rotr(u32, c1, c2 % 32));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"i64.add"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(u64, stack, sp, 0);
         const c1 = peekOperand(u64, stack, sp, 1);
