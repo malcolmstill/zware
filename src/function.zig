@@ -28,6 +28,8 @@ pub const WasmError = error{
     //
     BadMemoryIndex, // TODO: I think we won't see this with validation
     MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
+    BadTableIndex,
+    TableIndexOutOfBounds,
 };
 
 pub const Function = union(enum) {

@@ -144,6 +144,25 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
     }
 
+    fn @"else"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        var next_ip = ip + 1;
+        var next_sp = sp;
+
+        const lp = self.lp;
+        const label = peekLabel(stack, lp);
+        const n = label.return_arity;
+
+        // Copy return values
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            stack[lp + i] = stack[sp - n + i];
+        }
+
+        self.lp = label.previous_lp;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
+    }
+
     fn impl_end(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         var next_ip = ip + 1;
         var next_sp = sp;
@@ -182,14 +201,40 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
     }
 
+    fn br_if(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const condition = peekOperand(u32, stack, sp, 0);
+        const new_sp = sp - 1;
+
+        if (condition == 0) {
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, new_sp, stack, err });
+        } else {
+            const target = code[ip].br_if;
+
+            const lp = self.lp;
+            const lp_target = labelOffset(stack, lp, target);
+            const label = peekLabel(stack, lp);
+            const n = label.return_arity;
+
+            // Copy return values
+            var i: usize = 0;
+            while (i < n) : (i += 1) {
+                stack[lp + i] = stack[new_sp - n + i];
+            }
+
+            self.lp = label.previous_lp;
+
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.ip_start, code, lp + n, stack, err });
+        }
+    }
+
     fn br_table(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const meta = code[ip].br_table;
 
         const j = peekOperand(u32, stack, sp, 0);
+        const new_sp = sp - 1;
         const ls = self.inst.module.br_table_indices.items[meta.ls.offset .. meta.ls.offset + meta.ls.count];
 
         const target = if (j >= ls.len) meta.ln else ls[j];
-        std.debug.warn("br_table target = {}\n", .{target});
 
         const lp = self.lp;
         const lp_target = labelOffset(stack, lp, target);
@@ -199,7 +244,7 @@ pub const Interpreter = struct {
         // Copy return values
         var i: usize = 0;
         while (i < n) : (i += 1) {
-            stack[lp + i] = stack[sp - n + i];
+            stack[lp + i] = stack[new_sp - n + i];
         }
 
         self.lp = label.previous_lp;
@@ -277,6 +322,81 @@ pub const Interpreter = struct {
             },
             .host_function => |hf| {
                 hf.func(self) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+    }
+
+    fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const instr = code[ip].call_indirect;
+        const op_func_type_index = instr.@"type";
+        const table_index = instr.table;
+
+        // Read lookup index from stack
+        const lookup_index = peekOperand(u32, stack, sp, 0);
+        var next_sp = sp - 1;
+        var next_ip = ip;
+
+        const table = self.inst.getTable(table_index) catch |e| {
+            err.* = e;
+            return;
+        };
+        const function_handle = table.lookup(lookup_index) catch |e| {
+            err.* = e;
+            return;
+        };
+        const function = self.inst.store.function(function_handle) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        switch (function) {
+            .function => |f| {
+                // Check that signatures match
+                // const func_type = module.types.list.items[function.typeidx];
+                const call_indirect_func_type = self.inst.module.types.list.items[op_func_type_index];
+                if (!Module.signaturesEqual(f.params, f.results, call_indirect_func_type)) {
+                    err.* = error.IndirectCallTypeMismatch;
+                    return;
+                }
+
+                next_sp += f.locals_count;
+
+                // Consume parameters from the stack
+                const previous_fp = self.fp;
+                self.fp = next_sp;
+                next_sp = pushFrameInternal(stack, previous_fp, next_sp, f.params.len + f.locals_count, f.results.len, self.inst) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                // Our continuation is the code after call
+                next_sp = pushLabelInternal(stack, self.lp, next_sp, f.results.len, ip + 1, self.continuation_end) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
+                // self.continuation = f.code;
+                next_ip = f.ip_start;
+                self.continuation_end = f.ip_end;
+
+                self.inst = self.inst.store.instance(f.instance) catch |e| {
+                    err.* = e;
+                    return;
+                };
+            },
+            .host_function => |host_func| {
+                const call_indirect_func_type = self.inst.module.types.list.items[op_func_type_index];
+                if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) {
+                    err.* = error.IndirectCallTypeMismatch;
+                    return;
+                }
+
+                host_func.func(self) catch |e| {
                     err.* = e;
                     return;
                 };
@@ -880,8 +1000,8 @@ pub const Interpreter = struct {
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
-        impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_end,       br,             impl_ni,        br_table,        @"return",
-        impl_call,        impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      drop,          select,         impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         @"else",         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_end,       br,             br_if,          br_table,        @"return",
+        impl_call,        call_indirect,  impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      drop,          select,         impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
         @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  impl_ni,
         impl_ni,          @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    impl_ni,         impl_i32_eq,  impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
