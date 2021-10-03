@@ -987,7 +987,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
     }
 
     fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
