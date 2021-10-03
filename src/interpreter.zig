@@ -2275,6 +2275,46 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
+    fn @"f32.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i32, stack, sp, 0);
+
+        putOperand(f32, stack, sp, 0, @intToFloat(f32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f32.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(u32, stack, sp, 0);
+
+        putOperand(f32, stack, sp, 0, @intToFloat(f32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f32.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(f32, stack, sp, 0, @intToFloat(f32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f32.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(u64, stack, sp, 0);
+
+        putOperand(f32, stack, sp, 0, @intToFloat(f32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"f32.demote_f64"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        putOperand(f32, stack, sp, 0, @floatCast(f32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
