@@ -2051,6 +2051,130 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"i32.wrap_i64"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(i32, stack, sp, 0, @truncate(i32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f32, stack, sp, 0);
+
+        if (math.isNan(c1)) {
+            err.* = error.InvalidConversion;
+            return;
+        }
+
+        const trunc = @trunc(c1);
+
+        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        putOperand(i32, stack, sp, 0, @floatToInt(i32, trunc));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f32, stack, sp, 0);
+
+        if (math.isNan(c1)) {
+            err.* = error.InvalidConversion;
+            return;
+        }
+
+        const trunc = @trunc(c1);
+
+        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        putOperand(u32, stack, sp, 0, @floatToInt(u32, trunc));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        if (math.isNan(c1)) {
+            err.* = error.InvalidConversion;
+            return;
+        }
+
+        const trunc = @trunc(c1);
+
+        if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        putOperand(i32, stack, sp, 0, @floatToInt(i32, trunc));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(f64, stack, sp, 0);
+
+        if (math.isNan(c1)) {
+            err.* = error.InvalidConversion;
+            return;
+        }
+
+        const trunc = @trunc(c1);
+
+        if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
+            err.* = error.Overflow;
+            return;
+        }
+
+        putOperand(u32, stack, sp, 0, @floatToInt(u32, trunc));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.extend_i32_s"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(i64, stack, sp, 0);
+
+        putOperand(i64, stack, sp, 0, @truncate(i32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i64.extend_i32_u"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(u64, stack, sp, 0);
+
+        putOperand(u64, stack, sp, 0, @truncate(u32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
