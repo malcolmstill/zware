@@ -2119,7 +2119,7 @@ pub const Interpreter = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) {
             err.* = error.Overflow;
             return;
         }
@@ -2144,7 +2144,7 @@ pub const Interpreter = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) {
             err.* = error.Overflow;
             return;
         }
