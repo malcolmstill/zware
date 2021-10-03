@@ -2427,6 +2427,185 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
 
+    fn trunc_sat(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const meta = code[ip].trunc_sat;
+
+        switch (meta) {
+            0 => {
+                const c1 = peekOperand(f32, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(i32, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
+                    putOperand(i32, stack, sp, 0, @bitCast(i32, @as(u32, 0x7fffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
+                    putOperand(i32, stack, sp, 0, @bitCast(i32, @as(u32, 0x80000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(i32, stack, sp, 0, @floatToInt(i32, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            1 => { // putOperand(u32, stack, sp, 0,
+                const c1 = peekOperand(f32, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(u32, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
+                    putOperand(u32, stack, sp, 0, @bitCast(u32, @as(u32, 0xffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
+                    putOperand(u32, stack, sp, 0, @bitCast(u32, @as(u32, 0x00000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(u32, stack, sp, 0, @floatToInt(u32, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            2 => {
+                const c1 = peekOperand(f64, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(i32, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+                    putOperand(i32, stack, sp, 0, @bitCast(i32, @as(u32, 0x7fffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
+                    putOperand(i32, stack, sp, 0, @bitCast(i32, @as(u32, 0x80000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(i32, stack, sp, 0, @floatToInt(i32, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            3 => {
+                const c1 = peekOperand(f64, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(u32, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+                    putOperand(u32, stack, sp, 0, @bitCast(u32, @as(u32, 0xffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
+                    putOperand(u32, stack, sp, 0, @bitCast(u32, @as(u32, 0x00000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(u32, stack, sp, 0, @floatToInt(u32, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            4 => {
+                const c1 = peekOperand(f32, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(i64, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
+                    putOperand(i64, stack, sp, 0, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
+                    putOperand(i64, stack, sp, 0, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(i64, stack, sp, 0, @floatToInt(i64, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            5 => {
+                const c1 = peekOperand(f32, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(u64, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
+                    putOperand(u64, stack, sp, 0, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
+                    putOperand(u64, stack, sp, 0, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(u64, stack, sp, 0, @floatToInt(u64, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            6 => {
+                const c1 = peekOperand(f64, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(i64, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
+                    putOperand(i64, stack, sp, 0, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
+                    putOperand(i64, stack, sp, 0, @bitCast(i64, @as(u64, 0x8000000000000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(i64, stack, sp, 0, @floatToInt(i64, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            7 => {
+                const c1 = peekOperand(f64, stack, sp, 0);
+                const trunc = @trunc(c1);
+
+                if (math.isNan(c1)) {
+                    putOperand(u64, stack, sp, 0, 0);
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
+                    putOperand(u64, stack, sp, 0, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+                if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
+                    putOperand(u64, stack, sp, 0, @bitCast(u64, @as(u64, 0x0000000000000000)));
+                    return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+                }
+
+                putOperand(u64, stack, sp, 0, @floatToInt(u64, trunc));
+                return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+            },
+            else => {
+                err.* = error.Trap;
+                return;
+            },
+        }
+    }
+
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{

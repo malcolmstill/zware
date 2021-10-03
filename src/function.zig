@@ -33,6 +33,7 @@ pub const WasmError = error{
     BadGlobalIndex,
     GlobalIndexOutOfBounds,
     NegativeDenominator,
+    Trap,
 };
 
 pub const Function = union(enum) {
