@@ -1163,6 +1163,15 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f32.sub"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f32, stack, sp, 0);
+        const c1 = peekOperand(f32, stack, sp, 1);
+
+        putOperand(f32, stack, sp, 1, c1 - c2);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, usize, []u64, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
@@ -1175,7 +1184,7 @@ pub const Interpreter = struct {
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.ctz",   impl_ni,      @"i32.add",    @"i32.sub",     @"i32.mul",     impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        @"i64.add",     @"i64.sub",     @"i64.mul",      impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        impl_ni,          impl_ni,        impl_ni,         @"f32.sub",      impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
