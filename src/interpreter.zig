@@ -1246,6 +1246,24 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f32.ne"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f32, stack, sp, 0);
+        const c1 = peekOperand(f32, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 != c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f32.lt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f32, stack, sp, 0);
+        const c1 = peekOperand(f32, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 < c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(f32, stack, sp, 0);
         const c1 = peekOperand(f32, stack, sp, 1);
@@ -1264,6 +1282,15 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f32.ge"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f32, stack, sp, 0);
+        const c1 = peekOperand(f32, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 >= c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
     fn @"f64.eq"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c2 = peekOperand(f64, stack, sp, 0);
         const c1 = peekOperand(f64, stack, sp, 1);
@@ -1273,9 +1300,68 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
 
+    fn @"f64.ne"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 != c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.lt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 < c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.gt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 > c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.le"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 <= c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"f64.ge"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c2 = peekOperand(f64, stack, sp, 0);
+        const c1 = peekOperand(f64, stack, sp, 1);
+
+        putOperand(u64, stack, sp, 1, @as(u64, if (c1 >= c2) 1 else 0));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(u32, stack, sp, 0);
+        putOperand(u32, stack, sp, 0, @clz(u32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(u32, stack, sp, 0);
         putOperand(u32, stack, sp, 0, @ctz(u32, c1));
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const c1 = peekOperand(u32, stack, sp, 0);
+        putOperand(u32, stack, sp, 0, @popCount(u32, c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
