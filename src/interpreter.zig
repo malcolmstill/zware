@@ -424,7 +424,7 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
     }
 
-    fn impl_local_get(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+    fn @"local.get"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const local_index = code[ip].@"local.get";
 
         const frame = peekFrame(stack, self.fp);
@@ -443,6 +443,47 @@ pub const Interpreter = struct {
         const frame = peekFrame(stack, self.fp);
 
         stack[self.fp - frame.locals_count + local_index] = peekOperand(u64, stack, sp, 0);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
+    }
+
+    fn @"local.tee"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const local_index = code[ip].@"local.tee";
+
+        const value = peekOperand(u64, stack, sp, 0);
+        const frame = peekFrame(stack, self.fp);
+
+        stack[self.fp - frame.locals_count + local_index] = value;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
+    fn @"global.get"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const global_index = code[ip].@"global.get";
+
+        const global = self.inst.getGlobal(global_index) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        _ = pushOperand3(u64, stack, sp, global.value) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp + 1, stack, err });
+    }
+
+    fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const global_index = code[ip].@"global.set";
+        const value = peekOperand(u64, stack, sp, 0);
+
+        const global = self.inst.getGlobal(global_index) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        global.value = value;
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 1, stack, err });
     }
@@ -504,8 +545,6 @@ pub const Interpreter = struct {
             err.* = e;
             return;
         };
-
-        std.debug.warn("value = {}, {x}, {x}\n", .{ value, value, @bitCast(u32, value) });
 
         putOperand(f32, stack, sp, 0, value);
 
@@ -923,6 +962,36 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
     }
 
+    fn @"memory.size"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        _ = pushOperand3(u32, stack, sp, @intCast(u32, memory.data.items.len)) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp - 2, stack, err });
+    }
+
+    fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
+        const memory = self.inst.getMemory(0) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        const num_pages = peekOperand(u32, stack, sp, 0);
+        if (memory.grow(num_pages)) |old_size| {
+            putOperand(u32, stack, sp, 0, @intCast(u32, old_size));
+        } else |_| {
+            putOperand(i32, stack, sp, 0, @as(i32, -1));
+        }
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
+    }
+
     fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const instr = code[ip];
 
@@ -1002,9 +1071,9 @@ pub const Interpreter = struct {
     const lookup = [256]InstructionFunction{
         impl_unreachable, impl_nop,       impl_block,      impl_loop,       impl_if,         @"else",         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_end,       br,             br_if,          br_table,        @"return",
         impl_call,        call_indirect,  impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      drop,          select,         impl_ni,        impl_ni,        impl_ni,         impl_ni,
-        impl_local_get,   @"local.set",   impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
-        @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  impl_ni,
-        impl_ni,          @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    impl_ni,         impl_i32_eq,  impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
+        @"local.get",     @"local.set",   @"local.tee",    @"global.get",   @"global.set",   impl_ni,         impl_ni,      impl_ni,      @"i32.load",  @"i64.load",  @"f32.load",   @"f64.load",    @"i32.load8_s", @"i32.load8_u", @"i32.load16_s", @"i32.load16_u",
+        @"i64.load8_s",   @"i64.load8_u", @"i64.load16_s", @"i64.load16_u", @"i64.load32_s", @"i64.load32_u", @"i32.store", @"i64.store", @"f32.store", @"f64.store", @"i32.store8", @"i32.store16", @"i64.store8",  @"i64.store16", @"i64.store32",  @"memory.size",
+        @"memory.grow",   @"i32.const",   @"i64.const",    @"f32.const",    @"f64.const",    impl_ni,         impl_i32_eq,  impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_i32_add,  impl_i32_sub,   impl_ni,        impl_ni,        impl_ni,         impl_ni,
         impl_ni,          impl_ni,        impl_ni,         impl_ni,         impl_ni,         impl_ni,         impl_ni,      impl_ni,      impl_ni,      impl_ni,      impl_ni,       impl_ni,        impl_ni,        impl_ni,        impl_ni,         impl_ni,
