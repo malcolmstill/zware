@@ -292,7 +292,7 @@ pub const Instance = struct {
 
                 try interp.pushFrame(f.locals_count, 0, self);
 
-                try interp.pushLabel(0, 0);
+                try interp.pushLabel(0, f.ip_end - 1);
 
                 try interp.invoke(f.ip_start);
             },

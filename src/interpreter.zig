@@ -283,7 +283,9 @@ pub const Interpreter = struct {
             return;
         }
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+        const previous_frame = peekFrame(stack, self.fp);
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, previous_frame.instance.module.parsed_code.items, next_sp, stack, err });
     }
 
     fn call(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -335,7 +337,7 @@ pub const Interpreter = struct {
             },
         }
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, self.inst.module.parsed_code.items, next_sp, stack, err });
     }
 
     fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -408,7 +410,7 @@ pub const Interpreter = struct {
             },
         }
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, next_sp, stack, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, self.inst.module.parsed_code.items, next_sp, stack, err });
     }
 
     fn drop(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
@@ -509,7 +511,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u32, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -530,7 +532,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -588,12 +590,12 @@ pub const Interpreter = struct {
         const offset = load_data.offset;
         const address = peekOperand(u32, stack, sp, 0);
 
-        const value = memory.read(u8, offset, address) catch |e| {
+        const value = memory.read(i8, offset, address) catch |e| {
             err.* = e;
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(i32, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -614,7 +616,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u32, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -630,12 +632,12 @@ pub const Interpreter = struct {
         const offset = load_data.offset;
         const address = peekOperand(u32, stack, sp, 0);
 
-        const value = memory.read(u16, offset, address) catch |e| {
+        const value = memory.read(i16, offset, address) catch |e| {
             err.* = e;
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(i32, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -656,7 +658,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u32, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -672,12 +674,12 @@ pub const Interpreter = struct {
         const offset = load_data.offset;
         const address = peekOperand(u32, stack, sp, 0);
 
-        const value = memory.read(u8, offset, address) catch |e| {
+        const value = memory.read(i8, offset, address) catch |e| {
             err.* = e;
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(i64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -698,7 +700,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -714,12 +716,12 @@ pub const Interpreter = struct {
         const offset = load_data.offset;
         const address = peekOperand(u32, stack, sp, 0);
 
-        const value = memory.read(u16, offset, address) catch |e| {
+        const value = memory.read(i16, offset, address) catch |e| {
             err.* = e;
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(i64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -740,7 +742,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -756,12 +758,12 @@ pub const Interpreter = struct {
         const offset = load_data.offset;
         const address = peekOperand(u32, stack, sp, 0);
 
-        const value = memory.read(u32, offset, address) catch |e| {
+        const value = memory.read(i32, offset, address) catch |e| {
             err.* = e;
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(i64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -782,7 +784,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        stack[sp - 1] = value;
+        putOperand(u64, stack, sp, 0, value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1720,7 +1722,7 @@ pub const Interpreter = struct {
     fn @"f32.abs"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, math.fabs(c1));
+        putOperand(f32, stack, sp, 0, math.fabs(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1728,7 +1730,7 @@ pub const Interpreter = struct {
     fn @"f32.neg"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, -c1);
+        putOperand(f32, stack, sp, 0, -c1);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1736,7 +1738,7 @@ pub const Interpreter = struct {
     fn @"f32.ceil"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, @ceil(c1));
+        putOperand(f32, stack, sp, 0, @ceil(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1744,7 +1746,7 @@ pub const Interpreter = struct {
     fn @"f32.floor"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, @floor(c1));
+        putOperand(f32, stack, sp, 0, @floor(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1752,7 +1754,7 @@ pub const Interpreter = struct {
     fn @"f32.trunc"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, @trunc(c1));
+        putOperand(f32, stack, sp, 0, @trunc(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1764,12 +1766,12 @@ pub const Interpreter = struct {
 
         if (ceil - c1 == c1 - floor) {
             if (@mod(ceil, 2) == 0) {
-                putOperand(f32, stack, sp, 1, ceil);
+                putOperand(f32, stack, sp, 0, ceil);
             } else {
-                putOperand(f32, stack, sp, 1, floor);
+                putOperand(f32, stack, sp, 0, floor);
             }
         } else {
-            putOperand(f32, stack, sp, 1, @round(c1));
+            putOperand(f32, stack, sp, 0, @round(c1));
         }
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
@@ -1778,7 +1780,7 @@ pub const Interpreter = struct {
     fn @"f32.sqrt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f32, stack, sp, 0);
 
-        putOperand(f32, stack, sp, 1, math.sqrt(c1));
+        putOperand(f32, stack, sp, 0, math.sqrt(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1887,7 +1889,7 @@ pub const Interpreter = struct {
     fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, math.fabs(c1));
+        putOperand(f64, stack, sp, 0, math.fabs(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1895,7 +1897,7 @@ pub const Interpreter = struct {
     fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, -c1);
+        putOperand(f64, stack, sp, 0, -c1);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1903,7 +1905,7 @@ pub const Interpreter = struct {
     fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, @ceil(c1));
+        putOperand(f64, stack, sp, 0, @ceil(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1911,7 +1913,7 @@ pub const Interpreter = struct {
     fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, @floor(c1));
+        putOperand(f64, stack, sp, 0, @floor(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1919,7 +1921,7 @@ pub const Interpreter = struct {
     fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, @trunc(c1));
+        putOperand(f64, stack, sp, 0, @trunc(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
@@ -1931,12 +1933,12 @@ pub const Interpreter = struct {
 
         if (ceil - c1 == c1 - floor) {
             if (@mod(ceil, 2) == 0) {
-                putOperand(f64, stack, sp, 1, ceil);
+                putOperand(f64, stack, sp, 0, ceil);
             } else {
-                putOperand(f64, stack, sp, 1, floor);
+                putOperand(f64, stack, sp, 0, floor);
             }
         } else {
-            putOperand(f64, stack, sp, 1, @round(c1));
+            putOperand(f64, stack, sp, 0, @round(c1));
         }
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
@@ -1945,7 +1947,7 @@ pub const Interpreter = struct {
     fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction, sp: usize, stack: []u64, err: *?WasmError) void {
         const c1 = peekOperand(f64, stack, sp, 0);
 
-        putOperand(f64, stack, sp, 1, math.sqrt(c1));
+        putOperand(f64, stack, sp, 0, math.sqrt(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, sp, stack, err });
     }
