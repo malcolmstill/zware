@@ -185,7 +185,7 @@ pub const ParseIterator = struct {
                     .block = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .continuation = Range{ .offset = 0, .count = 0 },
+                        .branch_target = 0,
                     },
                 };
             },
@@ -216,7 +216,7 @@ pub const ParseIterator = struct {
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .continuation = Range{ .offset = 0, .count = 0 },
+                        .branch_target = 0,
                     },
                 };
             },
@@ -252,8 +252,8 @@ pub const ParseIterator = struct {
                     .@"if" = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .continuation = Range{ .offset = 0, .count = 0 },
-                        .else_continuation = null,
+                        .branch_target = 0,
+                        .else_ip = null,
                     },
                 };
             },

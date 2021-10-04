@@ -859,6 +859,9 @@ pub const Module = struct {
         //    blocks, loops and ifs
         try function.calculateContinuations(code_start, parsed_code);
 
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
+
         return common.Range{
             .offset = code_start,
             .count = self.parsed_code.items.len - code_start,
@@ -883,6 +886,9 @@ pub const Module = struct {
         // 2. Make a second pass where we fix up the continuations for
         //    blocks, loops and ifs
         try function.calculateContinuations(code_start, parsed_code);
+
+        // Patch last end so that it is return
+        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
         return common.Range{
             .offset = code_start,

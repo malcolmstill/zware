@@ -5,17 +5,50 @@ const Instance = @import("instance.zig").Instance;
 const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
 
+pub const WasmError = error{
+    NotImplemented,
+    StackUnderflow,
+    StackOverflow,
+    TrapUnreachable,
+    LabelStackUnderflow,
+    LabelStackOverflow,
+    OperandStackUnderflow,
+    ControlStackUnderflow,
+    OperandStackOverflow,
+    FunctionIndexOutOfBounds,
+    BadFunctionIndex,
+    ControlStackOverflow,
+    BadInstanceIndex,
+    DivisionByZero,
+    Overflow,
+    InvalidConversion,
+    OutOfBoundsMemoryAccess,
+    IndirectCallTypeMismatch,
+    UndefinedElement,
+    //
+    BadMemoryIndex, // TODO: I think we won't see this with validation
+    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
+    BadTableIndex,
+    TableIndexOutOfBounds,
+    BadGlobalIndex,
+    GlobalIndexOutOfBounds,
+    NegativeDenominator,
+    Trap,
+};
+
 pub const Function = union(enum) {
     function: struct {
         // locals: []const u8,
         locals_count: usize,
-        code: []Instruction,
+        // code: []Instruction,
+        ip_start: usize,
+        ip_end: usize,
         params: []const ValueType,
         results: []const ValueType,
         instance: usize,
     },
     host_function: struct {
-        func: fn (*Interpreter) anyerror!void,
+        func: fn (*Interpreter) WasmError!void,
         params: []const ValueType,
         results: []const ValueType,
     },
@@ -33,18 +66,18 @@ pub const Instruction = union(Opcode) {
     block: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
+        branch_target: usize,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
+        branch_target: usize,
     },
     @"if": struct {
         param_arity: usize,
         return_arity: usize,
-        continuation: Range,
-        else_continuation: ?Range,
+        branch_target: usize,
+        else_ip: ?usize,
     },
     @"else": void,
     end: void,
@@ -303,8 +336,7 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
             .block => |*block_instr| {
                 const end_offset = try findEnd(code[offset..]);
 
-                const continuation = code[offset + end_offset + 1 ..];
-                block_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                block_instr.branch_target = parsed_code_offset + offset + end_offset + 1;
             },
             .@"if" => |*if_instr| {
                 const end_offset = try findEnd(code[offset..]);
@@ -312,17 +344,14 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
 
                 if (optional_else_offset == null and if_instr.param_arity -% if_instr.return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                const continuation = code[offset + end_offset + 1 ..];
-                if_instr.continuation = Range{ .offset = parsed_code_offset + offset + end_offset + 1, .count = continuation.len };
+                if_instr.branch_target = parsed_code_offset + offset + end_offset + 1;
+
                 if (optional_else_offset) |else_offset| {
-                    const else_continuation = code[offset + else_offset + 1 ..];
-                    if_instr.else_continuation = Range{ .offset = parsed_code_offset + offset + else_offset + 1, .count = else_continuation.len };
+                    if_instr.else_ip = parsed_code_offset + offset + else_offset + 1;
                 }
             },
             .loop => |*loop_instr| {
-                // const end_offset = try findEnd(code[offset..]);
-                const continuation = code[offset..];
-                loop_instr.continuation = Range{ .offset = parsed_code_offset + offset, .count = continuation.len };
+                loop_instr.branch_target = parsed_code_offset + offset;
             },
             else => {},
         }
