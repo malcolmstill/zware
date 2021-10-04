@@ -232,7 +232,6 @@ pub const Instance = struct {
     //
     // Similar to invoke, but without some type checking
     pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
-        std.debug.warn("invoke\n", .{});
         // 1.
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
@@ -245,6 +244,8 @@ pub const Instance = struct {
 
         switch (function) {
             .function => |f| {
+                const function_instance = try self.store.instance(f.instance);
+
                 if (f.params.len != in.len) return error.ParamCountMismatch;
                 if (f.results.len != out.len) return error.ResultCountMismatch;
 
@@ -269,7 +270,7 @@ pub const Instance = struct {
                     .op_stack_len = locals_start,
                     .label_stack_len = interp.label_ptr,
                     .return_arity = f.results.len,
-                    .inst = self,
+                    .inst = function_instance,
                 }, f.locals_count + f.params.len);
 
                 // 7a.2. push label for our implicit function block. We know we don't have
@@ -299,7 +300,6 @@ pub const Instance = struct {
     }
 
     pub fn invokeStart(self: *Instance, index: u32, comptime options: InterpreterOptions) !void {
-        std.debug.warn("invokeStart\n", .{});
         const function = try self.getFunc(index);
 
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
@@ -308,6 +308,7 @@ pub const Instance = struct {
 
         switch (function) {
             .function => |f| {
+                const function_instance = try self.store.instance(f.instance);
                 var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
 
                 const locals_start = interp.op_ptr;
@@ -321,7 +322,7 @@ pub const Instance = struct {
                     .op_stack_len = locals_start,
                     .label_stack_len = interp.label_ptr,
                     .return_arity = 0,
-                    .inst = self,
+                    .inst = function_instance,
                 }, f.locals_count);
 
                 try interp.pushLabel(Interpreter.Label{
@@ -340,7 +341,6 @@ pub const Instance = struct {
     }
 
     pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: InterpreterOptions) !Result {
-        std.debug.warn("invokeExpression\n", .{});
         var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
         var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
         var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
