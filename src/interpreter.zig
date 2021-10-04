@@ -2579,12 +2579,6 @@ pub const Interpreter = struct {
             },
         }
     }
-    //
-    //
-    //
-    //
-    //
-    //
 
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, *?WasmError) void;
 
@@ -2649,10 +2643,15 @@ pub const Interpreter = struct {
         const label = self.peekNthLabel(target);
         const n = label.return_arity;
 
-        var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-        const src = self.op_stack[self.op_stack.len - n ..];
+        // var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+        // const src = self.op_stack[self.op_stack.len - n ..];
 
-        mem.copy(u64, dest, src);
+        var i: usize = 0;
+        while (i < n) : (i += 1) {
+            self.op_stack[label.op_stack_len + i] = self.op_stack[self.op_stack.len - n + i];
+        }
+
+        // mem.copy(u64, dest, src);
 
         // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
         self.op_ptr = label.op_stack_len + n;
