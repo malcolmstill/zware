@@ -57,7 +57,7 @@ pub const Interpreter = struct {
 
         i = 0;
         while (i < self.label_ptr) : (i += 1) {
-            std.debug.warn("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].break_target });
+            std.debug.warn("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
         }
         std.debug.warn("\n", .{});
 
@@ -100,7 +100,7 @@ pub const Interpreter = struct {
         self.pushLabel(Label{
             .return_arity = meta.return_arity,
             .op_stack_len = self.op_ptr - meta.param_arity,
-            .break_target = meta.break_target,
+            .branch_target = meta.branch_target,
         }) catch |e| {
             err.* = e;
             return;
@@ -116,7 +116,7 @@ pub const Interpreter = struct {
             // note that we use block_params rather than block_returns for return arity:
             .return_arity = meta.param_arity,
             .op_stack_len = self.op_ptr - meta.param_arity,
-            .break_target = meta.break_target,
+            .branch_target = meta.branch_target,
         }) catch |e| {
             err.* = e;
             return;
@@ -132,7 +132,7 @@ pub const Interpreter = struct {
         var next_ip = ip + 1;
 
         if (condition == 0) {
-            next_ip = meta.break_target;
+            next_ip = meta.branch_target;
 
             // unless we have an else branch
             if (meta.else_ip) |else_ip| {
@@ -142,7 +142,7 @@ pub const Interpreter = struct {
                 self.pushLabel(Label{
                     .return_arity = meta.return_arity,
                     .op_stack_len = self.op_ptr - meta.param_arity,
-                    .break_target = meta.break_target,
+                    .branch_target = meta.branch_target,
                 }) catch |e| {
                     err.* = e;
                     return;
@@ -153,7 +153,7 @@ pub const Interpreter = struct {
             self.pushLabel(Label{
                 .return_arity = meta.return_arity,
                 .op_stack_len = self.op_ptr - meta.param_arity,
-                .break_target = meta.break_target,
+                .branch_target = meta.branch_target,
             }) catch |e| {
                 err.* = e;
                 return;
@@ -166,7 +166,7 @@ pub const Interpreter = struct {
     fn @"else"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const label = self.popLabel();
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.break_target, code, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.branch_target, code, err });
     }
 
     fn end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -223,7 +223,7 @@ pub const Interpreter = struct {
         const previous_frame = self.peekFrame();
         self.inst = previous_frame.inst;
 
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.break_target, previous_frame.inst.module.parsed_code.items, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.branch_target, previous_frame.inst.module.parsed_code.items, err });
     }
 
     fn call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -266,7 +266,7 @@ pub const Interpreter = struct {
                 self.pushLabel(Label{
                     .return_arity = f.results.len,
                     .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
-                    .break_target = ip + 1,
+                    .branch_target = ip + 1,
                 }) catch |e| {
                     err.* = e;
                     return;
@@ -348,7 +348,7 @@ pub const Interpreter = struct {
                 self.pushLabel(Label{
                     .return_arity = func.results.len,
                     .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
-                    .break_target = ip + 1,
+                    .branch_target = ip + 1,
                 }) catch |e| {
                     err.* = e;
                     return;
@@ -2616,7 +2616,7 @@ pub const Interpreter = struct {
         self.op_ptr = label.op_stack_len + n;
         _ = self.popLabels(target);
 
-        return label.break_target;
+        return label.branch_target;
     }
 
     pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
@@ -2748,7 +2748,7 @@ pub const Interpreter = struct {
     // - code: the code we should interpret after `end`
     pub const Label = struct {
         return_arity: usize = 0,
-        break_target: usize = 0,
+        branch_target: usize = 0,
         op_stack_len: usize, // u32?
     };
 };

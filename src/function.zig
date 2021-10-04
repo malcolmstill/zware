@@ -66,17 +66,17 @@ pub const Instruction = union(Opcode) {
     block: struct {
         param_arity: usize,
         return_arity: usize,
-        break_target: usize,
+        branch_target: usize,
     },
     loop: struct {
         param_arity: usize,
         return_arity: usize,
-        break_target: usize,
+        branch_target: usize,
     },
     @"if": struct {
         param_arity: usize,
         return_arity: usize,
-        break_target: usize,
+        branch_target: usize,
         else_ip: ?usize,
     },
     @"else": void,
@@ -336,7 +336,7 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
             .block => |*block_instr| {
                 const end_offset = try findEnd(code[offset..]);
 
-                block_instr.break_target = parsed_code_offset + offset + end_offset + 1;
+                block_instr.branch_target = parsed_code_offset + offset + end_offset + 1;
             },
             .@"if" => |*if_instr| {
                 const end_offset = try findEnd(code[offset..]);
@@ -344,14 +344,14 @@ pub fn calculateContinuations(parsed_code_offset: usize, code: []Instruction) !v
 
                 if (optional_else_offset == null and if_instr.param_arity -% if_instr.return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                if_instr.break_target = parsed_code_offset + offset + end_offset + 1;
+                if_instr.branch_target = parsed_code_offset + offset + end_offset + 1;
 
                 if (optional_else_offset) |else_offset| {
                     if_instr.else_ip = parsed_code_offset + offset + else_offset + 1;
                 }
             },
             .loop => |*loop_instr| {
-                loop_instr.break_target = parsed_code_offset + offset;
+                loop_instr.branch_target = parsed_code_offset + offset;
             },
             else => {},
         }

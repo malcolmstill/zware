@@ -279,7 +279,7 @@ pub const Instance = struct {
                 try interp.pushLabel(Interpreter.Label{
                     .return_arity = f.results.len,
                     .op_stack_len = locals_start,
-                    .break_target = f.ip_end - 1,
+                    .branch_target = f.ip_end - 1,
                 });
 
                 // std.debug.warn("invoke[{}, {}] = {x}\n", .{ index, handle, f.code });
@@ -328,7 +328,7 @@ pub const Instance = struct {
                 try interp.pushLabel(Interpreter.Label{
                     .return_arity = 0,
                     .op_stack_len = locals_start,
-                    .break_target = 0,
+                    .branch_target = 0,
                 });
 
                 try interp.invoke(f.ip_start);
