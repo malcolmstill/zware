@@ -457,7 +457,7 @@ pub const Interpreter = struct {
 
     fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const global_index = code[ip].@"global.set";
-        const value = self.peekOperand();
+        const value = self.popAnyOperand();
 
         const global = self.inst.getGlobal(global_index) catch |e| {
             err.* = e;
