@@ -46,6 +46,7 @@ pub const Interpreter = struct {
     }
 
     fn rebug(self: *Interpreter, opcode: Instruction) void {
+        // std.debug.warn("{}\n", .{opcode});
         std.debug.warn("\n=====================================================\n", .{});
         std.debug.warn("before: {}\n", .{opcode});
         var i: usize = 0;
@@ -70,13 +71,13 @@ pub const Interpreter = struct {
         const stdout = std.io.getStdOut().writer();
 
         var buf: [10]u8 = undefined;
-        stdout.print("Continue:", .{}) catch |e| return;
-        _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
+        // stdout.print("Continue:", .{}) catch |e| return;
+        // _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
     }
 
     inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, err: *?WasmError) void {
         const next_instr = code[next_ip];
-        // self.rebug(next_instr);
+        self.rebug(next_instr);
 
         return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, err });
     }
@@ -170,14 +171,14 @@ pub const Interpreter = struct {
     }
 
     fn end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        // const label = self.popLabel();
-        // var next_ip = ip + 1;
+        const label = self.popLabel();
+        var next_ip = ip + 1;
 
-        // // It seems like we need to special case end for a function call. This
-        // // doesn't seem quite right because the spec doesn't mention it. On
-        // // call we push a label containing a continuation which is the code to
-        // // resume after the call has returned. We want to use that if we've run
-        // // out of code in the current function, i.e. self.continuation is empty
+        // It seems like we need to special case end for a function call. This
+        // doesn't seem quite right because the spec doesn't mention it. On
+        // call we push a label containing a continuation which is the code to
+        // resume after the call has returned. We want to use that if we've run
+        // out of code in the current function, i.e. self.continuation is empty
         // if (self.continuation.len == 0) {
         //     const frame = try self.peekNthFrame(0);
         //     const n = label.return_arity;
@@ -192,7 +193,7 @@ pub const Interpreter = struct {
         //     self.inst = frame.inst;
         // }
 
-        // return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.break_target, code, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
     fn br(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -346,8 +347,8 @@ pub const Interpreter = struct {
 
                 // Consume parameters from the stack
                 self.pushFrame(Frame{
-                    .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
-                    .label_stack_len = self.label_stack.len,
+                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
+                    .label_stack_len = self.label_ptr,
                     .return_arity = func.results.len,
                     .inst = self.inst,
                 }, func.locals_count + func.params.len) catch |e| {
@@ -358,7 +359,7 @@ pub const Interpreter = struct {
                 // Our continuation is the code after call
                 self.pushLabel(Label{
                     .return_arity = func.results.len,
-                    .op_stack_len = self.op_stack.len - func.params.len - func.locals_count,
+                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
                     .break_target = ip + 1,
                 }) catch |e| {
                     err.* = e;
@@ -410,6 +411,7 @@ pub const Interpreter = struct {
         const local_index = code[ip].@"local.get";
 
         const frame = self.peekFrame();
+        std.debug.warn("local_index = {}\n", .{local_index});
 
         _ = self.pushOperand(u64, frame.locals[local_index]) catch |e| {
             err.* = e;
@@ -2605,6 +2607,7 @@ pub const Interpreter = struct {
         // self.continuation = code;
         // const instr = self.continuation[0];
         const instr = self.inst.module.parsed_code.items[ip];
+        std.debug.warn("first instr = {}\n", .{instr});
         // self.continuation = self.continuation[1..];
 
         var err: ?WasmError = null;
@@ -2648,7 +2651,7 @@ pub const Interpreter = struct {
 
         var i: usize = 0;
         while (i < n) : (i += 1) {
-            self.op_stack[label.op_stack_len + i] = self.op_stack[self.op_stack.len - n + i];
+            self.op_stack[label.op_stack_len + i] = self.op_stack[self.op_ptr - n + i];
         }
 
         // mem.copy(u64, dest, src);
@@ -2726,6 +2729,7 @@ pub const Interpreter = struct {
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
     pub fn pushFrame(self: *Interpreter, frame: Frame, params_and_locals_count: usize) !void {
+        std.debug.warn("params_and_locals_count = {}\n", .{params_and_locals_count});
         if (self.frame_ptr == self.frame_stack.len) return error.ControlStackOverflow;
         // self.frame_stack = self.frame_stack_mem[0 .. self.frame_ptr + 1];
         self.frame_ptr += 1;
