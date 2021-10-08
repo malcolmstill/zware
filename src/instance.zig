@@ -14,9 +14,9 @@ const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
 
 const InterpreterOptions = struct {
-    operand_stack_size: comptime_int = 1024,
-    control_stack_size: comptime_int = 1024,
+    frame_stack_size: comptime_int = 1024,
     label_stack_size: comptime_int = 1024,
+    operand_stack_size: comptime_int = 1024,
 };
 
 // Instance
@@ -99,10 +99,8 @@ pub const Instance = struct {
                 const func_type = self.module.types.list.items[func.typeidx];
                 const handle = try self.store.addFunction(Function{
                     .function = .{
-                        // .code = self.module.parsed_code.items[code.code.offset .. code.code.offset + code.code.count],
                         .ip_start = code.code.offset,
                         .ip_end = code.code.offset + code.code.count,
-                        // .locals = code.locals,
                         .locals_count = code.locals_count,
                         .params = func_type.params,
                         .results = func_type.results,
@@ -238,9 +236,9 @@ pub const Instance = struct {
 
         const function = try self.getFunc(index);
 
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
         switch (function) {
             .function => |f| {
@@ -250,7 +248,7 @@ pub const Instance = struct {
                 if (f.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
+                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
 
                 const locals_start = interp.op_ptr;
 
@@ -282,7 +280,6 @@ pub const Instance = struct {
                     .branch_target = f.ip_end - 1,
                 });
 
-                // std.debug.warn("invoke[{}, {}] = {x}\n", .{ index, handle, f.code });
                 // 8. Execute our function
                 interp.function_start = f.ip_start;
                 try interp.invoke(f.ip_start);
@@ -293,7 +290,7 @@ pub const Instance = struct {
                 }
             },
             .host_function => |host_func| {
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
                 try host_func.func(&interp);
             },
         }
@@ -302,14 +299,14 @@ pub const Instance = struct {
     pub fn invokeStart(self: *Instance, index: u32, comptime options: InterpreterOptions) !void {
         const function = try self.getFunc(index);
 
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
+        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
         switch (function) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], try self.store.instance(f.instance));
+                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
 
                 const locals_start = interp.op_ptr;
 
@@ -334,17 +331,18 @@ pub const Instance = struct {
                 try interp.invoke(f.ip_start);
             },
             .host_function => |host_func| {
-                var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
                 try host_func.func(&interp);
             },
         }
     }
 
     pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: InterpreterOptions) !Result {
-        var op_stack_mem: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
-        var frame_stack_mem: [options.control_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.control_stack_size;
-        var label_stack_mem: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.control_stack_size;
-        var interp = Interpreter.init(op_stack_mem[0..], frame_stack_mem[0..], label_stack_mem[0..], self);
+        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+
+        var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
 
         const locals_start = interp.op_ptr;
 
