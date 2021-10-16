@@ -87,7 +87,7 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            _ = self.decodeSection() catch |err| {
+            self.decodeSection() catch |err| {
                 switch (err) {
                     error.EndOfStream => {
                         break;
@@ -126,7 +126,7 @@ pub const Module = struct {
         return count;
     }
 
-    pub fn decodeSection(self: *Module) !SectionType {
+    pub fn decodeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const id: SectionType = rd.readEnum(SectionType, .Little) catch |err| switch (err) {
@@ -141,7 +141,7 @@ pub const Module = struct {
 
         const section_start = rd.context.pos;
 
-        _ = switch (id) {
+        switch (id) {
             .Custom => try self.decodeCustomSection(size),
             .Type => try self.decodeTypeSection(),
             .Import => try self.decodeImportSection(),
@@ -154,15 +154,13 @@ pub const Module = struct {
             .Element => try self.decodeElementSection(),
             .Code => try self.decodeCodeSection(),
             .Data => try self.decodeDataSection(),
-        };
+        }
 
         const section_end = rd.context.pos;
         if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
-
-        return id;
     }
 
-    fn decodeTypeSection(self: *Module) !usize {
+    fn decodeTypeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -230,11 +228,9 @@ pub const Module = struct {
                 .results = results_value_type,
             });
         }
-
-        return count;
     }
 
-    fn decodeImportSection(self: *Module) !usize {
+    fn decodeImportSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -295,11 +291,9 @@ pub const Module = struct {
                 .desc_tag = tag,
             });
         }
-
-        return count;
     }
 
-    fn decodeFunctionSection(self: *Module) !usize {
+    fn decodeFunctionSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -312,8 +306,6 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             try self.decodeFunction(null);
         }
-
-        return count;
     }
 
     fn decodeFunction(self: *Module, import: ?u32) !void {
@@ -335,7 +327,7 @@ pub const Module = struct {
         });
     }
 
-    fn decodeTableSection(self: *Module) !usize {
+    fn decodeTableSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -348,8 +340,6 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             try self.decodeTable(null);
         }
-
-        return count;
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
@@ -403,7 +393,7 @@ pub const Module = struct {
         }
     }
 
-    fn decodeMemorySection(self: *Module) !usize {
+    fn decodeMemorySection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -416,8 +406,6 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             try self.decodeMemory(null);
         }
-
-        return count;
     }
 
     fn decodeMemory(self: *Module, import: ?u32) !void {
@@ -468,7 +456,7 @@ pub const Module = struct {
         }
     }
 
-    fn decodeGlobalSection(self: *Module) !usize {
+    fn decodeGlobalSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -481,8 +469,6 @@ pub const Module = struct {
         while (i < count) : (i += 1) {
             try self.decodeGlobal(null);
         }
-
-        return count;
     }
 
     fn decodeGlobal(self: *Module, import: ?u32) !void {
@@ -531,7 +517,7 @@ pub const Module = struct {
         });
     }
 
-    fn decodeExportSection(self: *Module) !usize {
+    fn decodeExportSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -584,11 +570,9 @@ pub const Module = struct {
                 .index = index,
             });
         }
-
-        return count;
     }
 
-    fn decodeStartSection(self: *Module) !usize {
+    fn decodeStartSection(self: *Module) !void {
         if (self.start != null) return error.MultipleStartSections;
         const rd = self.buf.reader();
 
@@ -603,11 +587,9 @@ pub const Module = struct {
         if (function_type.params.len != 0 or function_type.results.len != 0) return error.ValidatorNotStartFunctionType;
 
         self.start = index;
-
-        return 1;
     }
 
-    fn decodeElementSection(self: *Module) !usize {
+    fn decodeElementSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -662,11 +644,9 @@ pub const Module = struct {
                 .data = self.module[data_start..rd.context.pos],
             });
         }
-
-        return 1;
     }
 
-    fn decodeCodeSection(self: *Module) !usize {
+    fn decodeCodeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -728,16 +708,13 @@ pub const Module = struct {
             const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
 
             try self.codes.list.append(Code{
-                // .locals = locals,
                 .locals_count = locals_count,
                 .code = parsed_code,
             });
         }
-
-        return count;
     }
 
-    fn decodeDataSection(self: *Module) !usize {
+    fn decodeDataSection(self: *Module) !void {
         const rd = self.buf.reader();
 
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -784,11 +761,9 @@ pub const Module = struct {
                 .data = self.module[data_start..rd.context.pos],
             });
         }
-
-        return count;
     }
 
-    fn decodeCustomSection(self: *Module, size: u32) !usize {
+    fn decodeCustomSection(self: *Module, size: u32) !void {
         const rd = self.buf.reader();
         const offset = rd.context.pos;
 
@@ -820,8 +795,6 @@ pub const Module = struct {
             .name = name,
             .data = data,
         });
-
-        return 1;
     }
 
     pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
