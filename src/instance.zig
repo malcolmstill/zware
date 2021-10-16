@@ -52,7 +52,22 @@ pub const Instance = struct {
     pub fn instantiate(self: *Instance, index: usize) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
-        // 1. Initialise imports
+        try self.instantiateImports();
+        try self.instantiateFunctions(index);
+        try self.instantiateGlobals();
+        try self.instantiateMemories();
+        try self.instantiateTables();
+        try self.checkData();
+        try self.checkElements();
+        try self.instantiateData();
+        try self.instantiateElements();
+
+        if (self.module.start) |start_function| {
+            try self.invokeStart(start_function, .{});
+        }
+    }
+
+    fn instantiateImports(self: *Instance) !void {
         for (self.module.imports.list.items) |import| {
             const import_handle = try self.store.import(import.module, import.name, import.desc_tag);
             switch (import.desc_tag) {
@@ -62,7 +77,9 @@ pub const Instance = struct {
                 .Global => try self.globaladdrs.append(import_handle),
             }
         }
+    }
 
+    fn instantiateFunctions(self: *Instance, index: usize) !void {
         // Initialise (internal) functions
         //
         // We have two possibilities:
@@ -112,7 +129,9 @@ pub const Instance = struct {
                 try self.funcaddrs.append(handle);
             }
         }
+    }
 
+    fn instantiateGlobals(self: *Instance) !void {
         // 2. Initialise globals
         for (self.module.globals.list.items) |global_def, i| {
             if (global_def.import != null) {
@@ -128,7 +147,9 @@ pub const Instance = struct {
                 try self.globaladdrs.append(handle);
             }
         }
+    }
 
+    fn instantiateMemories(self: *Instance) !void {
         // 3a. Initialise memories
         for (self.module.memories.list.items) |mem_size, i| {
             if (mem_size.import != null) {
@@ -139,7 +160,9 @@ pub const Instance = struct {
                 try self.memaddrs.append(handle);
             }
         }
+    }
 
+    fn instantiateTables(self: *Instance) !void {
         // 3b. Initialise tables
         for (self.module.tables.list.items) |table_size, i| {
             if (table_size.import != null) {
@@ -150,7 +173,9 @@ pub const Instance = struct {
                 try self.tableaddrs.append(handle);
             }
         }
+    }
 
+    fn checkData(self: *Instance) !void {
         // 4a. Check all data
         for (self.module.datas.list.items) |data| {
             const handle = self.memaddrs.items[data.index];
@@ -159,14 +184,18 @@ pub const Instance = struct {
             const offset = try self.invokeExpression(data.offset.offset, u32, .{});
             try memory.check(offset, data.data);
         }
+    }
 
+    fn checkElements(self: *Instance) !void {
         // 4b. Check all elements
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
             const offset = try self.invokeExpression(segment.offset.offset, u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
+    }
 
+    fn instantiateData(self: *Instance) !void {
         // 5a. Mutate all data
         for (self.module.datas.list.items) |data| {
             const handle = self.memaddrs.items[data.index];
@@ -175,7 +204,9 @@ pub const Instance = struct {
             const offset = try self.invokeExpression(data.offset.offset, u32, .{});
             try memory.copy(offset, data.data);
         }
+    }
 
+    fn instantiateElements(self: *Instance) !void {
         // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
@@ -187,10 +218,6 @@ pub const Instance = struct {
                 const value = try instruction.readULEB128Mem(u32, &data);
                 try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
             }
-        }
-
-        if (self.module.start) |start_function| {
-            try self.invokeStart(start_function, .{});
         }
     }
 
