@@ -162,6 +162,10 @@ pub const ParseIterator = struct {
         self.continuation_stack[self.continuation_stack_ptr] = offset;
     }
 
+    fn peekContinuationStack(self: *ParseIterator) usize {
+        return self.continuation_stack[self.continuation_stack_ptr - 1];
+    }
+
     fn popContinuationStack(self: *ParseIterator) !usize {
         if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow;
         self.continuation_stack_ptr -= 1;
@@ -246,7 +250,7 @@ pub const ParseIterator = struct {
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .branch_target = 0,
+                        .branch_target = self.code_ptr,
                     },
                 };
             },
@@ -289,15 +293,28 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .@"else" => rt_instr = Instruction.@"else",
+            .@"else" => {
+                const parsed_code_offset = self.peekContinuationStack();
+
+                switch (self.parsed.items[parsed_code_offset]) {
+                    .@"if" => |*b| b.else_ip = self.code_ptr + 1,
+                    else => return error.UnexpectedInstruction,
+                }
+
+                rt_instr = Instruction.@"else";
+            },
             .end => {
+                // If we're not looking at the `end` of a function
                 if (self.code.len != 0) {
                     const parsed_code_offset = try self.popContinuationStack();
 
                     switch (self.parsed.items[parsed_code_offset]) {
-                        .block => |*blk| blk.branch_target = self.code_ptr + 1,
-                        .loop => |*lp| lp.branch_target = self.code_ptr + 1,
-                        .@"if" => |*i| i.branch_target = self.code_ptr + 1,
+                        .block => |*b| b.branch_target = self.code_ptr + 1,
+                        .loop => {},
+                        .@"if" => |*b| {
+                            if (b.else_ip == null and b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
+                            b.branch_target = self.code_ptr + 1;
+                        },
                         else => return error.UnexpectedInstruction,
                     }
                 }
