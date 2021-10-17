@@ -7,7 +7,6 @@ const Validator = @import("validator.zig").Validator;
 const ValueType = @import("common.zig").ValueType;
 const LocalType = @import("common.zig").LocalType;
 const ArrayList = std.ArrayList;
-const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 pub const OpcodeIterator = struct {
@@ -124,7 +123,6 @@ pub const ParseIterator = struct {
             .code = function,
             .code_ptr = parsed_code.items.len,
             .function = function,
-            // .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
             .parsed = parsed_code,
             .module = module,
             .params = null,
