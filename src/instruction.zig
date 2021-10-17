@@ -144,8 +144,6 @@ pub const ParseIterator = struct {
         self.params = function_type.params;
         self.locals = locals;
 
-        try self.pushContinuationStack(self.code_ptr);
-
         try self.validator.pushControlFrame(
             .nop, // block?
             function_type.params[0..0],
