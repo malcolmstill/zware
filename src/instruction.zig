@@ -6,6 +6,8 @@ const Range = @import("common.zig").Range;
 const Validator = @import("validator.zig").Validator;
 const ValueType = @import("common.zig").ValueType;
 const LocalType = @import("common.zig").LocalType;
+const ArrayList = std.ArrayList;
+const FixedBufferAllocator = std.heap.FixedBufferAllocator;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 pub const OpcodeIterator = struct {
@@ -108,17 +110,22 @@ const F64_OUT = [1]ValueType{.F64} ** 1;
 pub const ParseIterator = struct {
     function: []const u8,
     code: []const u8,
-    parsed: []Instruction,
+    code_ptr: usize,
+    parsed: *ArrayList(Instruction),
     module: *Module,
     validator: Validator,
     params: ?[]const ValueType,
     locals: ?[]LocalType,
+    continuation_stack: []usize,
+    continuation_stack_ptr: usize,
 
-    pub fn init(module: *Module, function: []const u8) ParseIterator {
+    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize) ParseIterator {
         return ParseIterator{
             .code = function,
+            .code_ptr = parsed_code.items.len,
             .function = function,
-            .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
+            // .parsed = module.parsed_code.items[module.parsed_code.items.len..module.parsed_code.items.len],
+            .parsed = parsed_code,
             .module = module,
             .params = null,
             .locals = null,
@@ -126,6 +133,8 @@ pub const ParseIterator = struct {
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
             .validator = Validator.init(module.alloc),
+            .continuation_stack = continuation_stack,
+            .continuation_stack_ptr = 0,
         };
     }
 
@@ -137,6 +146,8 @@ pub const ParseIterator = struct {
         self.params = function_type.params;
         self.locals = locals;
 
+        try self.pushContinuationStack(self.code_ptr);
+
         try self.validator.pushControlFrame(
             .nop, // block?
             function_type.params[0..0],
@@ -144,7 +155,26 @@ pub const ParseIterator = struct {
         );
     }
 
+    fn pushContinuationStack(self: *ParseIterator, offset: usize) !void {
+        defer self.continuation_stack_ptr += 1;
+        if (self.continuation_stack_ptr >= self.continuation_stack.len) return error.ContinuationStackOverflow;
+
+        self.continuation_stack[self.continuation_stack_ptr] = offset;
+    }
+
+    fn peekContinuationStack(self: *ParseIterator) usize {
+        return self.continuation_stack[self.continuation_stack_ptr - 1];
+    }
+
+    fn popContinuationStack(self: *ParseIterator) !usize {
+        if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow;
+        self.continuation_stack_ptr -= 1;
+
+        return self.continuation_stack[self.continuation_stack_ptr];
+    }
+
     pub fn next(self: *ParseIterator) !?Instruction {
+        defer self.code_ptr += 1;
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
@@ -181,6 +211,8 @@ pub const ParseIterator = struct {
                     }
                 }
 
+                try self.pushContinuationStack(self.code_ptr);
+
                 rt_instr = Instruction{
                     .block = .{
                         .param_arity = block_params,
@@ -212,11 +244,13 @@ pub const ParseIterator = struct {
                     }
                 }
 
+                try self.pushContinuationStack(self.code_ptr);
+
                 rt_instr = Instruction{
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .branch_target = 0,
+                        .branch_target = self.code_ptr,
                     },
                 };
             },
@@ -248,6 +282,8 @@ pub const ParseIterator = struct {
                     }
                 }
 
+                try self.pushContinuationStack(self.code_ptr);
+
                 rt_instr = Instruction{
                     .@"if" = .{
                         .param_arity = block_params,
@@ -257,8 +293,34 @@ pub const ParseIterator = struct {
                     },
                 };
             },
-            .@"else" => rt_instr = Instruction.@"else",
-            .end => rt_instr = Instruction.end,
+            .@"else" => {
+                const parsed_code_offset = self.peekContinuationStack();
+
+                switch (self.parsed.items[parsed_code_offset]) {
+                    .@"if" => |*b| b.else_ip = self.code_ptr + 1,
+                    else => return error.UnexpectedInstruction,
+                }
+
+                rt_instr = Instruction.@"else";
+            },
+            .end => {
+                // If we're not looking at the `end` of a function
+                if (self.code.len != 0) {
+                    const parsed_code_offset = try self.popContinuationStack();
+
+                    switch (self.parsed.items[parsed_code_offset]) {
+                        .block => |*b| b.branch_target = self.code_ptr + 1,
+                        .loop => {},
+                        .@"if" => |*b| {
+                            if (b.else_ip == null and b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
+                            b.branch_target = self.code_ptr + 1;
+                        },
+                        else => return error.UnexpectedInstruction,
+                    }
+                }
+
+                rt_instr = Instruction.end;
+            },
             .br => {
                 const label = try readULEB128Mem(u32, &self.code);
                 try self.validator.validateBr(label);
