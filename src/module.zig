@@ -799,9 +799,10 @@ pub const Module = struct {
 
     pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
         _ = try instruction.findFunctionEnd(code);
-
-        var it = ParseIterator.init(self, code);
+        var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
+
+        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..]);
 
         const in: [0]ValueType = [_]ValueType{} ** 0;
         var out: [1]ValueType = [_]ValueType{.I32} ** 1;
@@ -812,7 +813,6 @@ pub const Module = struct {
             out[0..1],
         );
 
-        // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
             switch (instr) {
                 .@"i32.const" => |_| {},
@@ -828,10 +828,6 @@ pub const Module = struct {
 
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
-        // 2. Make a second pass where we fix up the continuations for
-        //    blocks, loops and ifs
-        try function.calculateContinuations(code_start, parsed_code);
-
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
@@ -843,22 +839,18 @@ pub const Module = struct {
 
     pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !common.Range {
         _ = try instruction.findFunctionEnd(code);
-
-        var it = ParseIterator.init(self, code);
+        var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
+
+        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..]);
 
         try it.pushFunction(locals, func_index);
 
-        // 1. Make a first pass allocating all of our Instructions
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
 
         var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
-
-        // 2. Make a second pass where we fix up the continuations for
-        //    blocks, loops and ifs
-        try function.calculateContinuations(code_start, parsed_code);
 
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
