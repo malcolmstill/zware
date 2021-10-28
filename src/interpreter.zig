@@ -169,6 +169,26 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.branch_target, code, err });
     }
 
+    fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const meta = code[ip].@"if";
+        const condition = self.popOperand(u32);
+
+        if (condition == 0) {
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, meta.branch_target, code, err });
+        } else {
+            // We are inside the if branch
+            self.pushLabel(Label{
+                .return_arity = meta.return_arity,
+                .op_stack_len = self.op_ptr - meta.param_arity,
+                .branch_target = meta.branch_target,
+            }) catch |e| {
+                err.* = e;
+                return;
+            };
+            return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
+        }
+    }
+
     fn end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const label = self.popLabel();
 
@@ -373,6 +393,46 @@ pub const Interpreter = struct {
         }
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, self.inst.module.parsed_code.items, err });
+    }
+
+    fn fast_call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        const f = code[ip].fast_call;
+
+        var next_ip = ip;
+
+        // Make space for locals (again, params already on stack)
+        var j: usize = 0;
+        while (j < f.locals) : (j += 1) {
+            self.pushOperand(u64, 0) catch |e| {
+                err.* = e;
+                return;
+            };
+        }
+
+        // Consume parameters from the stack
+        self.pushFrame(Frame{
+            .op_stack_len = self.op_ptr - f.params - f.locals,
+            .label_stack_len = self.label_ptr,
+            .return_arity = f.results,
+            .inst = self.inst,
+        }, f.locals + f.params) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        // Our continuation is the code after call
+        self.pushLabel(Label{
+            .return_arity = f.results,
+            .op_stack_len = self.op_ptr - f.params - f.locals,
+            .branch_target = ip + 1,
+        }) catch |e| {
+            err.* = e;
+            return;
+        };
+
+        next_ip = f.ip_start;
+
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
     fn drop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -2571,8 +2631,8 @@ pub const Interpreter = struct {
     const InstructionFunction = fn (*Interpreter, usize, []Instruction, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
-        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
-        call,               call_indirect,      impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
+        call,               call_indirect,      fast_call,            impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             impl_ni,                impl_ni,                impl_ni,                impl_ni,
         @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        impl_ni,              impl_ni,           impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
         @"i64.load8_s",     @"i64.load8_u",     @"i64.load16_s",      @"i64.load16_u",      @"i64.load32_s",      @"i64.load32_u",      @"i32.store",      @"i64.store",         @"f32.store",         @"f64.store",         @"i32.store8",        @"i32.store16",     @"i64.store8",          @"i64.store16",         @"i64.store32",         @"memory.size",
         @"memory.grow",     @"i32.const",       @"i64.const",         @"f32.const",         @"f64.const",         @"i32.eqz",           @"i32.eq",         @"i32.ne",            @"i32.lt_s",          @"i32.lt_u",          @"i32.gt_s",          @"i32.gt_u",        @"i32.le_s",            @"i32.le_u",            @"i32.ge_s",            @"i32.ge_u",

@@ -308,8 +308,15 @@ pub const ParseIterator = struct {
                         .block => |*b| b.branch_target = self.code_ptr + 1,
                         .loop => {},
                         .@"if" => |*b| {
+                            // We have an if with no else, check that this works arity-wise and replace with fast if
                             if (b.else_ip == null and b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
-                            b.branch_target = self.code_ptr + 1;
+                            self.parsed.items[parsed_code_offset] = Instruction{
+                                .if_no_else = .{
+                                    .param_arity = b.param_arity,
+                                    .return_arity = b.return_arity,
+                                    .branch_target = self.code_ptr + 1,
+                                },
+                            };
                         },
                         else => return error.UnexpectedInstruction,
                     }
@@ -357,7 +364,8 @@ pub const ParseIterator = struct {
 
                 try self.validator.validateCall(function_type);
 
-                rt_instr = Instruction{ .call = function_index };
+                // rt_instr = Instruction{ .call = function_index }; // TODO: do the replacement at instantiate-time?
+                rt_instr = Instruction{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
             .call_indirect => {
                 const type_index = try readULEB128Mem(u32, &self.code);
