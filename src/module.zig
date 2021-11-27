@@ -5,10 +5,11 @@ const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
-const Instruction = @import("function.zig").Instruction;
+const Instruction = @import("instruction.zig").Instruction;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
-const Opcode = instruction.Opcode;
+const opcode = @import("opcode.zig");
+const Opcode = @import("opcode.zig").Opcode;
 const ParseIterator = instruction.ParseIterator;
 const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
@@ -27,6 +28,7 @@ const LocalType = common.LocalType;
 const Interpreter = @import("interpreter.zig").Interpreter;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
+const RuntimeOpcode = @import("instruction.zig").RuntimeOpcode;
 const function = @import("function.zig");
 
 pub const Module = struct {
@@ -609,7 +611,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(expr);
+            const meta = try opcode.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -734,7 +736,7 @@ pub const Module = struct {
 
             const expr_start = rd.context.pos;
             const expr = self.module[expr_start..];
-            const meta = try instruction.findExprEnd(expr);
+            const meta = try opcode.findExprEnd(expr);
 
             rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -798,7 +800,7 @@ pub const Module = struct {
     }
 
     pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
-        _ = try instruction.findFunctionEnd(code);
+        _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
@@ -838,7 +840,7 @@ pub const Module = struct {
     }
 
     pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !common.Range {
-        _ = try instruction.findFunctionEnd(code);
+        _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 

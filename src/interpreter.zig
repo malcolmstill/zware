@@ -5,9 +5,9 @@ const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
 const ValueType = @import("module.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
-const Instruction = @import("function.zig").Instruction;
 const WasmError = @import("function.zig").WasmError;
 const instruction = @import("instruction.zig");
+const Instruction = instruction.Instruction;
 const Opcode = @import("instruction.zig").Opcode;
 
 // Interpreter:
