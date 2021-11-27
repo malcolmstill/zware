@@ -170,7 +170,7 @@ pub const Interpreter = struct {
     }
 
     fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        const meta = code[ip].@"if";
+        const meta = code[ip].if_no_else;
         const condition = self.popOperand(u32);
 
         if (condition == 0) {

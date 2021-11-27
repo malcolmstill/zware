@@ -681,15 +681,19 @@ pub const ParseIterator = struct {
                         .block => |*b| b.branch_target = self.code_ptr + 1,
                         .loop => {},
                         .@"if" => |*b| {
-                            // We have an if with no else, check that this works arity-wise and replace with fast if
-                            if (b.else_ip == null and b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
-                            self.parsed.items[parsed_code_offset] = Instruction{
-                                .if_no_else = .{
-                                    .param_arity = b.param_arity,
-                                    .return_arity = b.return_arity,
-                                    .branch_target = self.code_ptr + 1,
-                                },
-                            };
+                            if (b.else_ip == null) {
+                                // We have an if with no else, check that this works arity-wise and replace with fast if
+                                if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
+                                self.parsed.items[parsed_code_offset] = Instruction{
+                                    .if_no_else = .{
+                                        .param_arity = b.param_arity,
+                                        .return_arity = b.return_arity,
+                                        .branch_target = self.code_ptr + 1,
+                                    },
+                                };
+                            } else {
+                                b.branch_target = self.code_ptr + 1;
+                            }
                         },
                         else => return error.UnexpectedInstruction,
                     }
