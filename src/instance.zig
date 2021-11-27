@@ -3,6 +3,7 @@ const mem = std.mem;
 const math = std.math;
 const common = @import("common.zig");
 const instruction = @import("instruction.zig");
+const opcode = @import("opcode.zig");
 const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
@@ -215,7 +216,7 @@ pub const Instance = struct {
             var data = segment.data;
             var j: usize = 0;
             while (j < segment.count) : (j += 1) {
-                const value = try instruction.readULEB128Mem(u32, &data);
+                const value = try opcode.readULEB128Mem(u32, &data);
                 try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
             }
         }

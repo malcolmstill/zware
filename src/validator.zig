@@ -5,7 +5,7 @@ const ArrayList = std.ArrayList;
 const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("common.zig").ValueType;
 const Global = @import("common.zig").Global;
-const Opcode = @import("instruction.zig").Opcode;
+const Opcode = @import("opcode.zig").Opcode;
 
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
