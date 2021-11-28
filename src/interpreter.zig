@@ -234,20 +234,14 @@ pub const Interpreter = struct {
 
         switch (function) {
             .function => |f| {
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < f.locals_count) : (j += 1) {
-                    self.pushOperand(u64, 0) catch |e| {
-                        err.* = e;
-                        return;
-                    };
-                }
-
                 // Check we have enough stack space
-                self.checkStackSpace(f.required_stack_space) catch |e| {
+                self.checkStackSpace(f.required_stack_space + f.locals_count) catch |e| {
                     err.* = e;
                     return;
                 };
+
+                // Make space for locals (again, params already on stack)
+                self.op_ptr += f.locals_count;
 
                 self.inst = self.inst.store.instance(f.instance) catch |e| {
                     err.* = e;
@@ -322,20 +316,14 @@ pub const Interpreter = struct {
                     return;
                 }
 
-                // Make space for locals (again, params already on stack)
-                var j: usize = 0;
-                while (j < func.locals_count) : (j += 1) {
-                    self.pushOperand(u64, 0) catch |e| {
-                        err.* = e;
-                        return;
-                    };
-                }
-
                 // Check we have enough stack space
-                self.checkStackSpace(func.required_stack_space) catch |e| {
+                self.checkStackSpace(func.required_stack_space + func.locals_count) catch |e| {
                     err.* = e;
                     return;
                 };
+
+                // Make space for locals (again, params already on stack)
+                self.op_ptr += func.locals_count;
 
                 self.inst = self.inst.store.instance(func.instance) catch |e| {
                     err.* = e;
@@ -387,22 +375,14 @@ pub const Interpreter = struct {
     fn fast_call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const f = code[ip].fast_call;
 
-        var next_ip = ip;
-
-        // Make space for locals (again, params already on stack)
-        var j: usize = 0;
-        while (j < f.locals) : (j += 1) {
-            self.pushOperand(u64, 0) catch |e| {
-                err.* = e;
-                return;
-            };
-        }
-
         // Check we have enough stack space
-        self.checkStackSpace(f.required_stack_space) catch |e| {
+        self.checkStackSpace(f.required_stack_space + f.locals) catch |e| {
             err.* = e;
             return;
         };
+
+        // Make space for locals (again, params already on stack)
+        self.op_ptr += f.locals;
 
         // Consume parameters from the stack
         self.pushFrame(Frame{
@@ -425,9 +405,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        next_ip = f.start;
-
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, f.start, code, err });
     }
 
     fn drop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -2670,7 +2648,7 @@ pub const Interpreter = struct {
     }
 
     pub fn checkStackSpace(self: *Interpreter, n: usize) !void {
-        if (self.op_ptr + n >= self.op_stack.len) return error.CheckStackSpace;
+        if (self.op_ptr + n > self.op_stack.len) return error.CheckStackSpace;
     }
 
     pub fn pushOperandNoCheck(self: *Interpreter, comptime T: type, value: T) void {
