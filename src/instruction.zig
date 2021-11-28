@@ -1,4 +1,5 @@
 const std = @import("std");
+const math = std.math;
 const Module = @import("module.zig").Module;
 const Range = @import("common.zig").Range;
 const Validator = @import("validator.zig").Validator;
@@ -197,26 +198,26 @@ pub const Instruction = union(RuntimeOpcode) {
     @"unreachable": void,
     nop: void,
     block: struct {
-        param_arity: usize,
-        return_arity: usize,
-        branch_target: usize,
+        param_arity: u16,
+        return_arity: u16,
+        branch_target: u32,
     },
     loop: struct {
-        param_arity: usize,
-        return_arity: usize,
-        branch_target: usize,
+        param_arity: u16,
+        return_arity: u16,
+        branch_target: u32,
     },
     @"if": struct {
-        param_arity: usize,
-        return_arity: usize,
-        branch_target: usize,
-        else_ip: ?usize,
+        param_arity: u16,
+        return_arity: u16,
+        branch_target: u32,
+        else_ip: u32,
     },
     @"else": void,
     if_no_else: struct {
-        param_arity: usize,
-        return_arity: usize,
-        branch_target: usize,
+        param_arity: u16,
+        return_arity: u16,
+        branch_target: u32,
     },
     end: void,
     br: u32,
@@ -232,11 +233,11 @@ pub const Instruction = union(RuntimeOpcode) {
         table: u32,
     },
     fast_call: struct {
-        start: usize,
-        locals: usize,
-        params: usize,
-        results: usize,
-        required_stack_space: usize,
+        start: u32,
+        locals: u16,
+        params: u16,
+        results: u16,
+        required_stack_space: u16,
     },
     drop: void,
     select: void,
@@ -560,13 +561,13 @@ pub const ParseIterator = struct {
             .block => {
                 const block_type = try opcode.readILEB128Mem(i32, &self.code);
 
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                var block_params: u16 = 0;
+                var block_returns: u16 = if (block_type == -0x40) 0 else 1;
 
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
+                    block_params = try math.cast(u16, func_type.params.len);
+                    block_returns = try math.cast(u16, func_type.results.len);
                     try self.validator.validateBlock(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -594,12 +595,12 @@ pub const ParseIterator = struct {
             .loop => {
                 const block_type = try opcode.readILEB128Mem(i32, &self.code);
 
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                var block_params: u16 = 0;
+                var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
+                    block_params = try math.cast(u16, func_type.params.len);
+                    block_returns = try math.cast(u16, func_type.results.len);
                     try self.validator.validateLoop(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -620,7 +621,7 @@ pub const ParseIterator = struct {
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .branch_target = self.code_ptr,
+                        .branch_target = try math.cast(u32, self.code_ptr),
                     },
                 };
             },
@@ -632,12 +633,12 @@ pub const ParseIterator = struct {
                 //    otherwise assume temporarily that 1 value is returned
                 // 3. If block_type >= 0 then we reference a function type,
                 //    so look it up and update the params / returns count to match
-                var block_params: usize = 0;
-                var block_returns: usize = if (block_type == -0x40) 0 else 1;
+                var block_params: u16 = 0;
+                var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = func_type.params.len;
-                    block_returns = func_type.results.len;
+                    block_params = try math.cast(u16, func_type.params.len);
+                    block_returns = try math.cast(u16, func_type.results.len);
                     try self.validator.validateIf(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -655,11 +656,10 @@ pub const ParseIterator = struct {
                 try self.pushContinuationStack(self.code_ptr);
 
                 rt_instr = Instruction{
-                    .@"if" = .{
+                    .if_no_else = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
                         .branch_target = 0,
-                        .else_ip = null,
                     },
                 };
             },
@@ -667,7 +667,16 @@ pub const ParseIterator = struct {
                 const parsed_code_offset = self.peekContinuationStack();
 
                 switch (self.parsed.items[parsed_code_offset]) {
-                    .@"if" => |*b| b.else_ip = self.code_ptr + 1,
+                    .if_no_else => |*b| {
+                        self.parsed.items[parsed_code_offset] = Instruction{
+                            .@"if" = .{
+                                .param_arity = b.param_arity,
+                                .return_arity = b.return_arity,
+                                .branch_target = 0,
+                                .else_ip = try math.cast(u32, self.code_ptr + 1),
+                            },
+                        };
+                    },
                     else => return error.UnexpectedInstruction,
                 }
 
@@ -679,22 +688,16 @@ pub const ParseIterator = struct {
                     const parsed_code_offset = try self.popContinuationStack();
 
                     switch (self.parsed.items[parsed_code_offset]) {
-                        .block => |*b| b.branch_target = self.code_ptr + 1,
+                        .block => |*b| b.branch_target = try math.cast(u32, self.code_ptr + 1),
                         .loop => {},
                         .@"if" => |*b| {
-                            if (b.else_ip == null) {
-                                // We have an if with no else, check that this works arity-wise and replace with fast if
-                                if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
-                                self.parsed.items[parsed_code_offset] = Instruction{
-                                    .if_no_else = .{
-                                        .param_arity = b.param_arity,
-                                        .return_arity = b.return_arity,
-                                        .branch_target = self.code_ptr + 1,
-                                    },
-                                };
-                            } else {
-                                b.branch_target = self.code_ptr + 1;
-                            }
+                            b.branch_target = try math.cast(u32, self.code_ptr + 1);
+                        },
+                        .if_no_else => |*b| {
+                            // We have an if with no else, check that this works arity-wise and replace with fast if
+                            if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
+
+                            b.branch_target = try math.cast(u32, self.code_ptr + 1);
                         },
                         else => return error.UnexpectedInstruction,
                     }

@@ -128,38 +128,16 @@ pub const Interpreter = struct {
         const meta = code[ip].@"if";
         const condition = self.popOperand(u32);
 
-        var next_ip = ip + 1;
+        self.pushLabel(Label{
+            .return_arity = meta.return_arity,
+            .op_stack_len = self.op_ptr - meta.param_arity,
+            .branch_target = meta.branch_target,
+        }) catch |e| {
+            err.* = e;
+            return;
+        };
 
-        if (condition == 0) {
-            next_ip = meta.branch_target;
-
-            // unless we have an else branch
-            if (meta.else_ip) |else_ip| {
-                next_ip = else_ip;
-
-                // We are inside the else branch
-                self.pushLabel(Label{
-                    .return_arity = meta.return_arity,
-                    .op_stack_len = self.op_ptr - meta.param_arity,
-                    .branch_target = meta.branch_target,
-                }) catch |e| {
-                    err.* = e;
-                    return;
-                };
-            }
-        } else {
-            // We are inside the if branch
-            self.pushLabel(Label{
-                .return_arity = meta.return_arity,
-                .op_stack_len = self.op_ptr - meta.param_arity,
-                .branch_target = meta.branch_target,
-            }) catch |e| {
-                err.* = e;
-                return;
-            };
-        }
-
-        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
+        return @call(.{ .modifier = .always_tail }, dispatch, .{ self, if (condition == 0) meta.else_ip else ip + 1, code, err });
     }
 
     fn @"else"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
