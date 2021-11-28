@@ -117,8 +117,8 @@ pub const Instance = struct {
                 const func_type = self.module.types.list.items[func.typeidx];
                 const handle = try self.store.addFunction(Function{
                     .function = .{
-                        .ip_start = code.code.offset,
-                        .ip_end = code.code.offset + code.code.count,
+                        .start = code.start,
+                        .required_stack_space = code.required_stack_space,
                         .locals_count = code.locals_count,
                         .params = func_type.params,
                         .results = func_type.results,
@@ -139,7 +139,7 @@ pub const Instance = struct {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
             } else {
-                const value = if (global_def.code) |code| try self.invokeExpression(code.offset, u64, .{}) else 0;
+                const value = if (global_def.start) |start| try self.invokeExpression(start, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
                     .value = value,
                     .mutability = global_def.mutability,
@@ -182,7 +182,7 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.offset.offset, u32, .{});
+            const offset = try self.invokeExpression(data.start, u32, .{});
             try memory.check(offset, data.data);
         }
     }
@@ -191,7 +191,7 @@ pub const Instance = struct {
         // 4b. Check all elements
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.offset.offset, u32, .{});
+            const offset = try self.invokeExpression(segment.start, u32, .{});
             if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
         }
     }
@@ -202,7 +202,7 @@ pub const Instance = struct {
             const handle = self.memaddrs.items[data.index];
             const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.offset.offset, u32, .{});
+            const offset = try self.invokeExpression(data.start, u32, .{});
             try memory.copy(offset, data.data);
         }
     }
@@ -211,7 +211,7 @@ pub const Instance = struct {
         // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment| {
             const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.offset.offset, u32, .{});
+            const offset = try self.invokeExpression(segment.start, u32, .{});
 
             var data = segment.data;
             var j: usize = 0;
@@ -291,6 +291,9 @@ pub const Instance = struct {
                     try interp.pushOperand(u64, 0);
                 }
 
+                // Check we have enough stack space
+                try interp.checkStackSpace(f.required_stack_space);
+
                 // 7a. push control frame
                 try interp.pushFrame(Interpreter.Frame{
                     .op_stack_len = locals_start,
@@ -305,12 +308,11 @@ pub const Instance = struct {
                 try interp.pushLabel(Interpreter.Label{
                     .return_arity = f.results.len,
                     .op_stack_len = locals_start,
-                    .branch_target = f.ip_end - 1,
+                    .branch_target = 0,
                 });
 
                 // 8. Execute our function
-                interp.function_start = f.ip_start;
-                try interp.invoke(f.ip_start);
+                try interp.invoke(f.start);
 
                 // 9.
                 for (out) |_, out_index| {
@@ -343,6 +345,9 @@ pub const Instance = struct {
                     try interp.pushOperand(u64, 0);
                 }
 
+                // Check we have enough stack space
+                try interp.checkStackSpace(f.required_stack_space);
+
                 try interp.pushFrame(Interpreter.Frame{
                     .op_stack_len = locals_start,
                     .label_stack_len = interp.label_ptr,
@@ -356,7 +361,7 @@ pub const Instance = struct {
                     .branch_target = 0,
                 });
 
-                try interp.invoke(f.ip_start);
+                try interp.invoke(f.start);
             },
             .host_function => |host_func| {
                 var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);

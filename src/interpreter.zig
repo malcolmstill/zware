@@ -34,7 +34,6 @@ pub const Interpreter = struct {
 
     inst: *Instance = undefined,
     ip: usize = 0,
-    function_start: usize = 0,
 
     pub fn init(op_stack: []u64, frame_stack: []Frame, label_stack: []Label, inst: *Instance) Interpreter {
         return Interpreter{
@@ -266,6 +265,12 @@ pub const Interpreter = struct {
                     };
                 }
 
+                // Check we have enough stack space
+                self.checkStackSpace(f.required_stack_space) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
                 self.inst = self.inst.store.instance(f.instance) catch |e| {
                     err.* = e;
                     return;
@@ -292,7 +297,7 @@ pub const Interpreter = struct {
                     return;
                 };
 
-                next_ip = f.ip_start;
+                next_ip = f.start;
             },
             .host_function => |hf| {
                 hf.func(self) catch |e| {
@@ -348,6 +353,12 @@ pub const Interpreter = struct {
                     };
                 }
 
+                // Check we have enough stack space
+                self.checkStackSpace(func.required_stack_space) catch |e| {
+                    err.* = e;
+                    return;
+                };
+
                 self.inst = self.inst.store.instance(func.instance) catch |e| {
                     err.* = e;
                     return;
@@ -374,7 +385,7 @@ pub const Interpreter = struct {
                     return;
                 };
 
-                next_ip = func.ip_start;
+                next_ip = func.start;
             },
             .host_function => |host_func| {
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
@@ -409,6 +420,12 @@ pub const Interpreter = struct {
             };
         }
 
+        // Check we have enough stack space
+        self.checkStackSpace(f.required_stack_space) catch |e| {
+            err.* = e;
+            return;
+        };
+
         // Consume parameters from the stack
         self.pushFrame(Frame{
             .op_stack_len = self.op_ptr - f.params - f.locals,
@@ -430,7 +447,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        next_ip = f.ip_start;
+        next_ip = f.start;
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
@@ -459,10 +476,7 @@ pub const Interpreter = struct {
 
         const frame = self.peekFrame();
 
-        _ = self.pushOperand(u64, frame.locals[local_index]) catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(u64, frame.locals[local_index]);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -493,10 +507,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        _ = self.pushOperand(u64, global.value) catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(u64, global.value);
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -995,10 +1006,7 @@ pub const Interpreter = struct {
             return;
         };
 
-        _ = self.pushOperand(u32, @intCast(u32, memory.data.items.len)) catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(u32, @intCast(u32, memory.data.items.len));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -1022,10 +1030,7 @@ pub const Interpreter = struct {
     fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const instr = code[ip];
 
-        _ = self.pushOperand(i32, instr.@"i32.const") catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(i32, instr.@"i32.const");
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -1033,10 +1038,7 @@ pub const Interpreter = struct {
     fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const instr = code[ip];
 
-        _ = self.pushOperand(i64, instr.@"i64.const") catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(i64, instr.@"i64.const");
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -1044,10 +1046,7 @@ pub const Interpreter = struct {
     fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const instr = code[ip];
 
-        _ = self.pushOperand(f32, instr.@"f32.const") catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(f32, instr.@"f32.const");
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -1055,10 +1054,7 @@ pub const Interpreter = struct {
     fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const instr = code[ip];
 
-        _ = self.pushOperand(f64, instr.@"f64.const") catch |e| {
-            err.* = e;
-            return;
-        };
+        self.pushOperandNoCheck(f64, instr.@"f64.const");
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -2693,6 +2689,10 @@ pub const Interpreter = struct {
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
+    }
+
+    pub fn checkStackSpace(self: *Interpreter, n: usize) !void {
+        if (self.op_ptr + n >= self.op_stack.len) return error.CheckStackSpace;
     }
 
     pub fn pushOperandNoCheck(self: *Interpreter, comptime T: type, value: T) void {

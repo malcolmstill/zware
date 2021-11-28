@@ -87,6 +87,10 @@ pub const Module = struct {
         const version = try rd.readIntLittle(u32);
         if (version != 1) return error.UnknownBinaryVersion;
 
+        // Push an initial return instruction so we don't have to
+        // track the end of a function to use its return on invoke
+        try self.parsed_code.append(.@"return");
+
         var i: usize = 0;
         while (true) : (i += 1) {
             self.decodeSection() catch |err| {
@@ -488,7 +492,7 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         var code: ?[]const u8 = null;
-        var parsed_code: ?common.Range = null;
+        var parsed_code: ?StartWithDepth = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -514,7 +518,7 @@ pub const Module = struct {
         try self.globals.list.append(Global{
             .value_type = global_type,
             .mutability = mutability,
-            .code = parsed_code,
+            .start = if (parsed_code) |pc| pc.start else null,
             .import = import,
         });
     }
@@ -641,7 +645,7 @@ pub const Module = struct {
 
             try self.elements.list.append(Segment{
                 .index = table_index,
-                .offset = parsed_code,
+                .start = parsed_code.start,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -711,7 +715,8 @@ pub const Module = struct {
 
             try self.codes.list.append(Code{
                 .locals_count = locals_count,
-                .code = parsed_code,
+                .start = parsed_code.start,
+                .required_stack_space = parsed_code.max_depth,
             });
         }
     }
@@ -758,7 +763,7 @@ pub const Module = struct {
 
             try self.datas.list.append(Segment{
                 .index = mem_idx,
-                .offset = parsed_code,
+                .start = parsed_code.start,
                 .count = data_length,
                 .data = self.module[data_start..rd.context.pos],
             });
@@ -799,7 +804,12 @@ pub const Module = struct {
         });
     }
 
-    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !common.Range {
+    const StartWithDepth = struct {
+        start: usize,
+        max_depth: usize,
+    };
+
+    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
@@ -833,13 +843,10 @@ pub const Module = struct {
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
-        return common.Range{
-            .offset = code_start,
-            .count = self.parsed_code.items.len - code_start,
-        };
+        return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
-    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !common.Range {
+    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
@@ -857,10 +864,7 @@ pub const Module = struct {
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
-        return common.Range{
-            .offset = code_start,
-            .count = self.parsed_code.items.len - code_start,
-        };
+        return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {

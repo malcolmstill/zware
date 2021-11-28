@@ -10,6 +10,7 @@ const Opcode = @import("opcode.zig").Opcode;
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
+    max_depth: usize = 0,
 
     pub fn init(alloc: *mem.Allocator) Validator {
         return Validator{
@@ -17,6 +18,8 @@ pub const Validator = struct {
             .ctrl_stack = ControlStack.init(alloc),
         };
     }
+
+    // TODO: deinit?
 
     pub fn validateBlock(v: *Validator, in_operands: []const ValueType, out_operands: []const ValueType) !void {
         try v.popOperands(in_operands);
@@ -471,6 +474,7 @@ pub const Validator = struct {
     }
 
     fn pushOperand(v: *Validator, t: ValueTypeUnknown) !void {
+        defer v.trackMaxDepth();
         try v.op_stack.append(t);
     }
 
@@ -511,6 +515,12 @@ pub const Validator = struct {
         const len = operands.len;
         for (operands) |_, i| {
             _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = operands[len - i - 1] });
+        }
+    }
+
+    fn trackMaxDepth(v: *Validator) void {
+        if (v.op_stack.items.len > v.max_depth) {
+            v.max_depth = v.op_stack.items.len;
         }
     }
 
