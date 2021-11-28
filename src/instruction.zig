@@ -232,10 +232,11 @@ pub const Instruction = union(RuntimeOpcode) {
         table: u32,
     },
     fast_call: struct {
-        ip_start: usize,
+        start: usize,
         locals: usize,
         params: usize,
         results: usize,
+        required_stack_space: usize,
     },
     drop: void,
     select: void,

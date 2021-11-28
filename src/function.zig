@@ -34,15 +34,14 @@ pub const WasmError = error{
     GlobalIndexOutOfBounds,
     NegativeDenominator,
     Trap,
+    CheckStackSpace,
 };
 
 pub const Function = union(enum) {
     function: struct {
-        // locals: []const u8,
         locals_count: usize,
-        // code: []Instruction,
-        ip_start: usize,
-        ip_end: usize,
+        start: usize,
+        required_stack_space: usize,
         params: []const ValueType,
         results: []const ValueType,
         instance: usize,
@@ -55,7 +54,7 @@ pub const Function = union(enum) {
 };
 
 pub const Code = struct {
-    // locals: []const u8,
+    start: usize,
     locals_count: usize,
-    code: Range,
+    required_stack_space: usize,
 };

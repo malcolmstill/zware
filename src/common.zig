@@ -74,7 +74,7 @@ pub const Function = struct {
 pub const Global = struct {
     value_type: ValueType,
     mutability: Mutability,
-    code: ?Range,
+    start: ?usize,
     import: ?u32,
 };
 
@@ -95,7 +95,7 @@ pub const Element = struct {};
 
 pub const Segment = struct {
     index: u32,
-    offset: Range,
+    start: usize, // Initialisation code start
     count: u32, // Number of elements in data (useful when data is not []u8)
     data: []const u8,
 };
