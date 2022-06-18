@@ -838,8 +838,6 @@ pub const Module = struct {
             try self.parsed_code.append(instr);
         }
 
-        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
-
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
@@ -858,8 +856,6 @@ pub const Module = struct {
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
-
-        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
