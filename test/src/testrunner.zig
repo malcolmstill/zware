@@ -79,14 +79,16 @@ pub fn main() anyerror!void {
     const filename = args.nextPosix() orelse return error.NoFilename;
     std.log.info("testing: {s}", .{filename});
 
-    var arena = ArenaAllocator.init(&gpa.allocator);
+    var arena = ArenaAllocator.init(gpa.allocator());
     defer _ = arena.deinit();
 
+    const alloc = arena.allocator();
+
     // 2. Parse json and find .wasm file
-    const json_string = try fs.cwd().readFileAlloc(&arena.allocator, filename, 0xFFFFFFF);
+    const json_string = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
 
     @setEvalBranchQuota(10000);
-    const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = &arena.allocator });
+    const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = alloc });
 
     // 2.a. Find the wasm file
     var wasm_filename: []const u8 = undefined;
@@ -94,7 +96,7 @@ pub fn main() anyerror!void {
     var module: Module = undefined;
 
     // Initialise a store
-    var store: Store = Store.init(&arena.allocator);
+    var store: Store = Store.init(alloc);
     const spectest_module = "spectest";
 
     // Init spectest memory
@@ -234,7 +236,7 @@ pub fn main() anyerror!void {
 
     var inst: *Instance = undefined;
 
-    var registered_names = StringHashMap(usize).init(&arena.allocator);
+    var registered_names = StringHashMap(usize).init(alloc);
 
     for (r.commands) |command| {
         switch (command) {
@@ -242,17 +244,17 @@ pub fn main() anyerror!void {
                 wasm_filename = command.module.filename;
 
                 std.debug.print("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
 
                 errdefer {
                     std.debug.print("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
                 }
 
                 // 4. Initialise our module
-                module = Module.init(&arena.allocator, program);
+                module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(&arena.allocator, &store, module);
+                var new_inst = Instance.init(alloc, &store, module);
                 const inst_index = try store.addInstance(new_inst);
                 inst = try store.instance(inst_index);
                 try inst.instantiate(inst_index);
@@ -277,8 +279,8 @@ pub fn main() anyerror!void {
                         }
 
                         // Allocate input parameters and output results
-                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
-                        var out = try arena.allocator.alloc(u64, expected.len);
+                        var in = try alloc.alloc(u64, action.invoke.args.len);
+                        var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
@@ -383,8 +385,8 @@ pub fn main() anyerror!void {
                         }
 
                         // Allocate input parameters and output results
-                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
-                        var out = try arena.allocator.alloc(u64, expected.len);
+                        var in = try alloc.alloc(u64, action.invoke.args.len);
+                        var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
@@ -489,8 +491,8 @@ pub fn main() anyerror!void {
                 wasm_filename = command.assert_invalid.filename;
                 std.debug.print("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
 
-                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
-                module = Module.init(&arena.allocator, program);
+                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                module = Module.init(alloc, program);
 
                 errdefer {
                     std.debug.print("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
@@ -548,8 +550,8 @@ pub fn main() anyerror!void {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
                 wasm_filename = command.assert_malformed.filename;
                 std.debug.print("(malformed): {s}:{} ({s})\n", .{ r.source_filename, command.assert_malformed.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
-                module = Module.init(&arena.allocator, program);
+                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                module = Module.init(alloc, program);
 
                 const trap = command.assert_malformed.text;
 
@@ -760,8 +762,8 @@ pub fn main() anyerror!void {
                         std.debug.print("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
 
                         // Allocate input parameters and output results
-                        var in = try arena.allocator.alloc(u64, action.invoke.args.len);
-                        var out = try arena.allocator.alloc(u64, expected.len);
+                        var in = try alloc.alloc(u64, action.invoke.args.len);
+                        var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
@@ -785,12 +787,12 @@ pub fn main() anyerror!void {
             .assert_unlinkable => {
                 wasm_filename = command.assert_unlinkable.filename;
                 std.debug.print("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
 
-                module = Module.init(&arena.allocator, program);
+                module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(&arena.allocator, &store, module);
+                var new_inst = Instance.init(alloc, &store, module);
                 const inst_index = try store.addInstance(new_inst);
                 inst = try store.instance(inst_index);
 
@@ -813,12 +815,12 @@ pub fn main() anyerror!void {
             .assert_uninstantiable => {
                 wasm_filename = command.assert_uninstantiable.filename;
                 std.debug.print("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
+                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
 
-                module = Module.init(&arena.allocator, program);
+                module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(&arena.allocator, &store, module);
+                var new_inst = Instance.init(alloc, &store, module);
                 const inst_index = try store.addInstance(new_inst);
                 inst = try store.instance(inst_index);
 
