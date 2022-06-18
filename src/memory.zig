@@ -7,12 +7,12 @@ pub const MAX_PAGES = 64 * 1024;
 pub const PAGE_SIZE = 64 * 1024;
 
 pub const Memory = struct {
-    alloc: *mem.Allocator,
+    alloc: mem.Allocator,
     min: u32,
     max: ?u32 = null,
     data: ArrayList([PAGE_SIZE]u8),
 
-    pub fn init(alloc: *mem.Allocator, min: u32, max: ?u32) Memory {
+    pub fn init(alloc: mem.Allocator, min: u32, max: ?u32) Memory {
         return Memory{
             .alloc = alloc,
             .data = ArrayList([PAGE_SIZE]u8).init(alloc),
@@ -119,7 +119,9 @@ test "Memory test" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
 
-    var store = ArrayListStore.init(&arena.allocator);
+    const alloc = arena.allocator();
+
+    var store = ArrayListStore.init(alloc);
     const mem_handle = try store.addMemory(0, null);
     var mem0 = try store.memory(mem_handle);
     try testing.expectEqual(@as(usize, 0), mem0.asSlice().len);

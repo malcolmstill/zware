@@ -35,39 +35,39 @@ const WasmError = foxwren.WasmError;
 var gpa = GeneralPurposeAllocator(.{}){};
 
 fn print(_: *Interpreter) WasmError!void {
-    std.debug.warn("print\n", .{});
+    std.debug.print("print\n", .{});
 }
 
 fn print_i32(interp: *Interpreter) WasmError!void {
     const value = interp.popOperand(i32);
-    std.debug.warn("print_i32: {}\n", .{value});
+    std.debug.print("print_i32: {}\n", .{value});
 }
 
 fn print_i64(interp: *Interpreter) WasmError!void {
     const value = interp.popOperand(i64);
-    std.debug.warn("print_i64: {}\n", .{value});
+    std.debug.print("print_i64: {}\n", .{value});
 }
 
 fn print_f32(interp: *Interpreter) WasmError!void {
     const value = interp.popOperand(f32);
-    std.debug.warn("print_f32: {}\n", .{value});
+    std.debug.print("print_f32: {}\n", .{value});
 }
 
 fn print_f64(interp: *Interpreter) WasmError!void {
     const value = interp.popOperand(f64);
-    std.debug.warn("print_f64: {}\n", .{value});
+    std.debug.print("print_f64: {}\n", .{value});
 }
 
 fn print_i32_f32(interp: *Interpreter) WasmError!void {
     const value_f32 = interp.popOperand(f32);
     const value_i32 = interp.popOperand(i32);
-    std.debug.warn("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
+    std.debug.print("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
 }
 
 fn print_f64_f64(interp: *Interpreter) WasmError!void {
     const value_f64_2 = interp.popOperand(f64);
     const value_f64_1 = interp.popOperand(f64);
-    std.debug.warn("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
+    std.debug.print("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
 }
 
 pub fn main() anyerror!void {
@@ -241,11 +241,11 @@ pub fn main() anyerror!void {
             .module => {
                 wasm_filename = command.module.filename;
 
-                std.debug.warn("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
+                std.debug.print("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 errdefer {
-                    std.debug.warn("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
+                    std.debug.print("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
                 }
 
                 // 4. Initialise our module
@@ -267,7 +267,7 @@ pub fn main() anyerror!void {
                 switch (action) {
                     .invoke => {
                         const field = action.invoke.field;
-                        std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
+                        std.debug.print("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
                         var instance = inst;
                         if (command.assert_return.action.invoke.module) |name| {
@@ -288,8 +288,8 @@ pub fn main() anyerror!void {
 
                         // Invoke the function
                         instance.invoke(field, in, out, .{}) catch |err| {
-                            std.debug.warn("(result) invoke = {s}\n", .{field});
-                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                            std.debug.print("(result) invoke = {s}\n", .{field});
+                            std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                             return err;
                         };
 
@@ -303,18 +303,18 @@ pub fn main() anyerror!void {
                                     continue;
                                 }
 
-                                std.debug.warn("(result) invoke = {s}\n", .{field});
-                                std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.warn("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                                std.debug.print("(result) invoke = {s}\n", .{field});
+                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                std.debug.print("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
                                 return error.TestsuiteTestFailureTrapResult;
                             }
 
                             const result_value = try fmt.parseInt(u64, result.value, 10);
                             // Otherwise
                             errdefer {
-                                std.debug.warn("(result) invoke = {s}\n", .{field});
-                                std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.warn("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
+                                std.debug.print("(result) invoke = {s}\n", .{field});
+                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
                             }
                             if (result_value != out[expected.len - i - 1]) {
                                 return error.TestsuiteTestFailureTrapResult;
@@ -323,8 +323,8 @@ pub fn main() anyerror!void {
                     },
                     .get => {
                         const field = action.get.field;
-                        std.debug.warn("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
-                        std.debug.warn("(result) get \"{s}\"\n", .{field});
+                        std.debug.print("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
+                        std.debug.print("(result) get \"{s}\"\n", .{field});
                         if (action.get.module) |m| {
                             const registered_inst_offset = registered_names.get(m) orelse return error.NotRegistered;
                             const registered_inst = try store.instance(registered_inst_offset);
@@ -369,10 +369,10 @@ pub fn main() anyerror!void {
                 switch (action) {
                     .invoke => {
                         const field = action.invoke.field;
-                        std.debug.warn("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
+                        std.debug.print("(trap): {s}:{}\n", .{ r.source_filename, command.assert_trap.line });
 
                         errdefer {
-                            std.debug.warn("(trap) invoke = {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_trap.line });
+                            std.debug.print("(trap) invoke = {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_trap.line });
                         }
 
                         var instance = inst;
@@ -445,7 +445,7 @@ pub fn main() anyerror!void {
                                 error.UndefinedElement => continue,
                                 error.OutOfBoundsMemoryAccess => continue,
                                 else => {
-                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    std.debug.print("Unexpected error: {}\n", .{err});
                                     return error.TestsuiteExpectedUndefinedElement;
                                 },
                             }
@@ -459,7 +459,7 @@ pub fn main() anyerror!void {
                                 error.OutOfBoundsMemoryAccess => continue,
                                 error.IndirectCallTypeMismatch => continue,
                                 else => {
-                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    std.debug.print("Unexpected error: {}\n", .{err});
                                     return error.TestsuiteExpectedUnitialized;
                                 },
                             }
@@ -471,14 +471,14 @@ pub fn main() anyerror!void {
                             } else |err| switch (err) {
                                 error.TrapUnreachable => continue,
                                 else => {
-                                    std.debug.warn("Unexpected error: {}\n", .{err});
+                                    std.debug.print("Unexpected error: {}\n", .{err});
                                     return error.TestsuiteExpectedUnreachable;
                                 },
                             }
                         }
                     },
                     .get => {
-                        std.debug.warn("(trap) get\n", .{});
+                        std.debug.print("(trap) get\n", .{});
                         return error.TrapGetNotImplemented;
                     },
                 }
@@ -487,13 +487,13 @@ pub fn main() anyerror!void {
             },
             .assert_invalid => {
                 wasm_filename = command.assert_invalid.filename;
-                std.debug.warn("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
+                std.debug.print("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
 
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
                 module = Module.init(&arena.allocator, program);
 
                 errdefer {
-                    std.debug.warn("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
+                    std.debug.print("ERROR (invalid): {s}:{}\n", .{ r.source_filename, command.assert_invalid.line });
                 }
 
                 if (module.decode()) |_| {
@@ -539,7 +539,7 @@ pub fn main() anyerror!void {
                     error.ValidatorElemUnknownFunctionIndex => continue,
                     error.ValidatorElseBranchExpected => continue,
                     else => {
-                        std.debug.warn("Unexpected error: {}\n", .{err});
+                        std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
                     },
                 }
@@ -547,14 +547,14 @@ pub fn main() anyerror!void {
             .assert_malformed => {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
                 wasm_filename = command.assert_malformed.filename;
-                std.debug.warn("(malformed): {s}:{} ({s})\n", .{ r.source_filename, command.assert_malformed.line, wasm_filename });
+                std.debug.print("(malformed): {s}:{} ({s})\n", .{ r.source_filename, command.assert_malformed.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
                 module = Module.init(&arena.allocator, program);
 
                 const trap = command.assert_malformed.text;
 
                 errdefer {
-                    std.debug.warn("ERROR (malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
+                    std.debug.print("ERROR (malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
                 }
 
                 if (mem.eql(u8, trap, "unexpected end") or mem.eql(u8, trap, "length out of bounds")) {
@@ -569,7 +569,7 @@ pub fn main() anyerror!void {
                         error.ElementsCountMismatch => continue,
                         error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.TestsuiteExpectedUnexpectedEnd;
                         },
                     }
@@ -581,7 +581,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.MagicNumberNotFound => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -593,7 +593,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.UnknownBinaryVersion => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -605,7 +605,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.UnknownSectionId => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -620,7 +620,7 @@ pub fn main() anyerror!void {
                         error.Overflow => continue,
                         error.UnknownSectionId => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -633,7 +633,7 @@ pub fn main() anyerror!void {
                         error.MalformedCallIndirectReserved => continue,
                         error.MalformedMemoryReserved => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -645,7 +645,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.TooManyLocals => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -657,7 +657,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.FunctionCodeSectionsInconsistent => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -681,7 +681,7 @@ pub fn main() anyerror!void {
                         error.InvalidValue => continue,
                         error.MalformedSectionMismatchedSize => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -693,7 +693,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -707,7 +707,7 @@ pub fn main() anyerror!void {
                         error.UnknownSectionId => continue,
                         error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -719,7 +719,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.MultipleStartSections => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -731,7 +731,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.InvalidValue => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -743,7 +743,7 @@ pub fn main() anyerror!void {
                     } else |err| switch (err) {
                         error.NameNotUTF8 => continue,
                         else => {
-                            std.debug.warn("Unexpected error: {}\n", .{err});
+                            std.debug.print("Unexpected error: {}\n", .{err});
                             return error.ExpectedError;
                         },
                     }
@@ -757,7 +757,7 @@ pub fn main() anyerror!void {
                 switch (action) {
                     .invoke => {
                         const field = action.invoke.field;
-                        std.debug.warn("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
+                        std.debug.print("(return): {s}:{}\n", .{ r.source_filename, command.action.line });
 
                         // Allocate input parameters and output results
                         var in = try arena.allocator.alloc(u64, action.invoke.args.len);
@@ -771,20 +771,20 @@ pub fn main() anyerror!void {
 
                         // Invoke the function
                         inst.invoke(field, in, out, .{}) catch |err| {
-                            std.debug.warn("(result) invoke = {s}\n", .{field});
-                            std.debug.warn("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
+                            std.debug.print("(result) invoke = {s}\n", .{field});
+                            std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
                             return err;
                         };
                     },
                     .get => {
-                        std.debug.warn("(action) get\n", .{});
+                        std.debug.print("(action) get\n", .{});
                         return error.ActionGetNotImplemented;
                     },
                 }
             },
             .assert_unlinkable => {
                 wasm_filename = command.assert_unlinkable.filename;
-                std.debug.warn("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
+                std.debug.print("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 module = Module.init(&arena.allocator, program);
@@ -805,14 +805,14 @@ pub fn main() anyerror!void {
                     error.OutOfBoundsMemoryAccess => continue,
                     error.MismatchedMutability => continue,
                     else => {
-                        std.debug.warn("(unlinkable) Unexpected error: {}\n", .{err});
+                        std.debug.print("(unlinkable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
                     },
                 }
             },
             .assert_uninstantiable => {
                 wasm_filename = command.assert_uninstantiable.filename;
-                std.debug.warn("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
+                std.debug.print("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
                 program = try fs.cwd().readFileAlloc(&arena.allocator, wasm_filename, 0xFFFFFFF);
 
                 module = Module.init(&arena.allocator, program);
@@ -827,13 +827,13 @@ pub fn main() anyerror!void {
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
                     else => {
-                        std.debug.warn("(uninstantiable) Unexpected error: {}\n", .{err});
+                        std.debug.print("(uninstantiable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
                     },
                 }
             },
             .register => {
-                std.debug.warn("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
+                std.debug.print("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
                 if (command.register.name) |name| {
                     const registered_inst_offset = registered_names.get(name) orelse return error.NotRegistered;
                     const registered_inst = try store.instance(registered_inst_offset);
