@@ -10,7 +10,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.8.1
+          version: 0.9.1
       - run: zig build test
   testsuite:
     runs-on: ubuntu-latest
@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.8.1
+          version: 0.9.1
       - run: zig build --build-file test/build.zig --prefix ./
       - run: cp bin/testrunner testrunner
       - run: cp test/testsuite-generated/* ./
@@ -101,5 +101,5 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: 0.8.1
+          version: 0.9.1
       - run: zig fmt --check src/*.zig
