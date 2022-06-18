@@ -33,7 +33,7 @@ const function = @import("function.zig");
 
 pub const Module = struct {
     decoded: bool = false,
-    alloc: *mem.Allocator,
+    alloc: mem.Allocator,
     module: []const u8 = undefined,
     buf: std.io.FixedBufferStream([]const u8) = undefined,
     version: u32 = 0,
@@ -54,7 +54,7 @@ pub const Module = struct {
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
 
-    pub fn init(alloc: *mem.Allocator, module: []const u8) Module {
+    pub fn init(alloc: mem.Allocator, module: []const u8) Module {
         return Module{
             .alloc = alloc,
             .module = module,
@@ -838,8 +838,6 @@ pub const Module = struct {
             try self.parsed_code.append(instr);
         }
 
-        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
-
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
@@ -858,8 +856,6 @@ pub const Module = struct {
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
-
-        var parsed_code = self.parsed_code.items[code_start..self.parsed_code.items.len];
 
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
@@ -891,16 +887,16 @@ pub const Module = struct {
     }
 
     pub fn print(module: *Module) void {
-        std.debug.warn("    Types: {}\n", .{module.types.list.items.len});
-        std.debug.warn("Functions: {}\n", .{module.functions.list.items.len});
-        std.debug.warn("   Tables: {}\n", .{module.tables.list.items.len});
-        std.debug.warn(" Memories: {}\n", .{module.memories.list.items.len});
-        std.debug.warn("  Globals: {}\n", .{module.globals.list.items.len});
-        std.debug.warn("  Exports: {}\n", .{module.exports.list.items.len});
-        std.debug.warn("  Imports: {}\n", .{module.imports.list.items.len});
-        std.debug.warn("    Codes: {}\n", .{module.codes.list.items.len});
-        std.debug.warn("    Datas: {}\n", .{module.datas.list.items.len});
-        std.debug.warn("  Customs: {}\n", .{module.customs.list.items.len});
+        std.debug.print("    Types: {}\n", .{module.types.list.items.len});
+        std.debug.print("Functions: {}\n", .{module.functions.list.items.len});
+        std.debug.print("   Tables: {}\n", .{module.tables.list.items.len});
+        std.debug.print(" Memories: {}\n", .{module.memories.list.items.len});
+        std.debug.print("  Globals: {}\n", .{module.globals.list.items.len});
+        std.debug.print("  Exports: {}\n", .{module.exports.list.items.len});
+        std.debug.print("  Imports: {}\n", .{module.imports.list.items.len});
+        std.debug.print("    Codes: {}\n", .{module.codes.list.items.len});
+        std.debug.print("    Datas: {}\n", .{module.datas.list.items.len});
+        std.debug.print("  Customs: {}\n", .{module.customs.list.items.len});
     }
 };
 
@@ -911,7 +907,7 @@ fn Section(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn init(alloc: *mem.Allocator) Self {
+        pub fn init(alloc: mem.Allocator) Self {
             return Self{
                 .list = ArrayList(T).init(alloc),
             };
@@ -950,14 +946,16 @@ test "module loading (simple add function)" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
 
+    const alloc = arena.allocator();
+
     const bytes = @embedFile("../test/test.wasm");
 
-    var store: Store = Store.init(&arena.allocator);
+    var store: Store = Store.init(alloc);
 
-    var module = Module.init(&arena.allocator, bytes);
+    var module = Module.init(alloc, bytes);
     try module.decode();
 
-    var new_inst = Instance.init(&arena.allocator, &store, module);
+    var new_inst = Instance.init(alloc, &store, module);
     const index = try store.addInstance(new_inst);
     var inst = try store.instance(index);
     try inst.instantiate(index);
@@ -973,14 +971,16 @@ test "module loading (fib)" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
 
+    const alloc = arena.allocator();
+
     const bytes = @embedFile("../test/fib.wasm");
 
-    var store: Store = Store.init(&arena.allocator);
+    var store: Store = Store.init(alloc);
 
-    var module = Module.init(&arena.allocator, bytes);
+    var module = Module.init(alloc, bytes);
     try module.decode();
 
-    var new_inst = Instance.init(&arena.allocator, &store, module);
+    var new_inst = Instance.init(alloc, &store, module);
     const index = try store.addInstance(new_inst);
     var inst = try store.instance(index);
     try inst.instantiate(index);
@@ -1020,14 +1020,16 @@ test "module loading (fact)" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
 
+    const alloc = arena.allocator();
+
     const bytes = @embedFile("../test/fact.wasm");
 
-    var store: Store = Store.init(&arena.allocator);
+    var store: Store = Store.init(alloc);
 
-    var module = Module.init(&arena.allocator, bytes);
+    var module = Module.init(alloc, bytes);
     try module.decode();
 
-    var new_inst = Instance.init(&arena.allocator, &store, module);
+    var new_inst = Instance.init(alloc, &store, module);
     const index = try store.addInstance(new_inst);
     var inst = try store.instance(index);
     try inst.instantiate(index);

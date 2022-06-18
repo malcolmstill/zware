@@ -44,34 +44,27 @@ pub const Interpreter = struct {
         };
     }
 
-    fn rebug(self: *Interpreter, opcode: Instruction) void {
-        // std.debug.warn("{}\n", .{opcode});
-        std.debug.warn("\n=====================================================\n", .{});
-        std.debug.warn("before: {}\n", .{opcode});
+    fn debug(self: *Interpreter, opcode: Instruction) void {
+        // std.debug.print("{}\n", .{opcode});
+        std.debug.print("\n=====================================================\n", .{});
+        std.debug.print("before: {}\n", .{opcode});
         var i: usize = 0;
         while (i < self.op_ptr) : (i += 1) {
-            std.debug.warn("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+            std.debug.print("stack[{}] = {}\n", .{ i, self.op_stack[i] });
         }
-        std.debug.warn("\n", .{});
+        std.debug.print("\n", .{});
 
         i = 0;
         while (i < self.label_ptr) : (i += 1) {
-            std.debug.warn("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
+            std.debug.print("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
         }
-        std.debug.warn("\n", .{});
+        std.debug.print("\n", .{});
 
         i = 0;
         while (i < self.frame_ptr) : (i += 1) {
-            std.debug.warn("frame_stack[{}] = [ret_ari: {}, ops_start: {}, label_start: {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
+            std.debug.print("frame_stack[{}] = [ret_ari: {}, ops_start: {}, label_start: {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
         }
-        std.debug.warn("=====================================================\n", .{});
-
-        const stdin = std.io.getStdIn().reader();
-        const stdout = std.io.getStdOut().writer();
-
-        var buf: [10]u8 = undefined;
-        // stdout.print("Continue:", .{}) catch |e| return;
-        // _ = stdin.readUntilDelimiterOrEof(buf[0..], '\n') catch |e| return;
+        std.debug.print("=====================================================\n", .{});
     }
 
     inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, err: *?WasmError) void {
@@ -80,12 +73,12 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, err });
     }
 
-    fn impl_ni(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        std.debug.warn("not implemented: {any}\n", .{code[ip]});
+    fn impl_ni(_: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+        std.debug.print("not implemented: {any}\n", .{code[ip]});
         err.* = error.NotImplemented;
     }
 
-    fn @"unreachable"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"unreachable"(_: *Interpreter, _: usize, _: []Instruction, err: *?WasmError) void {
         err.* = error.TrapUnreachable;
     }
 
@@ -140,7 +133,7 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, if (condition == 0) meta.else_ip else ip + 1, code, err });
     }
 
-    fn @"else"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"else"(self: *Interpreter, _: usize, code: []Instruction, err: *?WasmError) void {
         const label = self.popLabel();
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, label.branch_target, code, err });
@@ -167,7 +160,7 @@ pub const Interpreter = struct {
     }
 
     fn end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        const label = self.popLabel();
+        _ = self.popLabel();
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -197,7 +190,7 @@ pub const Interpreter = struct {
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, next_ip, code, err });
     }
 
-    fn @"return"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"return"(self: *Interpreter, _: usize, _: []Instruction, err: *?WasmError) void {
         const frame = self.peekFrame();
         const n = frame.return_arity;
 

@@ -39,7 +39,7 @@ pub const Instance = struct {
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
 
-    pub fn init(alloc: *mem.Allocator, store: *Store, module: Module) Instance {
+    pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{
             .module = module,
             .store = store,

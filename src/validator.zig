@@ -12,7 +12,7 @@ pub const Validator = struct {
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
 
-    pub fn init(alloc: *mem.Allocator) Validator {
+    pub fn init(alloc: mem.Allocator) Validator {
         return Validator{
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
@@ -612,7 +612,7 @@ test "validate add i32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(&arena.allocator);
+    var v = Validator.init(arena.allocator());
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
@@ -629,7 +629,7 @@ test "validate add i64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(&arena.allocator);
+    var v = Validator.init(arena.allocator());
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I64} ** 1;
@@ -644,7 +644,7 @@ test "validate add f32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(&arena.allocator);
+    var v = Validator.init(arena.allocator());
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F32} ** 1;
@@ -659,7 +659,7 @@ test "validate add f64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(&arena.allocator);
+    var v = Validator.init(arena.allocator());
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F64} ** 1;
@@ -674,7 +674,7 @@ test "validate: add error on mismatched types" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(&arena.allocator);
+    var v = Validator.init(arena.allocator());
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;

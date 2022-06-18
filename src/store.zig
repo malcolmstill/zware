@@ -26,7 +26,7 @@ pub const ImportExport = struct {
 };
 
 pub const ArrayListStore = struct {
-    alloc: *mem.Allocator,
+    alloc: mem.Allocator,
     functions: ArrayList(Function),
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
@@ -34,7 +34,7 @@ pub const ArrayListStore = struct {
     imports: ArrayList(ImportExport),
     instances: ArrayList(Instance),
 
-    pub fn init(alloc: *mem.Allocator) ArrayListStore {
+    pub fn init(alloc: mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
             .alloc = alloc,
             .functions = ArrayList(Function).init(alloc),
@@ -60,7 +60,7 @@ pub const ArrayListStore = struct {
 
             return importexport.handle;
         }
-        std.log.err("Import not found: {s}.{s}\n", .{ module, name });
+        std.log.warn("Import not found: {s}.{s}\n", .{ module, name });
         return error.ImportNotFound;
     }
 
