@@ -566,8 +566,8 @@ pub const ParseIterator = struct {
 
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = try math.cast(u16, func_type.params.len);
-                    block_returns = try math.cast(u16, func_type.results.len);
+                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
                     try self.validator.validateBlock(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -599,8 +599,8 @@ pub const ParseIterator = struct {
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = try math.cast(u16, func_type.params.len);
-                    block_returns = try math.cast(u16, func_type.results.len);
+                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
                     try self.validator.validateLoop(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -621,7 +621,7 @@ pub const ParseIterator = struct {
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .branch_target = try math.cast(u32, self.code_ptr),
+                        .branch_target = math.cast(u32, self.code_ptr) orelse return error.FailedCast,
                     },
                 };
             },
@@ -637,8 +637,8 @@ pub const ParseIterator = struct {
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
                     const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = try math.cast(u16, func_type.params.len);
-                    block_returns = try math.cast(u16, func_type.results.len);
+                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
                     try self.validator.validateIf(func_type.params, func_type.results);
                 } else {
                     if (block_type == -0x40) {
@@ -673,7 +673,7 @@ pub const ParseIterator = struct {
                                 .param_arity = b.param_arity,
                                 .return_arity = b.return_arity,
                                 .branch_target = 0,
-                                .else_ip = try math.cast(u32, self.code_ptr + 1),
+                                .else_ip = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                             },
                         };
                     },
@@ -688,16 +688,16 @@ pub const ParseIterator = struct {
                     const parsed_code_offset = try self.popContinuationStack();
 
                     switch (self.parsed.items[parsed_code_offset]) {
-                        .block => |*b| b.branch_target = try math.cast(u32, self.code_ptr + 1),
+                        .block => |*b| b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                         .loop => {},
                         .@"if" => |*b| {
-                            b.branch_target = try math.cast(u32, self.code_ptr + 1);
+                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
                         .if_no_else => |*b| {
                             // We have an if with no else, check that this works arity-wise and replace with fast if
                             if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                            b.branch_target = try math.cast(u32, self.code_ptr + 1);
+                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
                         else => return error.UnexpectedInstruction,
                     }
