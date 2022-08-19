@@ -76,7 +76,7 @@ pub fn main() anyerror!void {
     // 1. Get .json file from command line
     var args = process.args();
     _ = args.skip();
-    const filename = args.nextPosix() orelse return error.NoFilename;
+    const filename = args.next() orelse return error.NoFilename;
     std.log.info("testing: {s}", .{filename});
 
     var arena = ArenaAllocator.init(gpa.allocator());
