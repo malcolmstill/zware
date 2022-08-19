@@ -8,7 +8,7 @@ pub const Memory = @import("memory.zig").Memory;
 pub const ValueType = @import("common.zig").ValueType;
 pub const WasmError = @import("function.zig").WasmError;
 
-test "" {
+test {
     _ = @import("validator.zig");
     _ = @import("interpreter.zig");
     _ = @import("module.zig");
