@@ -47,7 +47,7 @@ pub const Function = union(enum) {
         instance: usize,
     },
     host_function: struct {
-        func: fn (*Interpreter) WasmError!void,
+        func: *const fn (*Interpreter) WasmError!void,
         params: []const ValueType,
         results: []const ValueType,
     },
