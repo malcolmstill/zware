@@ -56,7 +56,7 @@ pub fn main() !void {
 
 ### Compile-time
 
-- Zig 0.9.1
+- Zig 0.10.0
 
 ### Run-time
 
