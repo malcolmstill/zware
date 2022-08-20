@@ -87,7 +87,7 @@ pub fn main() anyerror!void {
     // 2. Parse json and find .wasm file
     const json_string = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
 
-    @setEvalBranchQuota(10000);
+    @setEvalBranchQuota(100000);
     const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = alloc });
 
     // 2.a. Find the wasm file
