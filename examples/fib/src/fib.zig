@@ -15,7 +15,7 @@ pub fn main() !void {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../../../test/fib.wasm");
+    const bytes = @embedFile("fib.wasm");
 
     var store: Store = Store.init(alloc);
 
