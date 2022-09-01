@@ -1314,21 +1314,21 @@ pub const Interpreter = struct {
 
     fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u32);
-        self.pushOperandNoCheck(u32, @clz(u32, c1));
+        self.pushOperandNoCheck(u32, @clz(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
     fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u32);
-        self.pushOperandNoCheck(u32, @ctz(u32, c1));
+        self.pushOperandNoCheck(u32, @ctz(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
     fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u32);
-        self.pushOperandNoCheck(u32, @popCount(u32, c1));
+        self.pushOperandNoCheck(u32, @popCount(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
@@ -1500,21 +1500,21 @@ pub const Interpreter = struct {
 
     fn @"i64.clz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u64);
-        self.pushOperandNoCheck(u64, @clz(u64, c1));
+        self.pushOperandNoCheck(u64, @clz(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
     fn @"i64.ctz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u64);
-        self.pushOperandNoCheck(u64, @ctz(u64, c1));
+        self.pushOperandNoCheck(u64, @ctz(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
 
     fn @"i64.popcnt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
         const c1 = self.popOperand(u64);
-        self.pushOperandNoCheck(u64, @popCount(u64, c1));
+        self.pushOperandNoCheck(u64, @popCount(c1));
 
         return @call(.{ .modifier = .always_tail }, dispatch, .{ self, ip + 1, code, err });
     }
