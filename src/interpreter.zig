@@ -2573,7 +2573,7 @@ pub const Interpreter = struct {
         }
     }
 
-    const InstructionFunction = fn (*Interpreter, usize, []Instruction, *?WasmError) void;
+    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction, *?WasmError) void;
 
     const lookup = [256]InstructionFunction{
         @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
