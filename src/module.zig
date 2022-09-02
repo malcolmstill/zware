@@ -1022,7 +1022,7 @@ test "module loading (fact)" {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../test/fact.wasm");
+    const bytes = @embedFile("test/fact.wasm");
 
     var store: Store = Store.init(alloc);
 
