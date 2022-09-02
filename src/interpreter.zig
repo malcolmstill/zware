@@ -83,7 +83,7 @@ pub const Interpreter = struct {
     }
 
     fn nop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn block(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -95,7 +95,7 @@ pub const Interpreter = struct {
             .branch_target = meta.branch_target,
         });
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn loop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -108,7 +108,7 @@ pub const Interpreter = struct {
             .branch_target = meta.branch_target,
         });
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"if"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -121,13 +121,13 @@ pub const Interpreter = struct {
             .branch_target = meta.branch_target,
         });
 
-        return try dispatch(self, if (condition == 0) meta.else_ip else ip + 1, code);
+        return dispatch(self, if (condition == 0) meta.else_ip else ip + 1, code);
     }
 
     fn @"else"(self: *Interpreter, _: usize, code: []Instruction) WasmError!void {
         const label = self.popLabel();
 
-        return try dispatch(self, label.branch_target, code);
+        return dispatch(self, label.branch_target, code);
     }
 
     fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -135,7 +135,7 @@ pub const Interpreter = struct {
         const condition = self.popOperand(u32);
 
         if (condition == 0) {
-            return try dispatch(self, meta.branch_target, code);
+            return dispatch(self, meta.branch_target, code);
         } else {
             // We are inside the if branch
             try self.pushLabel(Label{
@@ -144,20 +144,20 @@ pub const Interpreter = struct {
                 .branch_target = meta.branch_target,
             });
 
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
     }
 
     fn end(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popLabel();
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn br(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const next_ip = self.branch(code[ip].br);
 
-        return try dispatch(self, next_ip, code);
+        return dispatch(self, next_ip, code);
     }
 
     fn br_if(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -165,7 +165,7 @@ pub const Interpreter = struct {
 
         const next_ip = if (condition == 0) ip + 1 else self.branch(code[ip].br_if);
 
-        return try dispatch(self, next_ip, code);
+        return dispatch(self, next_ip, code);
     }
 
     fn br_table(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -176,7 +176,7 @@ pub const Interpreter = struct {
 
         const next_ip = if (i >= ls.len) self.branch(meta.ln) else self.branch(ls[i]);
 
-        return try dispatch(self, next_ip, code);
+        return dispatch(self, next_ip, code);
     }
 
     fn @"return"(self: *Interpreter, _: usize, _: []Instruction) WasmError!void {
@@ -202,7 +202,7 @@ pub const Interpreter = struct {
         const previous_frame = self.peekFrame();
         self.inst = previous_frame.inst;
 
-        return try dispatch(self, label.branch_target, previous_frame.inst.module.parsed_code.items);
+        return dispatch(self, label.branch_target, previous_frame.inst.module.parsed_code.items);
     }
 
     fn call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -244,7 +244,7 @@ pub const Interpreter = struct {
             },
         }
 
-        return try dispatch(self, next_ip, self.inst.module.parsed_code.items);
+        return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
     fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -307,7 +307,7 @@ pub const Interpreter = struct {
             },
         }
 
-        return try dispatch(self, next_ip, self.inst.module.parsed_code.items);
+        return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
     fn fast_call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -334,12 +334,12 @@ pub const Interpreter = struct {
             .branch_target = ip + 1,
         });
 
-        return try dispatch(self, f.start, code);
+        return dispatch(self, f.start, code);
     }
 
     fn drop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popAnyOperand();
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn select(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -353,7 +353,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(u64, c2);
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"local.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -363,7 +363,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, frame.locals[local_index]);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"local.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -372,7 +372,7 @@ pub const Interpreter = struct {
         const frame = self.peekFrame();
         frame.locals[local_index] = self.popOperand(u64);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"local.tee"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -381,7 +381,7 @@ pub const Interpreter = struct {
         const frame = self.peekFrame();
         frame.locals[local_index] = self.peekOperand();
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"global.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -391,7 +391,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, global.value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -402,7 +402,7 @@ pub const Interpreter = struct {
 
         global.value = value;
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -417,7 +417,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -432,7 +432,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -447,7 +447,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -462,7 +462,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -477,7 +477,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -492,7 +492,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -507,7 +507,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -522,7 +522,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -537,7 +537,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -552,7 +552,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -567,7 +567,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -582,7 +582,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -597,7 +597,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.load32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -612,7 +612,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -626,7 +626,7 @@ pub const Interpreter = struct {
 
         try memory.write(u32, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -640,7 +640,7 @@ pub const Interpreter = struct {
 
         try memory.write(u64, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -654,7 +654,7 @@ pub const Interpreter = struct {
 
         try memory.write(f32, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -668,7 +668,7 @@ pub const Interpreter = struct {
 
         try memory.write(f64, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -682,7 +682,7 @@ pub const Interpreter = struct {
 
         try memory.write(u8, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -696,7 +696,7 @@ pub const Interpreter = struct {
 
         try memory.write(u16, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -710,7 +710,7 @@ pub const Interpreter = struct {
 
         try memory.write(u8, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -724,7 +724,7 @@ pub const Interpreter = struct {
 
         try memory.write(u16, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -738,7 +738,7 @@ pub const Interpreter = struct {
 
         try memory.write(u32, offset, address, value);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"memory.size"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -746,7 +746,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @intCast(u32, memory.data.items.len));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -759,7 +759,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(i32, @as(i32, -1));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -767,7 +767,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, instr.@"i32.const");
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -775,7 +775,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, instr.@"i64.const");
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -783,7 +783,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, instr.@"f32.const");
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -791,7 +791,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, instr.@"f64.const");
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -799,7 +799,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 == 0) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -808,7 +808,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 == c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -817,7 +817,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 != c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -826,7 +826,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -835,7 +835,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -844,7 +844,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -853,7 +853,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -862,7 +862,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -871,7 +871,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -880,7 +880,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -889,7 +889,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -897,7 +897,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == 0) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -906,7 +906,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -915,7 +915,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -924,7 +924,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -933,7 +933,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -942,7 +942,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -951,7 +951,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -960,7 +960,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -969,7 +969,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -978,7 +978,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -987,7 +987,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -996,7 +996,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1005,7 +1005,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1014,7 +1014,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1023,7 +1023,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1032,7 +1032,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1041,7 +1041,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1050,7 +1050,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1059,7 +1059,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1068,7 +1068,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1077,7 +1077,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1086,7 +1086,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1095,28 +1095,28 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @clz(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @ctz(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @popCount(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1125,7 +1125,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 +% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1134,7 +1134,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 -% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1143,7 +1143,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 *% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1154,7 +1154,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, div);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1165,7 +1165,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, div);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1177,7 +1177,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, rem);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1188,7 +1188,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, rem);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1197,7 +1197,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 & c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1206,7 +1206,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 | c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1215,7 +1215,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, c1 ^ c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1224,7 +1224,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, math.shl(u32, c1, c2 % 32));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1235,7 +1235,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, math.shr(i32, c1, mod));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1244,7 +1244,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, math.shr(u32, c1, c2 % 32));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1253,7 +1253,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, math.rotl(u32, c1, c2 % 32));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1262,28 +1262,28 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, math.rotr(u32, c1, c2 % 32));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @clz(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @ctz(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @popCount(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1292,7 +1292,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 +% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1301,7 +1301,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 -% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1310,7 +1310,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 *% c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1321,7 +1321,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, div);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1332,7 +1332,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, div);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1344,7 +1344,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, rem);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1355,7 +1355,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, rem);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1364,7 +1364,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 & c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1373,7 +1373,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 | c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1382,7 +1382,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, c1 ^ c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1391,7 +1391,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, math.shl(u64, c1, c2 % 64));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1402,7 +1402,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, math.shr(i64, c1, mod));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1411,7 +1411,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, math.shr(u64, c1, c2 % 64));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1420,7 +1420,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, math.rotl(u64, c1, c2 % 64));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1429,7 +1429,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, math.rotr(u64, c1, c2 % 64));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1437,7 +1437,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, math.fabs(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1445,7 +1445,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, -c1);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1453,7 +1453,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @ceil(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1461,7 +1461,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @floor(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1469,7 +1469,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @trunc(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1487,7 +1487,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, @round(c1));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1495,7 +1495,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, math.sqrt(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1504,7 +1504,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, c1 + c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1513,7 +1513,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, c1 - c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1522,7 +1522,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, c1 * c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1531,7 +1531,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, c1 / c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1540,11 +1540,11 @@ pub const Interpreter = struct {
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1557,7 +1557,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.min(c1, c2));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1566,11 +1566,11 @@ pub const Interpreter = struct {
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1583,7 +1583,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.max(c1, c2));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1596,7 +1596,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.fabs(c1));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1604,7 +1604,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, math.fabs(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1612,7 +1612,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, -c1);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1620,7 +1620,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @ceil(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1628,7 +1628,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @floor(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1636,7 +1636,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @trunc(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1654,7 +1654,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, @round(c1));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1662,7 +1662,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, math.sqrt(c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1671,7 +1671,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, c1 + c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1680,7 +1680,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, c1 - c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1689,7 +1689,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, c1 * c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1698,7 +1698,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, c1 / c2);
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1707,11 +1707,11 @@ pub const Interpreter = struct {
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1724,7 +1724,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.min(c1, c2));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1733,11 +1733,11 @@ pub const Interpreter = struct {
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return try dispatch(self, ip + 1, code);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1750,7 +1750,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.max(c1, c2));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1763,7 +1763,7 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.fabs(c1));
         }
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.wrap_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1771,7 +1771,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @truncate(i32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1786,7 +1786,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1801,7 +1801,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1816,7 +1816,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1831,7 +1831,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.extend_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1839,7 +1839,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.extend_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1847,7 +1847,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @truncate(u32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1862,7 +1862,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1877,7 +1877,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1892,7 +1892,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1907,7 +1907,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1915,7 +1915,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1923,7 +1923,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1931,7 +1931,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1939,7 +1939,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.demote_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1947,7 +1947,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @floatCast(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1955,7 +1955,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1963,7 +1963,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1971,7 +1971,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1979,7 +1979,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.promote_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1987,7 +1987,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @floatCast(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.reinterpret_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -1995,7 +1995,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @bitCast(i32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.reinterpret_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2003,7 +2003,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @bitCast(i64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.reinterpret_i32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2011,7 +2011,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f32, @bitCast(f32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.reinterpret_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2019,7 +2019,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(f64, @bitCast(f64, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2027,7 +2027,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @truncate(i8, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2035,7 +2035,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i32, @truncate(i16, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2043,7 +2043,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @truncate(i8, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2051,7 +2051,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @truncate(i16, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.extend32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2059,7 +2059,7 @@ pub const Interpreter = struct {
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
 
-        return try dispatch(self, ip + 1, code);
+        return dispatch(self, ip + 1, code);
     }
 
     fn trunc_sat(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
@@ -2072,20 +2072,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i32, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             1 => {
                 const c1 = self.popOperand(f32);
@@ -2093,20 +2093,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u32, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             2 => {
                 const c1 = self.popOperand(f64);
@@ -2114,20 +2114,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i32, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             3 => {
                 const c1 = self.popOperand(f64);
@@ -2135,20 +2135,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u32, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             4 => {
                 const c1 = self.popOperand(f32);
@@ -2156,20 +2156,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i64, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             5 => {
                 const c1 = self.popOperand(f32);
@@ -2177,20 +2177,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u64, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             6 => {
                 const c1 = self.popOperand(f64);
@@ -2198,20 +2198,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i64, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             7 => {
                 const c1 = self.popOperand(f64);
@@ -2219,20 +2219,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u64, 0);
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return try dispatch(self, ip + 1, code);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return try dispatch(self, ip + 1, code);
+                return dispatch(self, ip + 1, code);
             },
             else => {
                 return error.Trap;
