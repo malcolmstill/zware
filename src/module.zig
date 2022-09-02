@@ -948,7 +948,7 @@ test "module loading (simple add function)" {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../test/test.wasm");
+    const bytes = @embedFile("test/test.wasm");
 
     var store: Store = Store.init(alloc);
 
@@ -973,7 +973,7 @@ test "module loading (fib)" {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../test/fib.wasm");
+    const bytes = @embedFile("test/fib.wasm");
 
     var store: Store = Store.init(alloc);
 
@@ -1022,7 +1022,7 @@ test "module loading (fact)" {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../test/fact.wasm");
+    const bytes = @embedFile("test/fact.wasm");
 
     var store: Store = Store.init(alloc);
 

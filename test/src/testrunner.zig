@@ -76,7 +76,7 @@ pub fn main() anyerror!void {
     // 1. Get .json file from command line
     var args = process.args();
     _ = args.skip();
-    const filename = args.nextPosix() orelse return error.NoFilename;
+    const filename = args.next() orelse return error.NoFilename;
     std.log.info("testing: {s}", .{filename});
 
     var arena = ArenaAllocator.init(gpa.allocator());
@@ -87,8 +87,15 @@ pub fn main() anyerror!void {
     // 2. Parse json and find .wasm file
     const json_string = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
 
-    @setEvalBranchQuota(10000);
-    const r = try json.parse(Wast, &json.TokenStream.init(json_string), json.ParseOptions{ .allocator = alloc });
+    // See https://github.com/ziglang/zig/issues/12624
+    comptime {
+        @setEvalBranchQuota(100000);
+        _ = json.ParseError([]const Command);
+        _ = json.ParseError(Wast);
+    }
+
+    var ts = json.TokenStream.init(json_string);
+    const r = try json.parse(Wast, &ts, json.ParseOptions{ .allocator = alloc });
 
     // 2.a. Find the wasm file
     var wasm_filename: []const u8 = undefined;

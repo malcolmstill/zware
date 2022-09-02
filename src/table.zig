@@ -7,8 +7,11 @@ pub const Table = struct {
     max: ?u32,
 
     pub fn init(alloc: mem.Allocator, min: u32, max: ?u32) !Table {
+        const data = try alloc.alloc(?usize, min);
+        mem.set(?usize, data, null);
+
         return Table{
-            .data = try alloc.alloc(?usize, min),
+            .data = data,
             .min = min,
             .max = max,
         };
