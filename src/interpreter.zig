@@ -67,119 +67,108 @@ pub const Interpreter = struct {
         std.debug.print("=====================================================\n", .{});
     }
 
-    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction, err: *?WasmError) void {
+    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction) WasmError!void {
         const next_instr = code[next_ip];
 
-        return @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code, err });
+        return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
-    fn impl_ni(_: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn impl_ni(_: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         std.debug.print("not implemented: {any}\n", .{code[ip]});
-        err.* = error.NotImplemented;
+        return error.NotImplemented;
     }
 
-    fn @"unreachable"(_: *Interpreter, _: usize, _: []Instruction, err: *?WasmError) void {
-        err.* = error.TrapUnreachable;
+    fn @"unreachable"(_: *Interpreter, _: usize, _: []Instruction) WasmError!void {
+        return error.TrapUnreachable;
     }
 
-    fn nop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        return dispatch(self, ip + 1, code, err);
+    fn nop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+        return dispatch(self, ip + 1, code);
     }
 
-    fn block(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn block(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].block;
 
-        self.pushLabel(Label{
+        try self.pushLabel(Label{
             .return_arity = meta.return_arity,
             .op_stack_len = self.op_ptr - meta.param_arity,
             .branch_target = meta.branch_target,
-        }) catch |e| {
-            err.* = e;
-            return;
-        };
+        });
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn loop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn loop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].loop;
 
-        self.pushLabel(Label{
+        try self.pushLabel(Label{
             // note that we use block_params rather than block_returns for return arity:
             .return_arity = meta.param_arity,
             .op_stack_len = self.op_ptr - meta.param_arity,
             .branch_target = meta.branch_target,
-        }) catch |e| {
-            err.* = e;
-            return;
-        };
+        });
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"if"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"if"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].@"if";
         const condition = self.popOperand(u32);
 
-        self.pushLabel(Label{
+        try self.pushLabel(Label{
             .return_arity = meta.return_arity,
             .op_stack_len = self.op_ptr - meta.param_arity,
             .branch_target = meta.branch_target,
-        }) catch |e| {
-            err.* = e;
-            return;
-        };
+        });
 
-        return dispatch(self, if (condition == 0) meta.else_ip else ip + 1, code, err);
+        return dispatch(self, if (condition == 0) meta.else_ip else ip + 1, code);
     }
 
-    fn @"else"(self: *Interpreter, _: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"else"(self: *Interpreter, _: usize, code: []Instruction) WasmError!void {
         const label = self.popLabel();
 
-        return dispatch(self, label.branch_target, code, err);
+        return dispatch(self, label.branch_target, code);
     }
 
-    fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].if_no_else;
         const condition = self.popOperand(u32);
 
         if (condition == 0) {
-            return dispatch(self, meta.branch_target, code, err);
+            return dispatch(self, meta.branch_target, code);
         } else {
             // We are inside the if branch
-            self.pushLabel(Label{
+            try self.pushLabel(Label{
                 .return_arity = meta.return_arity,
                 .op_stack_len = self.op_ptr - meta.param_arity,
                 .branch_target = meta.branch_target,
-            }) catch |e| {
-                err.* = e;
-                return;
-            };
-            return dispatch(self, ip + 1, code, err);
+            });
+
+            return dispatch(self, ip + 1, code);
         }
     }
 
-    fn end(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn end(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popLabel();
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn br(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn br(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const next_ip = self.branch(code[ip].br);
 
-        return dispatch(self, next_ip, code, err);
+        return dispatch(self, next_ip, code);
     }
 
-    fn br_if(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn br_if(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const condition = self.popOperand(u32);
 
         const next_ip = if (condition == 0) ip + 1 else self.branch(code[ip].br_if);
 
-        return dispatch(self, next_ip, code, err);
+        return dispatch(self, next_ip, code);
     }
 
-    fn br_table(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn br_table(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].br_table;
 
         const i = self.popOperand(u32);
@@ -187,10 +176,10 @@ pub const Interpreter = struct {
 
         const next_ip = if (i >= ls.len) self.branch(meta.ln) else self.branch(ls[i]);
 
-        return dispatch(self, next_ip, code, err);
+        return dispatch(self, next_ip, code);
     }
 
-    fn @"return"(self: *Interpreter, _: usize, _: []Instruction, err: *?WasmError) void {
+    fn @"return"(self: *Interpreter, _: usize, _: []Instruction) WasmError!void {
         const frame = self.peekFrame();
         const n = frame.return_arity;
 
@@ -213,70 +202,52 @@ pub const Interpreter = struct {
         const previous_frame = self.peekFrame();
         self.inst = previous_frame.inst;
 
-        return dispatch(self, label.branch_target, previous_frame.inst.module.parsed_code.items, err);
+        return dispatch(self, label.branch_target, previous_frame.inst.module.parsed_code.items);
     }
 
-    fn call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const function_index = code[ip].call;
 
-        const function = self.inst.getFunc(function_index) catch |e| {
-            err.* = e;
-            return;
-        };
+        const function = try self.inst.getFunc(function_index);
         var next_ip = ip;
 
         switch (function) {
             .function => |f| {
                 // Check we have enough stack space
-                self.checkStackSpace(f.required_stack_space + f.locals_count) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                try self.checkStackSpace(f.required_stack_space + f.locals_count);
 
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += f.locals_count;
 
-                self.inst = self.inst.store.instance(f.instance) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                self.inst = try self.inst.store.instance(f.instance);
 
                 // Consume parameters from the stack
-                self.pushFrame(Frame{
+                try self.pushFrame(Frame{
                     .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
                     .label_stack_len = self.label_ptr,
                     .return_arity = f.results.len,
                     .inst = self.inst,
-                }, f.locals_count + f.params.len) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                }, f.locals_count + f.params.len);
 
                 // Our continuation is the code after call
-                self.pushLabel(Label{
+                try self.pushLabel(Label{
                     .return_arity = f.results.len,
                     .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
                     .branch_target = ip + 1,
-                }) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                });
 
                 next_ip = f.start;
             },
             .host_function => |hf| {
-                hf.func(self) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                try hf.func(self);
                 next_ip = ip + 1;
             },
         }
 
-        return dispatch(self, next_ip, self.inst.module.parsed_code.items, err);
+        return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
-    fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const call_indirect_instruction = code[ip].call_indirect;
         var module = self.inst.module;
 
@@ -285,18 +256,9 @@ pub const Interpreter = struct {
 
         // Read lookup index from stack
         const lookup_index = self.popOperand(u32);
-        const table = self.inst.getTable(table_index) catch |e| {
-            err.* = e;
-            return;
-        };
-        const function_handle = table.lookup(lookup_index) catch |e| {
-            err.* = e;
-            return;
-        };
-        const function = self.inst.store.function(function_handle) catch |e| {
-            err.* = e;
-            return;
-        };
+        const table = try self.inst.getTable(table_index);
+        const function_handle = try table.lookup(lookup_index);
+        const function = try self.inst.store.function(function_handle);
 
         var next_ip = ip;
 
@@ -305,108 +267,82 @@ pub const Interpreter = struct {
                 // Check that signatures match
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
                 if (!Module.signaturesEqual(func.params, func.results, call_indirect_func_type)) {
-                    err.* = error.IndirectCallTypeMismatch;
-                    return;
+                    return error.IndirectCallTypeMismatch;
                 }
 
                 // Check we have enough stack space
-                self.checkStackSpace(func.required_stack_space + func.locals_count) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                try self.checkStackSpace(func.required_stack_space + func.locals_count);
 
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += func.locals_count;
 
-                self.inst = self.inst.store.instance(func.instance) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                self.inst = try self.inst.store.instance(func.instance);
 
                 // Consume parameters from the stack
-                self.pushFrame(Frame{
+                try self.pushFrame(Frame{
                     .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
                     .label_stack_len = self.label_ptr,
                     .return_arity = func.results.len,
                     .inst = self.inst,
-                }, func.locals_count + func.params.len) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                }, func.locals_count + func.params.len);
 
                 // Our continuation is the code after call
-                self.pushLabel(Label{
+                try self.pushLabel(Label{
                     .return_arity = func.results.len,
                     .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
                     .branch_target = ip + 1,
-                }) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                });
 
                 next_ip = func.start;
             },
             .host_function => |host_func| {
                 const call_indirect_func_type = module.types.list.items[op_func_type_index];
                 if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) {
-                    err.* = error.IndirectCallTypeMismatch;
-                    return;
+                    return error.IndirectCallTypeMismatch;
                 }
 
-                host_func.func(self) catch |e| {
-                    err.* = e;
-                    return;
-                };
+                try host_func.func(self);
 
                 next_ip = ip + 1;
             },
         }
 
-        return dispatch(self, next_ip, self.inst.module.parsed_code.items, err);
+        return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
-    fn fast_call(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn fast_call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const f = code[ip].fast_call;
 
         // Check we have enough stack space
-        self.checkStackSpace(f.required_stack_space + f.locals) catch |e| {
-            err.* = e;
-            return;
-        };
+        try self.checkStackSpace(f.required_stack_space + f.locals);
 
         // Make space for locals (again, params already on stack)
         self.op_ptr += f.locals;
 
         // Consume parameters from the stack
-        self.pushFrame(Frame{
+        try self.pushFrame(Frame{
             .op_stack_len = self.op_ptr - f.params - f.locals,
             .label_stack_len = self.label_ptr,
             .return_arity = f.results,
             .inst = self.inst,
-        }, f.locals + f.params) catch |e| {
-            err.* = e;
-            return;
-        };
+        }, f.locals + f.params);
 
         // Our continuation is the code after call
-        self.pushLabel(Label{
+        try self.pushLabel(Label{
             .return_arity = f.results,
             .op_stack_len = self.op_ptr - f.params - f.locals,
             .branch_target = ip + 1,
-        }) catch |e| {
-            err.* = e;
-            return;
-        };
+        });
 
-        return dispatch(self, f.start, code, err);
+        return dispatch(self, f.start, code);
     }
 
-    fn drop(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn drop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popAnyOperand();
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn select(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn select(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const condition = self.popOperand(u32);
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
@@ -417,554 +353,404 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(u64, c2);
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.get"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"local.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.get";
 
         const frame = self.peekFrame();
 
         self.pushOperandNoCheck(u64, frame.locals[local_index]);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.set"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"local.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.set";
 
         const frame = self.peekFrame();
         frame.locals[local_index] = self.popOperand(u64);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.tee"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"local.tee"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.tee";
 
         const frame = self.peekFrame();
         frame.locals[local_index] = self.peekOperand();
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"global.get"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"global.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const global_index = code[ip].@"global.get";
 
-        const global = self.inst.getGlobal(global_index) catch |e| {
-            err.* = e;
-            return;
-        };
+        const global = try self.inst.getGlobal(global_index);
 
         self.pushOperandNoCheck(u64, global.value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const global_index = code[ip].@"global.set";
         const value = self.popAnyOperand();
 
-        const global = self.inst.getGlobal(global_index) catch |e| {
-            err.* = e;
-            return;
-        };
+        const global = try self.inst.getGlobal(global_index);
 
         global.value = value;
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u32, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u32, offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u64, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u64, offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.load"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f32.load";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(f32, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(f32, offset, address);
 
         self.pushOperandNoCheck(f32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.load"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f64.load";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(f64, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(f64, offset, address);
 
         self.pushOperandNoCheck(f64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load8_s";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(i8, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(i8, offset, address);
 
         self.pushOperandNoCheck(i32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load8_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load8_u";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u8, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u8, offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load16_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load16_s";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(i16, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(i16, offset, address);
 
         self.pushOperandNoCheck(i32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load16_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load16_u";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u16, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u16, offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load8_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load8_s";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(i8, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(i8, offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load8_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load8_u";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u8, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u8, offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load16_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load16_s";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(i16, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(i16, offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load16_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load16_u";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u16, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u16, offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load32_s";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(i32, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(i32, offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.load32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load32_u";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const address = self.popOperand(u32);
 
-        const value = memory.read(u32, offset, address) catch |e| {
-            err.* = e;
-            return;
-        };
+        const value = try memory.read(u32, offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = self.popOperand(u32);
         const address = self.popOperand(u32);
 
-        memory.write(u32, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u32, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = self.popOperand(u64);
         const address = self.popOperand(u32);
 
-        memory.write(u64, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u64, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.store"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f32.store";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = self.popOperand(f32);
         const address = self.popOperand(u32);
 
-        memory.write(f32, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(f32, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.store"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f64.store";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = self.popOperand(f64);
         const address = self.popOperand(u32);
 
-        memory.write(f64, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(f64, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store8"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store8";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = @truncate(u8, self.popOperand(u32));
         const address = self.popOperand(u32);
 
-        memory.write(u8, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u8, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store16"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store16";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = @truncate(u16, self.popOperand(u32));
         const address = self.popOperand(u32);
 
-        memory.write(u16, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u16, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store8"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store8";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = @truncate(u8, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        memory.write(u8, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u8, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store16"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store16";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = @truncate(u16, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        memory.write(u16, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u16, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store32"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.store32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store32";
 
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+        const memory = try self.inst.getMemory(0);
 
         const offset = load_data.offset;
         const value = @truncate(u32, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        memory.write(u32, offset, address, value) catch |e| {
-            err.* = e;
-            return;
-        };
+        try memory.write(u32, offset, address, value);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"memory.size"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+    fn @"memory.size"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+        const memory = try self.inst.getMemory(0);
 
         self.pushOperandNoCheck(u32, @intCast(u32, memory.data.items.len));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
-        const memory = self.inst.getMemory(0) catch |e| {
-            err.* = e;
-            return;
-        };
+    fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+        const memory = try self.inst.getMemory(0);
 
         const num_pages = self.popOperand(u32);
         if (memory.grow(num_pages)) |old_size| {
@@ -973,758 +759,720 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(i32, @as(i32, -1));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(i32, instr.@"i32.const");
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(i64, instr.@"i64.const");
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(f32, instr.@"f32.const");
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(f64, instr.@"f64.const");
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.eqz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 == 0) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.eq"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 == c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ne"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 != c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.lt_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.lt_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.gt_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.gt_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.le_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.le_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ge_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ge_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.eqz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == 0) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.eq"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ne"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.lt_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.lt_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.gt_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.gt_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.le_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.le_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ge_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ge_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.eq"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ne"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.lt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.le"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ge"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.eq"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ne"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 != c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.lt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 < c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.gt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 > c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.le"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 <= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ge"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 >= c2) 1 else 0));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @clz(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @ctz(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @popCount(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.add"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 +% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.sub"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 -% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.mul"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 *% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.div_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
-        const div = math.divTrunc(i32, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const div = try math.divTrunc(i32, c1, c2);
 
         self.pushOperandNoCheck(i32, div);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.div_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
-        const div = math.divTrunc(u32, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const div = try math.divTrunc(u32, c1, c2);
 
         self.pushOperandNoCheck(u32, div);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rem_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
-        const abs = math.absInt(c2) catch |e| {
-            err.* = e;
-            return;
-        };
-
-        const rem = math.rem(i32, c1, abs) catch |e| {
-            err.* = e;
-            return;
-        };
+        const abs = try math.absInt(c2);
+        const rem = try math.rem(i32, c1, abs);
 
         self.pushOperandNoCheck(i32, rem);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rem_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
-        const rem = math.rem(u32, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const rem = try math.rem(u32, c1, c2);
 
         self.pushOperandNoCheck(u32, rem);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.and"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 & c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.or"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 | c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.xor"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, c1 ^ c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shl"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, math.shl(u32, c1, c2 % 32));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shr_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
-        const mod = math.mod(i32, c2, 32) catch |e| {
-            err.* = e;
-            return;
-        };
+        const mod = try math.mod(i32, c2, 32);
 
         self.pushOperandNoCheck(i32, math.shr(i32, c1, mod));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shr_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, math.shr(u32, c1, c2 % 32));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rotl"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, math.rotl(u32, c1, c2 % 32));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rotr"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, math.rotr(u32, c1, c2 % 32));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.clz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @clz(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ctz"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @ctz(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.popcnt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @popCount(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.add"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 +% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.sub"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 -% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.mul"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 *% c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.div_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
-        const div = math.divTrunc(i64, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const div = try math.divTrunc(i64, c1, c2);
 
         self.pushOperandNoCheck(i64, div);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.div_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
-        const div = math.divTrunc(u64, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const div = try math.divTrunc(u64, c1, c2);
 
         self.pushOperandNoCheck(u64, div);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rem_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
-        const abs = math.absInt(c2) catch |e| {
-            err.* = e;
-            return;
-        };
-
-        const rem = math.rem(i64, c1, abs) catch |e| {
-            err.* = e;
-            return;
-        };
+        const abs = try math.absInt(c2);
+        const rem = try math.rem(i64, c1, abs);
 
         self.pushOperandNoCheck(i64, rem);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rem_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
-        const rem = math.rem(u64, c1, c2) catch |e| {
-            err.* = e;
-            return;
-        };
+        const rem = try math.rem(u64, c1, c2);
 
         self.pushOperandNoCheck(u64, rem);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.and"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 & c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.or"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 | c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.xor"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, c1 ^ c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shl"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, math.shl(u64, c1, c2 % 64));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shr_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
-        const mod = math.mod(i64, c2, 64) catch |e| {
-            err.* = e;
-            return;
-        };
+        const mod = try math.mod(i64, c2, 64);
 
         self.pushOperandNoCheck(i64, math.shr(i64, c1, mod));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shr_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, math.shr(u64, c1, c2 % 64));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rotl"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, math.rotl(u64, c1, c2 % 64));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rotr"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, math.rotr(u64, c1, c2 % 64));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.abs"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, math.fabs(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.neg"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, -c1);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ceil"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @ceil(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.floor"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @floor(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.trunc"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @trunc(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.nearest"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
         const floor = @floor(c1);
         const ceil = @ceil(c1);
@@ -1739,64 +1487,64 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, @round(c1));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.sqrt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, math.sqrt(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.add"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, c1 + c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.sub"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, c1 - c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.mul"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, c1 * c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.div"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, c1 / c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.min"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1809,20 +1557,20 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.min(c1, c2));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.max"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f32, math.nan_f32);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1835,10 +1583,10 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.max(c1, c2));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.copysign"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1848,50 +1596,50 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f32, math.fabs(c1));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, math.fabs(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, -c1);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @ceil(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @floor(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @trunc(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.nearest"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
         const floor = @floor(c1);
         const ceil = @ceil(c1);
@@ -1906,64 +1654,64 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, @round(c1));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, math.sqrt(c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.add"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, c1 + c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.sub"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, c1 - c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.mul"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, c1 * c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.div"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, c1 / c2);
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.min"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -1976,20 +1724,20 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.min(c1, c2));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.max"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code, err);
+            return dispatch(self, ip + 1, code);
         }
 
         if (c1 == 0.0 and c2 == 0.0) {
@@ -2002,10 +1750,10 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.max(c1, c2));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.copysign"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -2015,386 +1763,306 @@ pub const Interpreter = struct {
             self.pushOperandNoCheck(f64, math.fabs(c1));
         }
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.wrap_i64"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.wrap_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i32, @truncate(i32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) return error.Overflow;
+        if (trunc < @intToFloat(f32, std.math.minInt(i32))) return error.Overflow;
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
+        if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
+        if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
+        if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend_i32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.extend_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend_i32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.extend_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @truncate(u32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
+        if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
+        if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
+        if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            err.* = error.InvalidConversion;
-            return;
-        }
+        if (math.isNan(c1)) return error.InvalidConversion;
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
-            err.* = error.Overflow;
-            return;
-        }
-
-        if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
-            err.* = error.Overflow;
-            return;
-        }
+        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
+        if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.demote_f64"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.demote_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f32, @floatCast(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.promote_f32"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.promote_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f64, @floatCast(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.reinterpret_f32"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.reinterpret_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(i32, @bitCast(i32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.reinterpret_f64"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.reinterpret_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(i64, @bitCast(i64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.reinterpret_i32"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f32.reinterpret_i32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f32, @bitCast(f32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.reinterpret_i64"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"f64.reinterpret_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f64, @bitCast(f64, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(i32, @truncate(i8, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i32.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(i32, @truncate(i16, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i8, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i16, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend32_s"(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn @"i64.extend32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
 
-        return dispatch(self, ip + 1, code, err);
+        return dispatch(self, ip + 1, code);
     }
 
-    fn trunc_sat(self: *Interpreter, ip: usize, code: []Instruction, err: *?WasmError) void {
+    fn trunc_sat(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].trunc_sat;
 
         switch (meta) {
@@ -2404,20 +2072,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i32, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             1 => {
                 const c1 = self.popOperand(f32);
@@ -2425,20 +2093,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u32, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             2 => {
                 const c1 = self.popOperand(f64);
@@ -2446,20 +2114,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i32, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             3 => {
                 const c1 = self.popOperand(f64);
@@ -2467,20 +2135,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u32, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             4 => {
                 const c1 = self.popOperand(f32);
@@ -2488,20 +2156,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i64, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             5 => {
                 const c1 = self.popOperand(f32);
@@ -2509,20 +2177,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u64, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             6 => {
                 const c1 = self.popOperand(f64);
@@ -2530,20 +2198,20 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(i64, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             7 => {
                 const c1 = self.popOperand(f64);
@@ -2551,29 +2219,28 @@ pub const Interpreter = struct {
 
                 if (math.isNan(c1)) {
                     self.pushOperandNoCheck(u64, 0);
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
                 if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return dispatch(self, ip + 1, code, err);
+                    return dispatch(self, ip + 1, code);
                 }
 
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return dispatch(self, ip + 1, code, err);
+                return dispatch(self, ip + 1, code);
             },
             else => {
-                err.* = error.Trap;
-                return;
+                return error.Trap;
             },
         }
     }
 
-    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction, *?WasmError) void;
+    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction) WasmError!void;
 
     const lookup = [256]InstructionFunction{
         @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
@@ -2597,9 +2264,7 @@ pub const Interpreter = struct {
     pub fn invoke(self: *Interpreter, ip: usize) !void {
         const instr = self.inst.module.parsed_code.items[ip];
 
-        var err: ?WasmError = null;
-        @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items, &err });
-        if (err) |e| return e;
+        try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
