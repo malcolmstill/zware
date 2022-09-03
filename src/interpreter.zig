@@ -35,6 +35,23 @@ pub const Interpreter = struct {
     inst: *Instance = undefined,
     ip: usize = 0,
 
+    pub const Frame = struct {
+        locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
+        return_arity: usize = 0,
+        op_stack_len: usize,
+        label_stack_len: usize,
+        inst: *Instance,
+    };
+
+    // Label
+    //
+    // - code: the code we should interpret after `end`
+    pub const Label = struct {
+        return_arity: usize = 0,
+        branch_target: usize = 0,
+        op_stack_len: usize, // u32?
+    };
+
     pub fn init(op_stack: []u64, frame_stack: []Frame, label_stack: []Label, inst: *Instance) Interpreter {
         return Interpreter{
             .op_stack = op_stack,
@@ -44,28 +61,32 @@ pub const Interpreter = struct {
         };
     }
 
-    fn debug(self: *Interpreter, opcode: Instruction) void {
-        // std.debug.print("{}\n", .{opcode});
-        std.debug.print("\n=====================================================\n", .{});
-        std.debug.print("before: {}\n", .{opcode});
-        var i: usize = 0;
-        while (i < self.op_ptr) : (i += 1) {
-            std.debug.print("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        }
-        std.debug.print("\n", .{});
+    pub fn invoke(self: *Interpreter, ip: usize) !void {
+        const instr = self.inst.module.parsed_code.items[ip];
 
-        i = 0;
-        while (i < self.label_ptr) : (i += 1) {
-            std.debug.print("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
-        }
-        std.debug.print("\n", .{});
-
-        i = 0;
-        while (i < self.frame_ptr) : (i += 1) {
-            std.debug.print("frame_stack[{}] = [ret_ari: {}, ops_start: {}, label_start: {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
-        }
-        std.debug.print("=====================================================\n", .{});
+        try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
     }
+
+    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction) WasmError!void;
+
+    const lookup = [256]InstructionFunction{
+        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
+        call,               call_indirect,      fast_call,            impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        impl_ni,              impl_ni,           impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
+        @"i64.load8_s",     @"i64.load8_u",     @"i64.load16_s",      @"i64.load16_u",      @"i64.load32_s",      @"i64.load32_u",      @"i32.store",      @"i64.store",         @"f32.store",         @"f64.store",         @"i32.store8",        @"i32.store16",     @"i64.store8",          @"i64.store16",         @"i64.store32",         @"memory.size",
+        @"memory.grow",     @"i32.const",       @"i64.const",         @"f32.const",         @"f64.const",         @"i32.eqz",           @"i32.eq",         @"i32.ne",            @"i32.lt_s",          @"i32.lt_u",          @"i32.gt_s",          @"i32.gt_u",        @"i32.le_s",            @"i32.le_u",            @"i32.ge_s",            @"i32.ge_u",
+        @"i64.eqz",         @"i64.eq",          @"i64.ne",            @"i64.lt_s",          @"i64.lt_u",          @"i64.gt_s",          @"i64.gt_u",       @"i64.le_s",          @"i64.le_u",          @"i64.ge_s",          @"i64.ge_u",          @"f32.eq",          @"f32.ne",              @"f32.lt",              @"f32.gt",              @"f32.le",
+        @"f32.ge",          @"f64.eq",          @"f64.ne",            @"f64.lt",            @"f64.gt",            @"f64.le",            @"f64.ge",         @"i32.clz",           @"i32.ctz",           @"i32.popcnt",        @"i32.add",           @"i32.sub",         @"i32.mul",             @"i32.div_s",           @"i32.div_u",           @"i32.rem_s",
+        @"i32.rem_u",       @"i32.and",         @"i32.or",            @"i32.xor",           @"i32.shl",           @"i32.shr_s",         @"i32.shr_u",      @"i32.rotl",          @"i32.rotr",          @"i64.clz",           @"i64.ctz",           @"i64.popcnt",      @"i64.add",             @"i64.sub",             @"i64.mul",             @"i64.div_s",
+        @"i64.div_u",       @"i64.rem_s",       @"i64.rem_u",         @"i64.and",           @"i64.or",            @"i64.xor",           @"i64.shl",        @"i64.shr_s",         @"i64.shr_u",         @"i64.rotl",          @"i64.rotr",          @"f32.abs",         @"f32.neg",             @"f32.ceil",            @"f32.floor",           @"f32.trunc",
+        @"f32.nearest",     @"f32.sqrt",        @"f32.add",           @"f32.sub",           @"f32.mul",           @"f32.div",           @"f32.min",        @"f32.max",           @"f32.copysign",      @"f64.abs",           @"f64.neg",           @"f64.ceil",        @"f64.floor",           @"f64.trunc",           @"f64.nearest",         @"f64.sqrt",
+        @"f64.add",         @"f64.sub",         @"f64.mul",           @"f64.div",           @"f64.min",           @"f64.max",           @"f64.copysign",   @"i32.wrap_i64",      @"i32.trunc_f32_s",   @"i32.trunc_f32_u",   @"i32.trunc_f64_s",   @"i32.trunc_f64_u", @"i64.extend_i32_s",    @"i64.extend_i32_u",    @"i64.trunc_f32_s",     @"i64.trunc_f32_u",
+        @"i64.trunc_f64_s", @"i64.trunc_f64_u", @"f32.convert_i32_s", @"f32.convert_i32_u", @"f32.convert_i64_s", @"f32.convert_i64_u", @"f32.demote_f64", @"f64.convert_i32_s", @"f64.convert_i32_u", @"f64.convert_i64_s", @"f64.convert_i64_u", @"f64.promote_f32", @"i32.reinterpret_f32", @"i64.reinterpret_f64", @"f32.reinterpret_i32", @"f64.reinterpret_i64",
+        @"i32.extend8_s",   @"i32.extend16_s",  @"i64.extend8_s",     @"i64.extend16_s",    @"i64.extend32_s",    impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            trunc_sat,              impl_ni,                impl_ni,                impl_ni,
+    };
 
     inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction) WasmError!void {
         const next_instr = code[next_ip];
@@ -2240,33 +2261,6 @@ pub const Interpreter = struct {
         }
     }
 
-    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction) WasmError!void;
-
-    const lookup = [256]InstructionFunction{
-        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
-        call,               call_indirect,      fast_call,            impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        impl_ni,              impl_ni,           impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
-        @"i64.load8_s",     @"i64.load8_u",     @"i64.load16_s",      @"i64.load16_u",      @"i64.load32_s",      @"i64.load32_u",      @"i32.store",      @"i64.store",         @"f32.store",         @"f64.store",         @"i32.store8",        @"i32.store16",     @"i64.store8",          @"i64.store16",         @"i64.store32",         @"memory.size",
-        @"memory.grow",     @"i32.const",       @"i64.const",         @"f32.const",         @"f64.const",         @"i32.eqz",           @"i32.eq",         @"i32.ne",            @"i32.lt_s",          @"i32.lt_u",          @"i32.gt_s",          @"i32.gt_u",        @"i32.le_s",            @"i32.le_u",            @"i32.ge_s",            @"i32.ge_u",
-        @"i64.eqz",         @"i64.eq",          @"i64.ne",            @"i64.lt_s",          @"i64.lt_u",          @"i64.gt_s",          @"i64.gt_u",       @"i64.le_s",          @"i64.le_u",          @"i64.ge_s",          @"i64.ge_u",          @"f32.eq",          @"f32.ne",              @"f32.lt",              @"f32.gt",              @"f32.le",
-        @"f32.ge",          @"f64.eq",          @"f64.ne",            @"f64.lt",            @"f64.gt",            @"f64.le",            @"f64.ge",         @"i32.clz",           @"i32.ctz",           @"i32.popcnt",        @"i32.add",           @"i32.sub",         @"i32.mul",             @"i32.div_s",           @"i32.div_u",           @"i32.rem_s",
-        @"i32.rem_u",       @"i32.and",         @"i32.or",            @"i32.xor",           @"i32.shl",           @"i32.shr_s",         @"i32.shr_u",      @"i32.rotl",          @"i32.rotr",          @"i64.clz",           @"i64.ctz",           @"i64.popcnt",      @"i64.add",             @"i64.sub",             @"i64.mul",             @"i64.div_s",
-        @"i64.div_u",       @"i64.rem_s",       @"i64.rem_u",         @"i64.and",           @"i64.or",            @"i64.xor",           @"i64.shl",        @"i64.shr_s",         @"i64.shr_u",         @"i64.rotl",          @"i64.rotr",          @"f32.abs",         @"f32.neg",             @"f32.ceil",            @"f32.floor",           @"f32.trunc",
-        @"f32.nearest",     @"f32.sqrt",        @"f32.add",           @"f32.sub",           @"f32.mul",           @"f32.div",           @"f32.min",        @"f32.max",           @"f32.copysign",      @"f64.abs",           @"f64.neg",           @"f64.ceil",        @"f64.floor",           @"f64.trunc",           @"f64.nearest",         @"f64.sqrt",
-        @"f64.add",         @"f64.sub",         @"f64.mul",           @"f64.div",           @"f64.min",           @"f64.max",           @"f64.copysign",   @"i32.wrap_i64",      @"i32.trunc_f32_s",   @"i32.trunc_f32_u",   @"i32.trunc_f64_s",   @"i32.trunc_f64_u", @"i64.extend_i32_s",    @"i64.extend_i32_u",    @"i64.trunc_f32_s",     @"i64.trunc_f32_u",
-        @"i64.trunc_f64_s", @"i64.trunc_f64_u", @"f32.convert_i32_s", @"f32.convert_i32_u", @"f32.convert_i64_s", @"f32.convert_i64_u", @"f32.demote_f64", @"f64.convert_i32_s", @"f64.convert_i32_u", @"f64.convert_i64_s", @"f64.convert_i64_u", @"f64.promote_f32", @"i32.reinterpret_f32", @"i64.reinterpret_f64", @"f32.reinterpret_i32", @"f64.reinterpret_i64",
-        @"i32.extend8_s",   @"i32.extend16_s",  @"i64.extend8_s",     @"i64.extend16_s",    @"i64.extend32_s",    impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            trunc_sat,              impl_ni,                impl_ni,                impl_ni,
-    };
-
-    pub fn invoke(self: *Interpreter, ip: usize) !void {
-        const instr = self.inst.module.parsed_code.items[ip];
-
-        try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
-    }
-
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
     pub fn branch(self: *Interpreter, target: u32) usize {
         const label = self.peekNthLabel(target);
@@ -2409,22 +2403,28 @@ pub const Interpreter = struct {
         return self.label_stack[self.label_stack.len - target - 1];
     }
 
-    pub const Frame = struct {
-        locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
-        return_arity: usize = 0,
-        op_stack_len: usize,
-        label_stack_len: usize,
-        inst: *Instance,
-    };
+    fn debug(self: *Interpreter, opcode: Instruction) void {
+        // std.debug.print("{}\n", .{opcode});
+        std.debug.print("\n=====================================================\n", .{});
+        std.debug.print("before: {}\n", .{opcode});
+        var i: usize = 0;
+        while (i < self.op_ptr) : (i += 1) {
+            std.debug.print("stack[{}] = {}\n", .{ i, self.op_stack[i] });
+        }
+        std.debug.print("\n", .{});
 
-    // Label
-    //
-    // - code: the code we should interpret after `end`
-    pub const Label = struct {
-        return_arity: usize = 0,
-        branch_target: usize = 0,
-        op_stack_len: usize, // u32?
-    };
+        i = 0;
+        while (i < self.label_ptr) : (i += 1) {
+            std.debug.print("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
+        }
+        std.debug.print("\n", .{});
+
+        i = 0;
+        while (i < self.frame_ptr) : (i += 1) {
+            std.debug.print("frame_stack[{}] = [ret_ari: {}, ops_start: {}, label_start: {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
+        }
+        std.debug.print("=====================================================\n", .{});
+    }
 };
 
 const testing = std.testing;
