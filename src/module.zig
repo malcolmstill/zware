@@ -13,6 +13,8 @@ const Opcode = @import("opcode.zig").Opcode;
 const ParseIterator = instruction.ParseIterator;
 const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
+const NumType = common.NumType;
+const RefType = common.ValueType;
 const ValueType = common.ValueType;
 const Import = common.Import;
 const Export = common.Export;
@@ -608,49 +610,56 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const table_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            const elem_type = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
-            if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+            switch (elem_type) {
+                0 => {
+                    const table_index = 0;
 
-            const expr_start = rd.context.pos;
-            const expr = self.module[expr_start..];
-            const meta = try opcode.findExprEnd(expr);
+                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
 
-            // Number of u32's in our data (not the length in bytes!)
-            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-            const data_start = rd.context.pos;
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            var j: usize = 0;
-            while (j < data_length) : (j += 1) {
-                // When we pre-process all this data we can just store this
-                // but for the moment we're just using it to skip over
-                const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                    error.EndOfStream => return error.UnexpectedEndOfInput,
-                    else => return err,
-                };
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+                    const data_start = rd.context.pos;
 
-                if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                    }
+
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.elements.list.append(Segment{
+                        .index = table_index,
+                        .start = parsed_code.start,
+                        .count = data_length,
+                        .data = self.module[data_start..rd.context.pos],
+                    });
+                },
+                else => return error.ValidatorElemTypeNotImplemented,
             }
-
-            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
-
-            try self.elements.list.append(Segment{
-                .index = table_index,
-                .start = parsed_code.start,
-                .count = data_length,
-                .data = self.module[data_start..rd.context.pos],
-            });
         }
     }
 

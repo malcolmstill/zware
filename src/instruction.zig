@@ -494,6 +494,9 @@ const I32_OUT = [1]ValueType{.I32} ** 1;
 const I64_OUT = [1]ValueType{.I64} ** 1;
 const F32_OUT = [1]ValueType{.F32} ** 1;
 const F64_OUT = [1]ValueType{.F64} ** 1;
+const V128_OUT = [1]ValueType{.V128} ** 1;
+const FUNCREF_OUT = [1]ValueType{.FuncRef} ** 1;
+const EXTERNREF_OUT = [1]ValueType{.ExternRef} ** 1;
 
 pub const ParseIterator = struct {
     function: []const u8,
@@ -592,6 +595,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateBlock(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateBlock(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateBlock(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
@@ -625,6 +631,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateLoop(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateLoop(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateLoop(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
@@ -663,6 +672,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateIf(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateIf(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateIf(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
