@@ -579,7 +579,7 @@ pub fn main() anyerror!void {
                             error.ElementsCountMismatch => continue,
                             error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
                             else => {
-                                std.debug.print("Expected error for trap {}, got error: {}\n", .{ trap, err });
+                                std.debug.print("Expected error for trap {s}, got error: {}\n", .{ trap, err });
                                 return error.TestsuiteExpectedUnexpectedEnd;
                             },
                         }
