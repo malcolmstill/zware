@@ -1,6 +1,6 @@
 const std = @import("std");
 const ValueType = @import("common.zig").ValueType;
-const Interpreter = @import("interpreter.zig").Interpreter;
+const VirtualMachine = @import("interpreter.zig").VirtualMachine;
 const Instance = @import("instance.zig").Instance;
 const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
@@ -47,7 +47,7 @@ pub const Function = union(enum) {
         instance: usize,
     },
     host_function: struct {
-        func: *const fn (*Interpreter) WasmError!void,
+        func: *const fn (*VirtualMachine) WasmError!void,
         params: []const ValueType,
         results: []const ValueType,
     },

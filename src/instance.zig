@@ -10,11 +10,11 @@ const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
-const Interpreter = @import("interpreter.zig").Interpreter;
+const VirtualMachine = @import("interpreter.zig").VirtualMachine;
 const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
 
-const InterpreterOptions = struct {
+const VirtualMachineOptions = struct {
     frame_stack_size: comptime_int = 1024,
     label_stack_size: comptime_int = 1024,
     operand_stack_size: comptime_int = 1024,
@@ -257,15 +257,15 @@ pub const Instance = struct {
     // invoke
     //
     // Similar to invoke, but without some type checking
-    pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: InterpreterOptions) !void {
+    pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: VirtualMachineOptions) !void {
         // 1.
         const index = try self.module.getExport(.Func, name);
         if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
         const function = try self.getFunc(index);
 
-        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
         switch (function) {
@@ -276,28 +276,28 @@ pub const Instance = struct {
                 if (f.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
-                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
 
-                const locals_start = interp.op_ptr;
+                const locals_start = vm.op_ptr;
 
                 // 7b. push params
                 for (in) |arg| {
-                    try interp.pushOperand(u64, arg);
+                    try vm.pushOperand(u64, arg);
                 }
 
                 // 7c. push (i.e. make space for) locals
                 var i: usize = 0;
                 while (i < f.locals_count) : (i += 1) {
-                    try interp.pushOperand(u64, 0);
+                    try vm.pushOperand(u64, 0);
                 }
 
                 // Check we have enough stack space
-                try interp.checkStackSpace(f.required_stack_space);
+                try vm.checkStackSpace(f.required_stack_space);
 
                 // 7a. push control frame
-                try interp.pushFrame(Interpreter.Frame{
+                try vm.pushFrame(VirtualMachine.Frame{
                     .op_stack_len = locals_start,
-                    .label_stack_len = interp.label_ptr,
+                    .label_stack_len = vm.label_ptr,
                     .return_arity = f.results.len,
                     .inst = function_instance,
                 }, f.locals_count + f.params.len);
@@ -305,97 +305,97 @@ pub const Instance = struct {
                 // 7a.2. push label for our implicit function block. We know we don't have
                 // any code to execute after calling invoke, but we will need to
                 // pop a Label
-                try interp.pushLabel(Interpreter.Label{
+                try vm.pushLabel(VirtualMachine.Label{
                     .return_arity = f.results.len,
                     .op_stack_len = locals_start,
                     .branch_target = 0,
                 });
 
                 // 8. Execute our function
-                try interp.invoke(f.start);
+                try vm.invoke(f.start);
 
                 // 9.
                 for (out) |_, out_index| {
-                    out[out_index] = interp.popOperand(u64);
+                    out[out_index] = vm.popOperand(u64);
                 }
             },
             .host_function => |host_func| {
-                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
                 try host_func.func(&interp);
             },
         }
     }
 
-    pub fn invokeStart(self: *Instance, index: u32, comptime options: InterpreterOptions) !void {
+    pub fn invokeStart(self: *Instance, index: u32, comptime options: VirtualMachineOptions) !void {
         const function = try self.getFunc(index);
 
-        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
         switch (function) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
-                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
 
-                const locals_start = interp.op_ptr;
+                const locals_start = vm.op_ptr;
 
                 var i: usize = 0;
                 while (i < f.locals_count) : (i += 1) {
-                    try interp.pushOperand(u64, 0);
+                    try vm.pushOperand(u64, 0);
                 }
 
                 // Check we have enough stack space
-                try interp.checkStackSpace(f.required_stack_space);
+                try vm.checkStackSpace(f.required_stack_space);
 
-                try interp.pushFrame(Interpreter.Frame{
+                try vm.pushFrame(VirtualMachine.Frame{
                     .op_stack_len = locals_start,
-                    .label_stack_len = interp.label_ptr,
+                    .label_stack_len = vm.label_ptr,
                     .return_arity = 0,
                     .inst = function_instance,
                 }, f.locals_count);
 
-                try interp.pushLabel(Interpreter.Label{
+                try vm.pushLabel(VirtualMachine.Label{
                     .return_arity = 0,
                     .op_stack_len = locals_start,
                     .branch_target = 0,
                 });
 
-                try interp.invoke(f.start);
+                try vm.invoke(f.start);
             },
             .host_function => |host_func| {
-                var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
                 try host_func.func(&interp);
             },
         }
     }
 
-    pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: InterpreterOptions) !Result {
-        var frame_stack: [options.frame_stack_size]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]Interpreter.Label = [_]Interpreter.Label{undefined} ** options.label_stack_size;
+    pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: VirtualMachineOptions) !Result {
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
-        var interp = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
+        var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
 
-        const locals_start = interp.op_ptr;
+        const locals_start = vm.op_ptr;
 
-        try interp.pushFrame(Interpreter.Frame{
+        try vm.pushFrame(VirtualMachine.Frame{
             .op_stack_len = locals_start,
-            .label_stack_len = interp.label_ptr,
+            .label_stack_len = vm.label_ptr,
             .return_arity = 1,
             .inst = self,
         }, 0);
 
-        try interp.pushLabel(Interpreter.Label{
+        try vm.pushLabel(VirtualMachine.Label{
             .return_arity = 1,
             .op_stack_len = locals_start,
         });
 
-        try interp.invoke(start);
+        try vm.invoke(start);
 
         switch (Result) {
-            u64 => return interp.popAnyOperand(),
-            else => return interp.popOperand(Result),
+            u64 => return vm.popAnyOperand(),
+            else => return vm.popOperand(Result),
         }
     }
 };
