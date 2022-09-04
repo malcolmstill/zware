@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/global.wast",
+{"source_filename": "global.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "global.0.wasm"}, 
   {"type": "assert_return", "line": 181, "action": {"type": "invoke", "field": "get-a", "args": []}, "expected": [{"type": "i32", "value": "4294967294"}]}, 

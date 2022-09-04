@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/select.wast",
+{"source_filename": "select.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "select.0.wasm"}, 
   {"type": "assert_return", "line": 180, "action": {"type": "invoke", "field": "select_i32", "args": [{"type": "i32", "value": "1"}, {"type": "i32", "value": "2"}, {"type": "i32", "value": "1"}]}, "expected": [{"type": "i32", "value": "1"}]}, 

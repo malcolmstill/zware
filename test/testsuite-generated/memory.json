@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/memory.wast",
+{"source_filename": "memory.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "memory.0.wasm"}, 
   {"type": "module", "line": 4, "filename": "memory.1.wasm"}, 

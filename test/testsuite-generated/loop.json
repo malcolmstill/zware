@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/loop.wast",
+{"source_filename": "loop.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "loop.0.wasm"}, 
   {"type": "assert_return", "line": 430, "action": {"type": "invoke", "field": "empty", "args": []}, "expected": []}, 

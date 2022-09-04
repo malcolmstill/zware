@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/local_get.wast",
+{"source_filename": "local_get.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "local_get.0.wasm"}, 
   {"type": "assert_return", "line": 109, "action": {"type": "invoke", "field": "type-local-i32", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 

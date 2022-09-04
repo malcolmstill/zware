@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/endianness.wast",
+{"source_filename": "endianness.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "endianness.0.wasm"}, 
   {"type": "assert_return", "line": 133, "action": {"type": "invoke", "field": "i32_load16_s", "args": [{"type": "i32", "value": "4294967295"}]}, "expected": [{"type": "i32", "value": "4294967295"}]}, 

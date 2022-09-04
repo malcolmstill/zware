@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/custom.wast",
+{"source_filename": "custom.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "custom.0.wasm"}, 
   {"type": "module", "line": 14, "filename": "custom.1.wasm"}, 

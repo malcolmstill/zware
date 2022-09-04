@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/memory_trap.wast",
+{"source_filename": "memory_trap.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "memory_trap.0.wasm"}, 
   {"type": "assert_return", "line": 21, "action": {"type": "invoke", "field": "store", "args": [{"type": "i32", "value": "4294967292"}, {"type": "i32", "value": "42"}]}, "expected": []}, 

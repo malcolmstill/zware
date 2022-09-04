@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/type.wast",
+{"source_filename": "type.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "type.0.wasm"}, 
   {"type": "assert_malformed", "line": 44, "filename": "type.1.wat", "text": "result before parameter", "module_type": "text"}, 

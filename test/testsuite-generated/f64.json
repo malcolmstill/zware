@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/f64.wast",
+{"source_filename": "f64.wast",
  "commands": [
   {"type": "module", "line": 5, "filename": "f64.0.wasm"}, 
   {"type": "assert_return", "line": 19, "action": {"type": "invoke", "field": "add", "args": [{"type": "f64", "value": "9223372036854775808"}, {"type": "f64", "value": "9223372036854775808"}]}, "expected": [{"type": "f64", "value": "9223372036854775808"}]}, 

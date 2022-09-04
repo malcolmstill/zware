@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/skip-stack-guard-page.wast",
+{"source_filename": "skip-stack-guard-page.wast",
  "commands": [
   {"type": "module", "line": 2, "filename": "skip-stack-guard-page.0.wasm"}, 
   {"type": "assert_exhaustion", "line": 2275, "action": {"type": "invoke", "field": "test-guard-page-skip", "args": [{"type": "i32", "value": "0"}]}, "text": "call stack exhausted", "expected": []}, 

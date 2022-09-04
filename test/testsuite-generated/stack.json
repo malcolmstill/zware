@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/stack.wast",
+{"source_filename": "stack.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "stack.0.wasm"}, 
   {"type": "assert_return", "line": 146, "action": {"type": "invoke", "field": "fac-expr", "args": [{"type": "i64", "value": "25"}]}, "expected": [{"type": "i64", "value": "7034535277573963776"}]}, 

@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/memory_size.wast",
+{"source_filename": "memory_size.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "memory_size.0.wasm"}, 
   {"type": "assert_return", "line": 7, "action": {"type": "invoke", "field": "size", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 

@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/exports.wast",
+{"source_filename": "exports.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "exports.0.wasm"}, 
   {"type": "module", "line": 4, "filename": "exports.1.wasm"}, 

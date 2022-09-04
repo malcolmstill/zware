@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/memory_grow.wast",
+{"source_filename": "memory_grow.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "memory_grow.0.wasm"}, 
   {"type": "assert_return", "line": 14, "action": {"type": "invoke", "field": "size", "args": []}, "expected": [{"type": "i32", "value": "0"}]}, 
