@@ -179,6 +179,9 @@ pub const Opcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
+    @"ref.null" = 0xd0,
+    @"ref.is_null" = 0xd1,
+    @"ref.func" = 0xd2,
     misc = 0xfc,
 };
 

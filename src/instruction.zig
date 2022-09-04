@@ -192,6 +192,9 @@ pub const RuntimeOpcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
+    @"ref.null" = 0xd0,
+    @"ref.is_null" = 0xd1,
+    @"ref.func" = 0xd2,
     misc = 0xfc,
 };
 
@@ -473,6 +476,9 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
+    @"ref.null": void, // FIXME: fix type
+    @"ref.is_null": void,
+    @"ref.func": void, // FIXME: fix type
     misc: MiscInstruction,
 };
 
@@ -1380,6 +1386,17 @@ pub const ParseIterator = struct {
             .@"i64.extend8_s" => rt_instr = Instruction.@"i64.extend8_s",
             .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
+            .@"ref.null" => {
+                const reftype = try opcode.readULEB128Mem(i32, &self.code);
+                std.log.info("ref.null reftype = {}", .{reftype});
+                rt_instr = Instruction.@"ref.null";
+            },
+            .@"ref.is_null" => rt_instr = Instruction.@"ref.is_null",
+            .@"ref.func" => {
+                const funcidx = try opcode.readULEB128Mem(u32, &self.code);
+                std.log.info("ref.func funcidx = {}", .{funcidx});
+                rt_instr = Instruction.@"ref.func";
+            },
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);

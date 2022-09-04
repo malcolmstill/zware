@@ -173,7 +173,7 @@ pub const Validator = struct {
             .@"local.tee",
             .misc,
             => {
-                // These instructions are handle separately
+                // These instructions are handled separately
                 unreachable;
             },
             .@"unreachable" => try v.setUnreachable(),
@@ -489,6 +489,16 @@ pub const Validator = struct {
             },
             .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
+            },
+            .@"ref.null" => {
+                _ = try v.pushOperand(ValueTypeUnknown.Unknown);
+            },
+            .@"ref.is_null" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+            },
+            .@"ref.func" => {
+                _ = try v.pushOperand(ValueTypeUnknown{ .Known = .FuncRef });
             },
         }
     }
