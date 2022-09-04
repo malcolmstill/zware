@@ -1,14 +1,14 @@
-<h1 align="center">foxwren</h1>
+<h1 align="center">zware</h1>
 
 <div align="center">
   <img src="https://github.com/malcolmstill/web-assembly-logo/blob/master/dist/icon/web-assembly-icon-128px.png" alt="WebAssembly logo: a purple-blue square containing the uppercase letters W A. The square has a semicirclular notch on the top edge in the middle" />
   <br />
-  <strong>A WebAssembly runtime environment (written in Zig)</strong>
+  <strong>Zig WebAssembly Runtime Engine</strong>
 </div>
 
 ## About
 
-`foxwren` is a library for executing WebAssembly embedded in [Zig](https://ziglang.org) programs.
+`zware` is a library for executing WebAssembly embedded in [Zig](https://ziglang.org) programs.
 
 ## Example
 
@@ -16,10 +16,10 @@ From `examples/fib`:
 
 ```zig
 const std = @import("std");
-const foxwren = @import("foxwren");
-const Module = foxwren.Module;
-const Store = foxwren.Store;
-const Instance = foxwren.Instance;
+const zware = @import("zware");
+const Module = zware.Module;
+const Store = zware.Store;
+const Instance = zware.Instance;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
@@ -63,7 +63,7 @@ pub fn main() !void {
 - None, zig generates static binaries:
 
 ```bash
-➜  foxwren git:(master) ✗ ldd fib
+➜  zware git:(master) ✗ ldd fib
         not a dynamic executable
 ```
 

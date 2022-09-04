@@ -1,4 +1,4 @@
-name: foxwren tests
+name: zware tests
 on: push
 jobs:
   source-code-tests:
