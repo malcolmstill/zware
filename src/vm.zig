@@ -1802,8 +1802,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) return error.Overflow;
-        if (trunc < @intToFloat(f32, std.math.minInt(i32))) return error.Overflow;
+        if (trunc >= @intToFloat(f32, math.maxInt(i32))) return error.Overflow;
+        if (trunc < @intToFloat(f32, math.minInt(i32))) return error.Overflow;
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
@@ -1817,8 +1817,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) return error.Overflow;
-        if (trunc < @intToFloat(f32, std.math.minInt(u32))) return error.Overflow;
+        if (trunc >= @intToFloat(f32, math.maxInt(u32))) return error.Overflow;
+        if (trunc < @intToFloat(f32, math.minInt(u32))) return error.Overflow;
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
@@ -1832,8 +1832,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, std.math.maxInt(i32))) return error.Overflow;
-        if (trunc < @intToFloat(f64, std.math.minInt(i32))) return error.Overflow;
+        if (trunc > @intToFloat(f64, math.maxInt(i32))) return error.Overflow;
+        if (trunc < @intToFloat(f64, math.minInt(i32))) return error.Overflow;
 
         self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
 
@@ -1847,8 +1847,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, std.math.maxInt(u32))) return error.Overflow;
-        if (trunc < @intToFloat(f64, std.math.minInt(u32))) return error.Overflow;
+        if (trunc > @intToFloat(f64, math.maxInt(u32))) return error.Overflow;
+        if (trunc < @intToFloat(f64, math.minInt(u32))) return error.Overflow;
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
 
@@ -1878,8 +1878,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) return error.Overflow;
-        if (trunc < @intToFloat(f32, std.math.minInt(i64))) return error.Overflow;
+        if (trunc >= @intToFloat(f32, math.maxInt(i64))) return error.Overflow;
+        if (trunc < @intToFloat(f32, math.minInt(i64))) return error.Overflow;
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
@@ -1893,8 +1893,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) return error.Overflow;
-        if (trunc < @intToFloat(f32, std.math.minInt(u64))) return error.Overflow;
+        if (trunc >= @intToFloat(f32, math.maxInt(u64))) return error.Overflow;
+        if (trunc < @intToFloat(f32, math.minInt(u64))) return error.Overflow;
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
@@ -1908,8 +1908,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) return error.Overflow;
-        if (trunc < @intToFloat(f64, std.math.minInt(i64))) return error.Overflow;
+        if (trunc >= @intToFloat(f64, math.maxInt(i64))) return error.Overflow;
+        if (trunc < @intToFloat(f64, math.minInt(i64))) return error.Overflow;
 
         self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
 
@@ -1923,8 +1923,8 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) return error.Overflow;
-        if (trunc < @intToFloat(f64, std.math.minInt(u64))) return error.Overflow;
+        if (trunc >= @intToFloat(f64, math.maxInt(u64))) return error.Overflow;
+        if (trunc < @intToFloat(f64, math.minInt(u64))) return error.Overflow;
 
         self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
 
@@ -2096,11 +2096,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f32, std.math.maxInt(i32))) {
+                if (trunc >= @intToFloat(f32, math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f32, std.math.minInt(i32))) {
+                if (trunc < @intToFloat(f32, math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2117,11 +2117,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f32, std.math.maxInt(u32))) {
+                if (trunc >= @intToFloat(f32, math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f32, std.math.minInt(u32))) {
+                if (trunc < @intToFloat(f32, math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2138,11 +2138,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f64, std.math.maxInt(i32))) {
+                if (trunc >= @intToFloat(f64, math.maxInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f64, std.math.minInt(i32))) {
+                if (trunc < @intToFloat(f64, math.minInt(i32))) {
                     self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2159,11 +2159,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f64, std.math.maxInt(u32))) {
+                if (trunc >= @intToFloat(f64, math.maxInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f64, std.math.minInt(u32))) {
+                if (trunc < @intToFloat(f64, math.minInt(u32))) {
                     self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2180,11 +2180,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f32, std.math.maxInt(i64))) {
+                if (trunc >= @intToFloat(f32, math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f32, std.math.minInt(i64))) {
+                if (trunc < @intToFloat(f32, math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2201,11 +2201,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f32, std.math.maxInt(u64))) {
+                if (trunc >= @intToFloat(f32, math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f32, std.math.minInt(u64))) {
+                if (trunc < @intToFloat(f32, math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2222,11 +2222,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f64, std.math.maxInt(i64))) {
+                if (trunc >= @intToFloat(f64, math.maxInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f64, std.math.minInt(i64))) {
+                if (trunc < @intToFloat(f64, math.minInt(i64))) {
                     self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
                     return dispatch(self, ip + 1, code);
                 }
@@ -2243,11 +2243,11 @@ pub const VirtualMachine = struct {
                     return dispatch(self, ip + 1, code);
                 }
 
-                if (trunc >= @intToFloat(f64, std.math.maxInt(u64))) {
+                if (trunc >= @intToFloat(f64, math.maxInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
                     return dispatch(self, ip + 1, code);
                 }
-                if (trunc < @intToFloat(f64, std.math.minInt(u64))) {
+                if (trunc < @intToFloat(f64, math.minInt(u64))) {
                     self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
                     return dispatch(self, ip + 1, code);
                 }
