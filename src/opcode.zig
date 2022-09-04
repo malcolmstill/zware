@@ -182,6 +182,17 @@ pub const Opcode = enum(u8) {
     misc = 0xfc,
 };
 
+pub const MiscOpcode = enum(u8) {
+    @"i32.trunc_sat_f32_s",
+    @"i32.trunc_sat_f32_u",
+    @"i32.trunc_sat_f64_s",
+    @"i32.trunc_sat_f64_u",
+    @"i64.trunc_sat_f32_s",
+    @"i64.trunc_sat_f32_u",
+    @"i64.trunc_sat_f64_s",
+    @"i64.trunc_sat_f64_u",
+};
+
 const OpcodeMeta = struct {
     instruction: Opcode,
     offset: usize, // offset from start of function

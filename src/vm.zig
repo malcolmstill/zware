@@ -2019,7 +2019,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].misc;
 
         switch (meta) {
-            0 => {
+            .@"i32.trunc_sat_f32_s" => {
                 const c1 = self.popOperand(f32);
                 const trunc = @trunc(c1);
 
@@ -2040,7 +2040,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            1 => {
+            .@"i32.trunc_sat_f32_u" => {
                 const c1 = self.popOperand(f32);
                 const trunc = @trunc(c1);
 
@@ -2061,7 +2061,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            2 => {
+            .@"i32.trunc_sat_f64_s" => {
                 const c1 = self.popOperand(f64);
                 const trunc = @trunc(c1);
 
@@ -2082,7 +2082,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            3 => {
+            .@"i32.trunc_sat_f64_u" => {
                 const c1 = self.popOperand(f64);
                 const trunc = @trunc(c1);
 
@@ -2103,7 +2103,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            4 => {
+            .@"i64.trunc_sat_f32_s" => {
                 const c1 = self.popOperand(f32);
                 const trunc = @trunc(c1);
 
@@ -2124,7 +2124,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            5 => {
+            .@"i64.trunc_sat_f32_u" => {
                 const c1 = self.popOperand(f32);
                 const trunc = @trunc(c1);
 
@@ -2145,7 +2145,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            6 => {
+            .@"i64.trunc_sat_f64_s" => {
                 const c1 = self.popOperand(f64);
                 const trunc = @trunc(c1);
 
@@ -2166,7 +2166,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            7 => {
+            .@"i64.trunc_sat_f64_u" => {
                 const c1 = self.popOperand(f64);
                 const trunc = @trunc(c1);
 
@@ -2186,9 +2186,6 @@ pub const VirtualMachine = struct {
 
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
                 return dispatch(self, ip + 1, code);
-            },
-            else => {
-                return error.Trap;
             },
         }
     }

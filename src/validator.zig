@@ -6,6 +6,7 @@ const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("common.zig").ValueType;
 const Global = @import("common.zig").Global;
 const Opcode = @import("opcode.zig").Opcode;
+const MiscOpcode = @import("opcode.zig").MiscOpcode;
 
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
@@ -114,25 +115,32 @@ pub const Validator = struct {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
-    pub fn validateTrunc(v: *Validator, trunc_type: u32) !void {
+    pub fn validateTrunc(v: *Validator, trunc_type: MiscOpcode) !void {
         switch (trunc_type) {
-            0, 1 => {
+            .@"i32.trunc_sat_f32_s",
+            .@"i32.trunc_sat_f32_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            2, 3 => {
+            .@"i32.trunc_sat_f64_s",
+            .@"i32.trunc_sat_f64_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
-            4, 5 => {
+            .@"i64.trunc_sat_f32_s",
+            .@"i64.trunc_sat_f32_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F32 });
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
-            6, 7 => {
+            .@"i64.trunc_sat_f64_s",
+            .@"i64.trunc_sat_f64_u",
+            => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
-            else => return error.UnknownTruncType,
         }
     }
 

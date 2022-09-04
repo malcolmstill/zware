@@ -8,6 +8,7 @@ const LocalType = @import("common.zig").LocalType;
 const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
+const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
@@ -472,7 +473,7 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
-    misc: u32,
+    misc: MiscOpcode,
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1356,9 +1357,10 @@ pub const ParseIterator = struct {
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
-                try self.validator.validateTrunc(version);
+                const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
+                try self.validator.validateTrunc(misc_opcode);
 
-                rt_instr = Instruction{ .misc = version };
+                rt_instr = Instruction{ .misc = misc_opcode };
             },
         }
 
