@@ -1,4 +1,4 @@
-{"source_filename": "return.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/return.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "return.0.wasm"}, 
   {"type": "assert_return", "line": 224, "action": {"type": "invoke", "field": "type-i32", "args": []}, "expected": []}, 

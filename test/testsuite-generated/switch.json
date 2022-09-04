@@ -1,4 +1,4 @@
-{"source_filename": "switch.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/switch.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "switch.0.wasm"}, 
   {"type": "assert_return", "line": 120, "action": {"type": "invoke", "field": "stmt", "args": [{"type": "i32", "value": "0"}]}, "expected": [{"type": "i32", "value": "0"}]}, 

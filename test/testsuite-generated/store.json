@@ -1,4 +1,4 @@
-{"source_filename": "store.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/store.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "store.0.wasm"}, 
   {"type": "assert_return", "line": 44, "action": {"type": "invoke", "field": "as-block-value", "args": []}, "expected": []}, 

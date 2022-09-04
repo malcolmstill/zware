@@ -1,4 +1,4 @@
-{"source_filename": "loop.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/loop.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "loop.0.wasm"}, 
   {"type": "assert_return", "line": 430, "action": {"type": "invoke", "field": "empty", "args": []}, "expected": []}, 

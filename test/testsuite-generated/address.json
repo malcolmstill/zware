@@ -1,4 +1,4 @@
-{"source_filename": "address.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/address.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "address.0.wasm"}, 
   {"type": "assert_return", "line": 104, "action": {"type": "invoke", "field": "8u_good1", "args": [{"type": "i32", "value": "0"}]}, "expected": [{"type": "i32", "value": "97"}]}, 

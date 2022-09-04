@@ -1,4 +1,4 @@
-{"source_filename": "int_literals.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/int_literals.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "int_literals.0.wasm"}, 
   {"type": "assert_return", "line": 37, "action": {"type": "invoke", "field": "i32.test", "args": []}, "expected": [{"type": "i32", "value": "195940365"}]}, 
