@@ -1726,11 +1726,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code);
-        }
-        if (math.isNan(c2)) {
+        if (math.isNan(c1) or math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
             return dispatch(self, ip + 1, code);
         }
@@ -1752,11 +1748,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
-        if (math.isNan(c1)) {
-            self.pushOperandNoCheck(f64, math.nan_f64);
-            return dispatch(self, ip + 1, code);
-        }
-        if (math.isNan(c2)) {
+        if (math.isNan(c1) or math.isNan(c2)) {
             self.pushOperandNoCheck(f64, math.nan_f64);
             return dispatch(self, ip + 1, code);
         }
