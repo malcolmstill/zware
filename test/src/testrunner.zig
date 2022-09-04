@@ -635,7 +635,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
+                    if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch") or mem.eql(u8, trap, "END opcode expected")) {
                         switch (err) {
                             error.UnexpectedEndOfInput => continue,
                             error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
