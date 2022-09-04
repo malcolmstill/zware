@@ -2191,6 +2191,10 @@ pub const VirtualMachine = struct {
                 std.log.warn("memory.init not implemented", .{});
                 return error.Trap;
             },
+            .@"data.drop" => |_| {
+                std.log.warn("data.drop not implemented", .{});
+                return error.Trap;
+            },
         }
     }
 
