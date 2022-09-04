@@ -10,12 +10,12 @@ const instruction = @import("instruction.zig");
 const Instruction = instruction.Instruction;
 const Opcode = @import("instruction.zig").Opcode;
 
-// Interpreter:
+// VirtualMachine:
 //
-// The Interpreter interprets WebAssembly bytecode, i.e. it
+// The VirtualMachine interprets WebAssembly bytecode, i.e. it
 // is the engine of execution and the whole reason we're here.
 //
-// Whilst executing code, the Interpreter maintains three stacks.
+// Whilst executing code, the VirtualMachine maintains three stacks.
 // An operand stack, a control stack and a label stack.
 // The WebAssembly spec models execution as a single stack where operands,
 // activation frames, and labels are all interleaved. Here we split
@@ -24,7 +24,7 @@ const Opcode = @import("instruction.zig").Opcode;
 // Note: I had considered four stacks (separating out the params / locals) to
 // there own stack, but I don't think that's necessary.
 //
-pub const Interpreter = struct {
+pub const VirtualMachine = struct {
     op_stack: []u64 = undefined,
     op_ptr: usize = 0,
     frame_stack: []Frame = undefined,
@@ -52,8 +52,8 @@ pub const Interpreter = struct {
         op_stack_len: usize, // u32?
     };
 
-    pub fn init(op_stack: []u64, frame_stack: []Frame, label_stack: []Label, inst: *Instance) Interpreter {
-        return Interpreter{
+    pub fn init(op_stack: []u64, frame_stack: []Frame, label_stack: []Label, inst: *Instance) VirtualMachine {
+        return VirtualMachine{
             .op_stack = op_stack,
             .frame_stack = frame_stack,
             .label_stack = label_stack,
@@ -61,13 +61,13 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn invoke(self: *Interpreter, ip: usize) !void {
+    pub fn invoke(self: *VirtualMachine, ip: usize) !void {
         const instr = self.inst.module.parsed_code.items[ip];
 
         try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
     }
 
-    const InstructionFunction = *const fn (*Interpreter, usize, []Instruction) WasmError!void;
+    const InstructionFunction = *const fn (*VirtualMachine, usize, []Instruction) WasmError!void;
 
     const lookup = [256]InstructionFunction{
         @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
@@ -88,26 +88,26 @@ pub const Interpreter = struct {
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            trunc_sat,              impl_ni,                impl_ni,                impl_ni,
     };
 
-    inline fn dispatch(self: *Interpreter, next_ip: usize, code: []Instruction) WasmError!void {
+    inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Instruction) WasmError!void {
         const next_instr = code[next_ip];
 
         return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
-    fn impl_ni(_: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn impl_ni(_: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         std.debug.print("not implemented: {any}\n", .{code[ip]});
         return error.NotImplemented;
     }
 
-    fn @"unreachable"(_: *Interpreter, _: usize, _: []Instruction) WasmError!void {
+    fn @"unreachable"(_: *VirtualMachine, _: usize, _: []Instruction) WasmError!void {
         return error.TrapUnreachable;
     }
 
-    fn nop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn nop(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         return dispatch(self, ip + 1, code);
     }
 
-    fn block(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn block(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].block;
 
         try self.pushLabel(Label{
@@ -119,7 +119,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn loop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn loop(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].loop;
 
         try self.pushLabel(Label{
@@ -132,7 +132,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"if"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"if"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].@"if";
         const condition = self.popOperand(u32);
 
@@ -145,13 +145,13 @@ pub const Interpreter = struct {
         return dispatch(self, if (condition == 0) meta.else_ip else ip + 1, code);
     }
 
-    fn @"else"(self: *Interpreter, _: usize, code: []Instruction) WasmError!void {
+    fn @"else"(self: *VirtualMachine, _: usize, code: []Instruction) WasmError!void {
         const label = self.popLabel();
 
         return dispatch(self, label.branch_target, code);
     }
 
-    fn if_no_else(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn if_no_else(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].if_no_else;
         const condition = self.popOperand(u32);
 
@@ -169,19 +169,19 @@ pub const Interpreter = struct {
         }
     }
 
-    fn end(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn end(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popLabel();
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn br(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn br(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const next_ip = self.branch(code[ip].br);
 
         return dispatch(self, next_ip, code);
     }
 
-    fn br_if(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn br_if(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const condition = self.popOperand(u32);
 
         const next_ip = if (condition == 0) ip + 1 else self.branch(code[ip].br_if);
@@ -189,7 +189,7 @@ pub const Interpreter = struct {
         return dispatch(self, next_ip, code);
     }
 
-    fn br_table(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn br_table(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].br_table;
 
         const i = self.popOperand(u32);
@@ -200,7 +200,7 @@ pub const Interpreter = struct {
         return dispatch(self, next_ip, code);
     }
 
-    fn @"return"(self: *Interpreter, _: usize, _: []Instruction) WasmError!void {
+    fn @"return"(self: *VirtualMachine, _: usize, _: []Instruction) WasmError!void {
         const frame = self.peekFrame();
         const n = frame.return_arity;
 
@@ -226,7 +226,7 @@ pub const Interpreter = struct {
         return dispatch(self, label.branch_target, previous_frame.inst.module.parsed_code.items);
     }
 
-    fn call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn call(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const function_index = code[ip].call;
 
         const function = try self.inst.getFunc(function_index);
@@ -268,7 +268,7 @@ pub const Interpreter = struct {
         return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
-    fn call_indirect(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn call_indirect(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const call_indirect_instruction = code[ip].call_indirect;
         var module = self.inst.module;
 
@@ -331,7 +331,7 @@ pub const Interpreter = struct {
         return dispatch(self, next_ip, self.inst.module.parsed_code.items);
     }
 
-    fn fast_call(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn fast_call(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const f = code[ip].fast_call;
 
         // Check we have enough stack space
@@ -358,12 +358,12 @@ pub const Interpreter = struct {
         return dispatch(self, f.start, code);
     }
 
-    fn drop(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn drop(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         _ = self.popAnyOperand();
         return dispatch(self, ip + 1, code);
     }
 
-    fn select(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn select(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const condition = self.popOperand(u32);
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
@@ -377,7 +377,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"local.get"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.get";
 
         const frame = self.peekFrame();
@@ -387,7 +387,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"local.set"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.set";
 
         const frame = self.peekFrame();
@@ -396,7 +396,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"local.tee"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"local.tee"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const local_index = code[ip].@"local.tee";
 
         const frame = self.peekFrame();
@@ -405,7 +405,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"global.get"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"global.get"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const global_index = code[ip].@"global.get";
 
         const global = try self.inst.getGlobal(global_index);
@@ -415,7 +415,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"global.set"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"global.set"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const global_index = code[ip].@"global.set";
         const value = self.popAnyOperand();
 
@@ -426,7 +426,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load";
 
         const memory = try self.inst.getMemory(0);
@@ -441,7 +441,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load";
 
         const memory = try self.inst.getMemory(0);
@@ -456,7 +456,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f32.load";
 
         const memory = try self.inst.getMemory(0);
@@ -471,7 +471,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.load"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f64.load";
 
         const memory = try self.inst.getMemory(0);
@@ -486,7 +486,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.load8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load8_s";
 
         const memory = try self.inst.getMemory(0);
@@ -501,7 +501,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.load8_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load8_u";
 
         const memory = try self.inst.getMemory(0);
@@ -516,7 +516,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.load16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load16_s";
 
         const memory = try self.inst.getMemory(0);
@@ -531,7 +531,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.load16_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.load16_u";
 
         const memory = try self.inst.getMemory(0);
@@ -546,7 +546,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load8_s";
 
         const memory = try self.inst.getMemory(0);
@@ -561,7 +561,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load8_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load8_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load8_u";
 
         const memory = try self.inst.getMemory(0);
@@ -576,7 +576,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load16_s";
 
         const memory = try self.inst.getMemory(0);
@@ -591,7 +591,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load16_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load16_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load16_u";
 
         const memory = try self.inst.getMemory(0);
@@ -606,7 +606,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load32_s";
 
         const memory = try self.inst.getMemory(0);
@@ -621,7 +621,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.load32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.load32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.load32_u";
 
         const memory = try self.inst.getMemory(0);
@@ -636,7 +636,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store";
 
         const memory = try self.inst.getMemory(0);
@@ -650,7 +650,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store";
 
         const memory = try self.inst.getMemory(0);
@@ -664,7 +664,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f32.store";
 
         const memory = try self.inst.getMemory(0);
@@ -678,7 +678,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.store"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"f64.store";
 
         const memory = try self.inst.getMemory(0);
@@ -692,7 +692,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.store8"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store8";
 
         const memory = try self.inst.getMemory(0);
@@ -706,7 +706,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.store16"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i32.store16";
 
         const memory = try self.inst.getMemory(0);
@@ -720,7 +720,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store8"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.store8"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store8";
 
         const memory = try self.inst.getMemory(0);
@@ -734,7 +734,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store16"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.store16"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store16";
 
         const memory = try self.inst.getMemory(0);
@@ -748,7 +748,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.store32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.store32"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const load_data = code[ip].@"i64.store32";
 
         const memory = try self.inst.getMemory(0);
@@ -762,7 +762,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"memory.size"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"memory.size"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const memory = try self.inst.getMemory(0);
 
         self.pushOperandNoCheck(u32, @intCast(u32, memory.data.items.len));
@@ -770,7 +770,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"memory.grow"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"memory.grow"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const memory = try self.inst.getMemory(0);
 
         const num_pages = self.popOperand(u32);
@@ -783,7 +783,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.const"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(i32, instr.@"i32.const");
@@ -791,7 +791,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.const"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(i64, instr.@"i64.const");
@@ -799,7 +799,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.const"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(f32, instr.@"f32.const");
@@ -807,7 +807,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.const"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.const"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const instr = code[ip];
 
         self.pushOperandNoCheck(f64, instr.@"f64.const");
@@ -815,7 +815,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.eqz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(u32, @as(u32, if (c1 == 0) 1 else 0));
@@ -823,7 +823,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.eq"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -832,7 +832,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.ne"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -841,7 +841,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.lt_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -850,7 +850,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.lt_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -859,7 +859,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.gt_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -868,7 +868,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.gt_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -877,7 +877,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.le_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -886,7 +886,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.le_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -895,7 +895,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.ge_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -904,7 +904,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.ge_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -913,7 +913,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.eqz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.eqz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @as(u64, if (c1 == 0) 1 else 0));
@@ -921,7 +921,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.eq"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -930,7 +930,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.ne"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -939,7 +939,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.lt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.lt_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -948,7 +948,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.lt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.lt_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -957,7 +957,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.gt_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.gt_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -966,7 +966,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.gt_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.gt_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -975,7 +975,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.le_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.le_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -984,7 +984,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.le_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.le_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -993,7 +993,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ge_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.ge_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -1002,7 +1002,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ge_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.ge_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1011,7 +1011,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.eq"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1020,7 +1020,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.ne"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1029,7 +1029,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.lt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1038,7 +1038,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.gt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1047,7 +1047,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.le"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1056,7 +1056,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.ge"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1065,7 +1065,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.eq"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.eq"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1074,7 +1074,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ne"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.ne"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1083,7 +1083,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.lt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.lt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1092,7 +1092,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.gt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.gt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1101,7 +1101,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.le"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.le"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1110,7 +1110,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ge"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.ge"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1119,28 +1119,28 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.clz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @clz(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.ctz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @ctz(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.popcnt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
         self.pushOperandNoCheck(u32, @popCount(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.add"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1149,7 +1149,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.sub"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1158,7 +1158,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.mul"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1167,7 +1167,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.div_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -1178,7 +1178,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.div_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1189,7 +1189,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.rem_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -1201,7 +1201,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.rem_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1212,7 +1212,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.and"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1221,7 +1221,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.or"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1230,7 +1230,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.xor"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1239,7 +1239,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.shl"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1248,7 +1248,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.shr_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
@@ -1259,7 +1259,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.shr_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1268,7 +1268,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.rotl"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1277,7 +1277,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.rotr"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u32);
         const c1 = self.popOperand(u32);
 
@@ -1286,28 +1286,28 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.clz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.clz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @clz(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.ctz"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.ctz"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @ctz(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.popcnt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.popcnt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
         self.pushOperandNoCheck(u64, @popCount(c1));
 
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.add"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1316,7 +1316,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.sub"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1325,7 +1325,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.mul"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1334,7 +1334,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.div_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.div_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -1345,7 +1345,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.div_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.div_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1356,7 +1356,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rem_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.rem_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -1368,7 +1368,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rem_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.rem_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1379,7 +1379,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.and"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.and"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1388,7 +1388,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.or"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.or"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1397,7 +1397,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.xor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.xor"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1406,7 +1406,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.shl"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1415,7 +1415,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shr_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.shr_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
@@ -1426,7 +1426,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.shr_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.shr_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1435,7 +1435,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rotl"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.rotl"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1444,7 +1444,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.rotr"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.rotr"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(u64);
         const c1 = self.popOperand(u64);
 
@@ -1453,7 +1453,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.abs"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, math.fabs(c1));
@@ -1461,7 +1461,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.neg"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, -c1);
@@ -1469,7 +1469,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.ceil"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @ceil(c1));
@@ -1477,7 +1477,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.floor"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @floor(c1));
@@ -1485,7 +1485,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.trunc"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, @trunc(c1));
@@ -1493,7 +1493,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.nearest"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
         const floor = @floor(c1);
         const ceil = @ceil(c1);
@@ -1511,7 +1511,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.sqrt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f32, math.sqrt(c1));
@@ -1519,7 +1519,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.add"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1528,7 +1528,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.sub"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1537,7 +1537,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.mul"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1546,7 +1546,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.div"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1555,7 +1555,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.min"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1581,7 +1581,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.max"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1607,7 +1607,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.copysign"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f32);
         const c1 = self.popOperand(f32);
 
@@ -1620,7 +1620,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.abs"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.abs"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, math.fabs(c1));
@@ -1628,7 +1628,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.neg"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.neg"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, -c1);
@@ -1636,7 +1636,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.ceil"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.ceil"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @ceil(c1));
@@ -1644,7 +1644,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.floor"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.floor"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @floor(c1));
@@ -1652,7 +1652,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.trunc"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.trunc"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, @trunc(c1));
@@ -1660,7 +1660,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.nearest"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.nearest"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
         const floor = @floor(c1);
         const ceil = @ceil(c1);
@@ -1678,7 +1678,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.sqrt"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.sqrt"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f64, math.sqrt(c1));
@@ -1686,7 +1686,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.add"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.add"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1695,7 +1695,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.sub"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.sub"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1704,7 +1704,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.mul"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.mul"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1713,7 +1713,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.div"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.div"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1722,7 +1722,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.min"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.min"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1748,7 +1748,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.max"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.max"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1774,7 +1774,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.copysign"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.copysign"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c2 = self.popOperand(f64);
         const c1 = self.popOperand(f64);
 
@@ -1787,7 +1787,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.wrap_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.wrap_i64"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i32, @truncate(i32, c1));
@@ -1795,7 +1795,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.trunc_f32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1810,7 +1810,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.trunc_f32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1825,7 +1825,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.trunc_f64_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1840,7 +1840,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.trunc_f64_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1855,7 +1855,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.extend_i32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
@@ -1863,7 +1863,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.extend_i32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(u64, @truncate(u32, c1));
@@ -1871,7 +1871,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.trunc_f32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1886,7 +1886,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.trunc_f32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1901,7 +1901,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.trunc_f64_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1916,7 +1916,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.trunc_f64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.trunc_f64_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1)) return error.InvalidConversion;
@@ -1931,7 +1931,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.convert_i32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
@@ -1939,7 +1939,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.convert_i32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
@@ -1947,7 +1947,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.convert_i64_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
@@ -1955,7 +1955,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.convert_i64_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
@@ -1963,7 +1963,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.demote_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.demote_f64"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(f32, @floatCast(f32, c1));
@@ -1971,7 +1971,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.convert_i32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
@@ -1979,7 +1979,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i32_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.convert_i32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u32);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
@@ -1987,7 +1987,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i64_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.convert_i64_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
@@ -1995,7 +1995,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.convert_i64_u"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.convert_i64_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(u64);
 
         self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
@@ -2003,7 +2003,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.promote_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.promote_f32"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(f64, @floatCast(f64, c1));
@@ -2011,7 +2011,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.reinterpret_f32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.reinterpret_f32"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f32);
 
         self.pushOperandNoCheck(i32, @bitCast(i32, c1));
@@ -2019,7 +2019,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.reinterpret_f64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.reinterpret_f64"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(f64);
 
         self.pushOperandNoCheck(i64, @bitCast(i64, c1));
@@ -2027,7 +2027,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f32.reinterpret_i32"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f32.reinterpret_i32"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(f32, @bitCast(f32, c1));
@@ -2035,7 +2035,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"f64.reinterpret_i64"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"f64.reinterpret_i64"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(f64, @bitCast(f64, c1));
@@ -2043,7 +2043,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.extend8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(i32, @truncate(i8, c1));
@@ -2051,7 +2051,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i32.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i32.extend16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i32);
 
         self.pushOperandNoCheck(i32, @truncate(i16, c1));
@@ -2059,7 +2059,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend8_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.extend8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i8, c1));
@@ -2067,7 +2067,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend16_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.extend16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i16, c1));
@@ -2075,7 +2075,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn @"i64.extend32_s"(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn @"i64.extend32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const c1 = self.popOperand(i64);
 
         self.pushOperandNoCheck(i64, @truncate(i32, c1));
@@ -2083,7 +2083,7 @@ pub const Interpreter = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn trunc_sat(self: *Interpreter, ip: usize, code: []Instruction) WasmError!void {
+    fn trunc_sat(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const meta = code[ip].trunc_sat;
 
         switch (meta) {
@@ -2262,7 +2262,7 @@ pub const Interpreter = struct {
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
-    pub fn branch(self: *Interpreter, target: u32) usize {
+    pub fn branch(self: *VirtualMachine, target: u32) usize {
         const label = self.peekNthLabel(target);
         const n = label.return_arity;
 
@@ -2283,7 +2283,7 @@ pub const Interpreter = struct {
         return label.branch_target;
     }
 
-    pub fn pushOperand(self: *Interpreter, comptime T: type, value: T) !void {
+    pub fn pushOperand(self: *VirtualMachine, comptime T: type, value: T) !void {
         if (self.op_ptr == self.op_stack.len) return error.OperandStackOverflow;
 
         self.op_ptr += 1;
@@ -2299,11 +2299,11 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn checkStackSpace(self: *Interpreter, n: usize) !void {
+    pub fn checkStackSpace(self: *VirtualMachine, n: usize) !void {
         if (self.op_ptr + n > self.op_stack.len) return error.CheckStackSpace;
     }
 
-    pub fn pushOperandNoCheck(self: *Interpreter, comptime T: type, value: T) void {
+    pub fn pushOperandNoCheck(self: *VirtualMachine, comptime T: type, value: T) void {
         self.op_ptr += 1;
 
         self.op_stack[self.op_ptr - 1] = switch (T) {
@@ -2317,7 +2317,7 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn popOperand(self: *Interpreter, comptime T: type) T {
+    pub fn popOperand(self: *VirtualMachine, comptime T: type) T {
         defer self.op_ptr -= 1;
 
         const value = self.op_stack[self.op_ptr - 1];
@@ -2332,24 +2332,24 @@ pub const Interpreter = struct {
         };
     }
 
-    pub fn popAnyOperand(self: *Interpreter) u64 {
+    pub fn popAnyOperand(self: *VirtualMachine) u64 {
         defer self.op_ptr -= 1;
 
         return self.op_stack[self.op_ptr - 1];
     }
 
-    fn peekOperand(self: *Interpreter) u64 {
+    fn peekOperand(self: *VirtualMachine) u64 {
         return self.op_stack[self.op_ptr - 1];
     }
 
-    fn peekNthOperand(self: *Interpreter, index: u32) u64 {
+    fn peekNthOperand(self: *VirtualMachine, index: u32) u64 {
         return self.op_stack[self.op_ptr - index - 1];
     }
 
     // TODO: if the code is validated, do we need to know the params count
     //       i.e. can we get rid of the dependency on params so that we don't
     //       have to lookup a function (necessarily)
-    pub fn pushFrame(self: *Interpreter, frame: Frame, params_and_locals_count: usize) !void {
+    pub fn pushFrame(self: *VirtualMachine, frame: Frame, params_and_locals_count: usize) !void {
         if (self.frame_ptr == self.frame_stack.len) return error.ControlStackOverflow;
         self.frame_ptr += 1;
 
@@ -2359,17 +2359,17 @@ pub const Interpreter = struct {
         current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
-    pub fn popFrame(self: *Interpreter) Frame {
+    pub fn popFrame(self: *VirtualMachine) Frame {
         defer self.frame_ptr -= 1;
 
         return self.frame_stack[self.frame_ptr - 1];
     }
 
-    fn peekFrame(self: *Interpreter) *Frame {
+    fn peekFrame(self: *VirtualMachine) *Frame {
         return &self.frame_stack[self.frame_ptr - 1];
     }
 
-    pub fn pushLabel(self: *Interpreter, label: Label) !void {
+    pub fn pushLabel(self: *VirtualMachine, label: Label) !void {
         if (self.label_ptr == self.label_stack.len) return error.LabelStackOverflow;
 
         self.label_ptr += 1;
@@ -2377,7 +2377,7 @@ pub const Interpreter = struct {
         current_label.* = label;
     }
 
-    pub fn popLabel(self: *Interpreter) Label {
+    pub fn popLabel(self: *VirtualMachine) Label {
         defer self.label_ptr -= 1;
 
         return self.label_stack[self.label_ptr - 1];
@@ -2387,7 +2387,7 @@ pub const Interpreter = struct {
     //
     // Returns nth label on the Label stack relative to the top of the stack
     //
-    fn peekNthLabel(self: *Interpreter, index: u32) *Label {
+    fn peekNthLabel(self: *VirtualMachine, index: u32) *Label {
         return &self.label_stack[self.label_ptr - index - 1];
     }
 
@@ -2397,13 +2397,13 @@ pub const Interpreter = struct {
     //
     // popLabels pops labels up to and including `target`. Returns the
     // the label at `target`.
-    pub fn popLabels(self: *Interpreter, target: u32) Label {
+    pub fn popLabels(self: *VirtualMachine, target: u32) Label {
         defer self.label_ptr = self.label_ptr - target - 1;
 
         return self.label_stack[self.label_stack.len - target - 1];
     }
 
-    fn debug(self: *Interpreter, opcode: Instruction) void {
+    fn debug(self: *VirtualMachine, opcode: Instruction) void {
         // std.debug.print("{}\n", .{opcode});
         std.debug.print("\n=====================================================\n", .{});
         std.debug.print("before: {}\n", .{opcode});
@@ -2431,12 +2431,12 @@ const testing = std.testing;
 
 test "operand push / pop test" {
     var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack_mem: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
-    var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
+    var frame_stack_mem: [1024]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** 1024;
+    var label_stack_mem: [1024]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** 1024;
 
     var inst: Instance = undefined;
 
-    var i = Interpreter.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &inst);
+    var i = VirtualMachine.init(op_stack[0..], frame_stack_mem[0..], label_stack_mem[0..], &inst);
 
     try i.pushOperand(i32, 22);
     try i.pushOperand(i32, -23);
@@ -2463,11 +2463,11 @@ test "operand push / pop test" {
 // TODO: reinstate this. I think we need to build up a valid instance with module + code
 // test "simple interpret tests" {
 //     var op_stack: [6]u64 = [_]u64{0} ** 6;
-//     var frame_stack: [1024]Interpreter.Frame = [_]Interpreter.Frame{undefined} ** 1024;
-//     var label_stack_mem: [1024]Interpreter.Label = [_]Interpreter.Label{undefined} ** 1024;
+//     var frame_stack: [1024]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** 1024;
+//     var label_stack_mem: [1024]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** 1024;
 
 //     var inst: Instance = undefined;
-//     var i = Interpreter.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &inst);
+//     var i = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack_mem[0..], &inst);
 
 //     try i.pushOperand(i32, 22);
 //     try i.pushOperand(i32, -23);
