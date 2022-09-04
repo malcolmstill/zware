@@ -10,7 +10,7 @@ const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
-const VirtualMachine = @import("interpreter.zig").VirtualMachine;
+const VirtualMachine = @import("vm.zig").VirtualMachine;
 const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
 
