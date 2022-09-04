@@ -12,7 +12,7 @@ pub fn build(b: *Builder) void {
     const mode = b.standardReleaseOptions();
 
     const exe = b.addExecutable("fib", "src/fib.zig");
-    exe.addPackagePath("foxwren", "../../src/main.zig");
+    exe.addPackagePath("zware", "../../src/main.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
     exe.install();

@@ -5,24 +5,24 @@ const mem = std.mem;
 const math = std.math;
 const process = std.process;
 const json = std.json;
-const foxwren = @import("foxwren");
-const ValueType = foxwren.ValueType;
-const Module = foxwren.Module;
-const Instance = foxwren.Instance;
-const Store = foxwren.Store;
-const Memory = foxwren.Memory;
-const Function = foxwren.Function;
-const Global = foxwren.Global;
-const Interpreter = foxwren.Interpreter;
+const zware = @import("zware");
+const ValueType = zware.ValueType;
+const Module = zware.Module;
+const Instance = zware.Instance;
+const Store = zware.Store;
+const Memory = zware.Memory;
+const Function = zware.Function;
+const Global = zware.Global;
+const Interpreter = zware.Interpreter;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.hash_map.StringHashMap;
 const ArrayList = std.ArrayList;
-const WasmError = foxwren.WasmError;
+const WasmError = zware.WasmError;
 
 // testrunner
 //
-// testrunner is an a program that consumes the foxwren library
+// testrunner is an a program that consumes the zware library
 // and runs the WebAssembly testsuite.
 //
 // This allows us to separate out the library code from these
