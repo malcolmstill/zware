@@ -655,6 +655,7 @@ pub const Module = struct {
     fn decodeCodeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
+        // count: the number of functions in the code section
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
@@ -665,10 +666,11 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
+            // size: the number of bytes defining the function, includes bytes defining locals
             const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
-            }; // includes bytes defining locals
+            };
 
             const offset = rd.context.pos;
 
@@ -709,6 +711,7 @@ pub const Module = struct {
 
             const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
             const code = self.module[code_start..rd.context.pos];
+            if (code[code.len - 1] != @enumToInt(RuntimeOpcode.end)) return error.ExpectedFunctionEnd;
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
             const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
@@ -810,7 +813,7 @@ pub const Module = struct {
     };
 
     pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !StartWithDepth {
-        _ = try opcode.findFunctionEnd(code);
+        // _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
@@ -845,7 +848,7 @@ pub const Module = struct {
     }
 
     pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !StartWithDepth {
-        _ = try opcode.findFunctionEnd(code);
+        // _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
