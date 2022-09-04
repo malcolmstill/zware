@@ -691,7 +691,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    std.debug.print("Trap: {s}, got error error: {}\n", .{err});
+                    std.debug.print("Trap: {s}, got error error: {}\n", .{ trap, err });
                     return error.ErrorDoesNotMatchTrap;
                 }
             },
