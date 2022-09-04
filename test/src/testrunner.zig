@@ -603,6 +603,13 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "data count and data section have inconsistent lengths")) {
+                        switch (err) {
+                            error.DataCountSectionDataSectionCountMismatch => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "integer representation too long")) {
                         switch (err) {
                             error.InvalidValue => continue,

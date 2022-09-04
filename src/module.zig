@@ -53,6 +53,7 @@ pub const Module = struct {
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
+    dataCount: ?u32 = null,
 
     pub fn init(alloc: mem.Allocator, module: []const u8) Module {
         return Module{
@@ -160,6 +161,7 @@ pub const Module = struct {
             .Element => try self.decodeElementSection(),
             .Code => try self.decodeCodeSection(),
             .Data => try self.decodeDataSection(),
+            .DataCount => try self.decodeDataCountSection(size),
         }
 
         const section_end = rd.context.pos;
@@ -652,6 +654,17 @@ pub const Module = struct {
         }
     }
 
+    fn decodeDataCountSection(self: *Module, size: u32) !void {
+        const rd = self.buf.reader();
+
+        if (size == 0) return;
+
+        self.dataCount = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+    }
+
     fn decodeCodeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
@@ -731,6 +744,11 @@ pub const Module = struct {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
+
+        if (self.dataCount) |dataCount| {
+            if (count != dataCount) return error.DataCountSectionDataSectionCountMismatch;
+        }
+
         self.datas.count = count;
 
         var i: usize = 0;
@@ -940,6 +958,7 @@ const SectionType = enum(u8) {
     Element = 0x09,
     Code = 0x0a,
     Data = 0x0b,
+    DataCount = 0x0c,
 };
 
 const testing = std.testing;
