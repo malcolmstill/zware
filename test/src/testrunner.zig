@@ -38,33 +38,33 @@ fn print(_: *VirtualMachine) WasmError!void {
     std.debug.print("print\n", .{});
 }
 
-fn print_i32(interp: *VirtualMachine) WasmError!void {
+fn print_i32(vm: *VirtualMachine) WasmError!void {
     const value = vm.popOperand(i32);
     std.debug.print("print_i32: {}\n", .{value});
 }
 
-fn print_i64(interp: *VirtualMachine) WasmError!void {
+fn print_i64(vm: *VirtualMachine) WasmError!void {
     const value = vm.popOperand(i64);
     std.debug.print("print_i64: {}\n", .{value});
 }
 
-fn print_f32(interp: *VirtualMachine) WasmError!void {
+fn print_f32(vm: *VirtualMachine) WasmError!void {
     const value = vm.popOperand(f32);
     std.debug.print("print_f32: {}\n", .{value});
 }
 
-fn print_f64(interp: *VirtualMachine) WasmError!void {
+fn print_f64(vm: *VirtualMachine) WasmError!void {
     const value = vm.popOperand(f64);
     std.debug.print("print_f64: {}\n", .{value});
 }
 
-fn print_i32_f32(interp: *VirtualMachine) WasmError!void {
+fn print_i32_f32(vm: *VirtualMachine) WasmError!void {
     const value_f32 = vm.popOperand(f32);
     const value_i32 = vm.popOperand(i32);
     std.debug.print("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
 }
 
-fn print_f64_f64(interp: *VirtualMachine) WasmError!void {
+fn print_f64_f64(vm: *VirtualMachine) WasmError!void {
     const value_f64_2 = vm.popOperand(f64);
     const value_f64_1 = vm.popOperand(f64);
     std.debug.print("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
