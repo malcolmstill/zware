@@ -7,16 +7,19 @@ const ValueType = @import("common.zig").ValueType;
 const Global = @import("common.zig").Global;
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
+const Module = @import("module.zig").Module;
 
 pub const Validator = struct {
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
+    dataCountSection: bool,
 
-    pub fn init(alloc: mem.Allocator) Validator {
+    pub fn init(alloc: mem.Allocator, dataCountSection: bool) Validator {
         return Validator{
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
+            .dataCountSection = dataCountSection,
         };
     }
 
@@ -115,7 +118,7 @@ pub const Validator = struct {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
-    pub fn validateTrunc(v: *Validator, misc_type: MiscOpcode) !void {
+    pub fn validateMisc(v: *Validator, misc_type: MiscOpcode) !void {
         switch (misc_type) {
             .@"i32.trunc_sat_f32_s",
             .@"i32.trunc_sat_f32_u",
@@ -140,6 +143,12 @@ pub const Validator = struct {
             => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .F64 });
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
+            },
+            .@"memory.init" => {
+                if (!v.dataCountSection) return error.InstructionRequiresDataCountSection;
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
         }
     }
@@ -620,7 +629,7 @@ test "validate add i32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator());
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;
@@ -637,7 +646,7 @@ test "validate add i64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator());
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I64} ** 1;
@@ -652,7 +661,7 @@ test "validate add f32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator());
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F32} ** 1;
@@ -667,7 +676,7 @@ test "validate add f64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator());
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.F64} ** 1;
@@ -682,7 +691,7 @@ test "validate: add error on mismatched types" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator());
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValueType = [_]ValueType{} ** 0;
     var out: [1]ValueType = [_]ValueType{.I32} ** 1;

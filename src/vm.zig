@@ -2187,6 +2187,10 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
                 return dispatch(self, ip + 1, code);
             },
+            .@"memory.init" => |_| {
+                std.log.warn("memory.init not implemented", .{});
+                return error.Trap;
+            },
         }
     }
 

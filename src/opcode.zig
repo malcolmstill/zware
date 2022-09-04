@@ -191,6 +191,7 @@ pub const MiscOpcode = enum(u8) {
     @"i64.trunc_sat_f32_u",
     @"i64.trunc_sat_f64_s",
     @"i64.trunc_sat_f64_u",
+    @"memory.init",
 };
 
 const OpcodeMeta = struct {

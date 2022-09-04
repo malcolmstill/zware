@@ -473,7 +473,19 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
-    misc: MiscOpcode,
+    misc: MiscInstruction,
+};
+
+pub const MiscInstruction = union(MiscOpcode) {
+    @"i32.trunc_sat_f32_s": void,
+    @"i32.trunc_sat_f32_u": void,
+    @"i32.trunc_sat_f64_s": void,
+    @"i32.trunc_sat_f64_u": void,
+    @"i64.trunc_sat_f32_s": void,
+    @"i64.trunc_sat_f32_u": void,
+    @"i64.trunc_sat_f64_s": void,
+    @"i64.trunc_sat_f64_u": void,
+    @"memory.init": u32,
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -506,7 +518,7 @@ pub const ParseIterator = struct {
             // TODO: what type of allocator is this?
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
-            .validator = Validator.init(module.alloc),
+            .validator = Validator.init(module.alloc, module.dataCount != null),
             .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
         };
@@ -1357,10 +1369,24 @@ pub const ParseIterator = struct {
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
+                std.log.info("version = {}", .{version});
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
-                try self.validator.validateTrunc(misc_opcode);
+                try self.validator.validateMisc(misc_opcode);
 
-                rt_instr = Instruction{ .misc = misc_opcode };
+                switch (misc_opcode) {
+                    .@"i32.trunc_sat_f32_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f32_s" },
+                    .@"i32.trunc_sat_f32_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f32_u" },
+                    .@"i32.trunc_sat_f64_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f64_s" },
+                    .@"i32.trunc_sat_f64_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f64_u" },
+                    .@"i64.trunc_sat_f32_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f32_s" },
+                    .@"i64.trunc_sat_f32_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f32_u" },
+                    .@"i64.trunc_sat_f64_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f64_s" },
+                    .@"i64.trunc_sat_f64_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f64_u" },
+                    .@"memory.init" => {
+                        const dataidx = try opcode.readULEB128Mem(u32, &self.code);
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.init" = dataidx } };
+                    },
+                }
             },
         }
 

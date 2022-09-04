@@ -610,6 +610,13 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "data count section required")) {
+                        switch (err) {
+                            error.InstructionRequiresDataCountSection => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "integer representation too long")) {
                         switch (err) {
                             error.InvalidValue => continue,
