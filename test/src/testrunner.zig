@@ -613,7 +613,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "zero flag expected")) {
+                    if (mem.eql(u8, trap, "zero byte expected")) {
                         switch (err) {
                             error.MalformedCallIndirectReserved => continue,
                             error.MalformedMemoryReserved => continue,
