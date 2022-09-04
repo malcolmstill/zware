@@ -321,7 +321,7 @@ pub const Instance = struct {
             },
             .host_function => |host_func| {
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
-                try host_func.func(&interp);
+                try host_func.func(&vm);
             },
         }
     }
@@ -365,7 +365,7 @@ pub const Instance = struct {
             },
             .host_function => |host_func| {
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
-                try host_func.func(&interp);
+                try host_func.func(&vm);
             },
         }
     }
