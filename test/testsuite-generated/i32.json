@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/i32.wast",
+{"source_filename": "i32.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "i32.0.wasm"}, 
   {"type": "assert_return", "line": 37, "action": {"type": "invoke", "field": "add", "args": [{"type": "i32", "value": "1"}, {"type": "i32", "value": "1"}]}, "expected": [{"type": "i32", "value": "2"}]}, 

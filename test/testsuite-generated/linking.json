@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/linking.wast",
+{"source_filename": "linking.wast",
  "commands": [
   {"type": "module", "line": 3, "name": "$Mf", "filename": "linking.0.wasm"}, 
   {"type": "register", "line": 7, "name": "$Mf", "as": "Mf"}, 

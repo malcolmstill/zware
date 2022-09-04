@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/store.wast",
+{"source_filename": "store.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "store.0.wasm"}, 
   {"type": "assert_return", "line": 44, "action": {"type": "invoke", "field": "as-block-value", "args": []}, "expected": []}, 

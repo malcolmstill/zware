@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/imports.wast",
+{"source_filename": "imports.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "imports.0.wasm"}, 
   {"type": "register", "line": 19, "as": "test"}, 

@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/labels.wast",
+{"source_filename": "labels.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "labels.0.wasm"}, 
   {"type": "assert_return", "line": 291, "action": {"type": "invoke", "field": "block", "args": []}, "expected": [{"type": "i32", "value": "1"}]}, 

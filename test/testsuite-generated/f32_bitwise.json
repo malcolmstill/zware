@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/f32_bitwise.wast",
+{"source_filename": "f32_bitwise.wast",
  "commands": [
   {"type": "module", "line": 4, "filename": "f32_bitwise.0.wasm"}, 
   {"type": "assert_return", "line": 10, "action": {"type": "invoke", "field": "copysign", "args": [{"type": "f32", "value": "2147483648"}, {"type": "f32", "value": "2147483648"}]}, "expected": [{"type": "f32", "value": "2147483648"}]}, 

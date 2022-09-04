@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/f32.wast",
+{"source_filename": "f32.wast",
  "commands": [
   {"type": "module", "line": 5, "filename": "f32.0.wasm"}, 
   {"type": "assert_return", "line": 19, "action": {"type": "invoke", "field": "add", "args": [{"type": "f32", "value": "2147483648"}, {"type": "f32", "value": "2147483648"}]}, "expected": [{"type": "f32", "value": "2147483648"}]}, 

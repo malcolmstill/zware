@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/binary-leb128.wast",
+{"source_filename": "binary-leb128.wast",
  "commands": [
   {"type": "module", "line": 2, "filename": "binary-leb128.0.wasm"}, 
   {"type": "module", "line": 7, "filename": "binary-leb128.1.wasm"}, 

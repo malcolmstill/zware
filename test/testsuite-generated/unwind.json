@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/unwind.wast",
+{"source_filename": "unwind.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "unwind.0.wasm"}, 
   {"type": "assert_trap", "line": 212, "action": {"type": "invoke", "field": "func-unwind-by-unreachable", "args": []}, "text": "unreachable", "expected": []}, 

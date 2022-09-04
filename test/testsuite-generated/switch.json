@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/switch.wast",
+{"source_filename": "switch.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "switch.0.wasm"}, 
   {"type": "assert_return", "line": 120, "action": {"type": "invoke", "field": "stmt", "args": [{"type": "i32", "value": "0"}]}, "expected": [{"type": "i32", "value": "0"}]}, 

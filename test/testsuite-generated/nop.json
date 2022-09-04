@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/nop.wast",
+{"source_filename": "nop.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "nop.0.wasm"}, 
   {"type": "assert_return", "line": 306, "action": {"type": "invoke", "field": "as-func-first", "args": []}, "expected": [{"type": "i32", "value": "1"}]}, 

@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/call_indirect.wast",
+{"source_filename": "call_indirect.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "call_indirect.0.wasm"}, 
   {"type": "assert_return", "line": 471, "action": {"type": "invoke", "field": "type-i32", "args": []}, "expected": [{"type": "i32", "value": "306"}]}, 

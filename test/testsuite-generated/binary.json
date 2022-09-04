@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/binary.wast",
+{"source_filename": "binary.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "binary.0.wasm"}, 
   {"type": "module", "line": 2, "filename": "binary.1.wasm"}, 

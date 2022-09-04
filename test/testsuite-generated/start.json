@@ -1,4 +1,4 @@
-{"source_filename": "/Users/klltkr/foxwren-fix-vendored/test/testsuite/start.wast",
+{"source_filename": "start.wast",
  "commands": [
   {"type": "assert_invalid", "line": 2, "filename": "start.0.wasm", "text": "unknown function", "module_type": "binary"}, 
   {"type": "assert_invalid", "line": 7, "filename": "start.1.wasm", "text": "start function", "module_type": "binary"}, 
