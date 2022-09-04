@@ -566,195 +566,171 @@ pub fn main() anyerror!void {
                     std.debug.print("ERROR (malformed): {s}:{}\n", .{ r.source_filename, command.assert_malformed.line });
                 }
 
-                if (mem.eql(u8, trap, "unexpected end") or mem.eql(u8, trap, "length out of bounds")) {
-                    if (module.decode()) |_| {
-                        return error.TestsuiteExpectedUnexpectedEnd;
-                    } else |err| switch (err) {
-                        error.Overflow => continue,
-                        error.UnexpectedEndOfInput => continue,
-                        error.FunctionCodeSectionsInconsistent => continue,
-                        error.EndOfStream => continue,
-                        error.CouldntFindExprEnd => continue,
-                        error.ElementsCountMismatch => continue,
-                        error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.TestsuiteExpectedUnexpectedEnd;
-                        },
+                if (module.decode()) |_| {
+                    return error.TestsuiteMalformedExpectedButDecodedOk;
+                } else |err| {
+                    if (mem.eql(u8, trap, "unexpected end") or mem.eql(u8, trap, "length out of bounds")) {
+                        switch (err) {
+                            error.Overflow => continue,
+                            error.UnexpectedEndOfInput => continue,
+                            error.FunctionCodeSectionsInconsistent => continue,
+                            error.EndOfStream => continue,
+                            error.CouldntFindExprEnd => continue,
+                            error.ElementsCountMismatch => continue,
+                            error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
+                            else => {
+                                std.debug.print("Expected error for trap {}, got error: {}\n", .{ trap, err });
+                                return error.TestsuiteExpectedUnexpectedEnd;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "magic header not detected")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.MagicNumberNotFound => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "magic header not detected")) {
+                        switch (err) {
+                            error.MagicNumberNotFound => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "unknown binary version")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.UnknownBinaryVersion => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "unknown binary version")) {
+                        switch (err) {
+                            error.UnknownBinaryVersion => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "malformed section id")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.UnknownSectionId => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "malformed section id")) {
+                        switch (err) {
+                            error.UnknownSectionId => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "integer representation too long")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.InvalidValue => continue,
-                        error.ExpectedFuncTypeTag => continue,
-                        error.Overflow => continue,
-                        error.UnknownSectionId => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "integer representation too long")) {
+                        switch (err) {
+                            error.InvalidValue => continue,
+                            error.ExpectedFuncTypeTag => continue,
+                            error.Overflow => continue,
+                            error.UnknownSectionId => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "zero flag expected")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.MalformedCallIndirectReserved => continue,
-                        error.MalformedMemoryReserved => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "zero flag expected")) {
+                        switch (err) {
+                            error.MalformedCallIndirectReserved => continue,
+                            error.MalformedMemoryReserved => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "too many locals")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.TooManyLocals => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "too many locals")) {
+                        switch (err) {
+                            error.TooManyLocals => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "function and code section have inconsistent lengths")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.FunctionCodeSectionsInconsistent => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "function and code section have inconsistent lengths")) {
+                        switch (err) {
+                            error.FunctionCodeSectionsInconsistent => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.UnexpectedEndOfInput => continue,
-                        error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
-                        error.TypeCountMismatch => continue,
-                        error.ImportsCountMismatch => continue,
-                        error.TablesCountMismatch => continue,
-                        error.MemoriesCountMismatch => continue,
-                        error.GlobalsCountMismatch => continue,
-                        error.ElementsCountMismatch => continue,
-                        error.FunctionsCountMismatch => continue,
-                        error.CodesCountMismatch => continue,
-                        error.DatasCountMismatch => continue,
-                        error.InvalidValue => continue,
-                        error.MalformedSectionMismatchedSize => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
+                        switch (err) {
+                            error.UnexpectedEndOfInput => continue,
+                            error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
+                            error.TypeCountMismatch => continue,
+                            error.ImportsCountMismatch => continue,
+                            error.TablesCountMismatch => continue,
+                            error.MemoriesCountMismatch => continue,
+                            error.GlobalsCountMismatch => continue,
+                            error.ElementsCountMismatch => continue,
+                            error.FunctionsCountMismatch => continue,
+                            error.CodesCountMismatch => continue,
+                            error.DatasCountMismatch => continue,
+                            error.InvalidValue => continue,
+                            error.MalformedSectionMismatchedSize => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "malformed import kind")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.InvalidValue => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "malformed import kind")) {
+                        switch (err) {
+                            error.InvalidValue => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "integer too large")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.Overflow => continue,
-                        error.UnknownSectionId => continue,
-                        error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "integer too large")) {
+                        switch (err) {
+                            error.Overflow => continue,
+                            error.UnknownSectionId => continue,
+                            error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "junk after last section")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.MultipleStartSections => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "junk after last section")) {
+                        switch (err) {
+                            error.MultipleStartSections => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "malformed mutability")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.InvalidValue => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "malformed mutability")) {
+                        switch (err) {
+                            error.InvalidValue => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
-                }
 
-                if (mem.eql(u8, trap, "malformed UTF-8 encoding")) {
-                    if (module.decode()) |_| {
-                        return error.ExpectedError;
-                    } else |err| switch (err) {
-                        error.NameNotUTF8 => continue,
-                        else => {
-                            std.debug.print("Unexpected error: {}\n", .{err});
-                            return error.ExpectedError;
-                        },
+                    if (mem.eql(u8, trap, "malformed UTF-8 encoding")) {
+                        switch (err) {
+                            error.NameNotUTF8 => continue,
+                            else => {
+                                std.debug.print("Unexpected error: {}\n", .{err});
+                                return error.ExpectedError;
+                            },
+                        }
                     }
                 }
 
