@@ -179,7 +179,7 @@ pub const Opcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
-    trunc_sat = 0xfc,
+    misc = 0xfc,
 };
 
 const OpcodeMeta = struct {
@@ -267,7 +267,7 @@ pub const OpcodeIterator = struct {
             },
             .@"f32.const" => self.code = self.code[4..],
             .@"f64.const" => self.code = self.code[8..],
-            .trunc_sat => self.code = self.code[1..],
+            .misc => self.code = self.code[1..],
             else => {},
         }
 

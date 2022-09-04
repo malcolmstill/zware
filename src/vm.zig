@@ -85,7 +85,7 @@ pub const VirtualMachine = struct {
         @"i32.extend8_s",   @"i32.extend16_s",  @"i64.extend8_s",     @"i64.extend16_s",    @"i64.extend32_s",    impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            trunc_sat,              impl_ni,                impl_ni,                impl_ni,
+        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            misc,                   impl_ni,                impl_ni,                impl_ni,
     };
 
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Instruction) WasmError!void {
@@ -2015,8 +2015,8 @@ pub const VirtualMachine = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn trunc_sat(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const meta = code[ip].trunc_sat;
+    fn misc(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
+        const meta = code[ip].misc;
 
         switch (meta) {
             0 => {

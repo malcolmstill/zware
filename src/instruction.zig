@@ -191,7 +191,7 @@ pub const RuntimeOpcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
-    trunc_sat = 0xfc,
+    misc = 0xfc,
 };
 
 pub const Instruction = union(RuntimeOpcode) {
@@ -472,7 +472,7 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
-    trunc_sat: u32,
+    misc: u32,
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1354,11 +1354,11 @@ pub const ParseIterator = struct {
             .@"i64.extend8_s" => rt_instr = Instruction.@"i64.extend8_s",
             .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
-            .trunc_sat => {
+            .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
                 try self.validator.validateTrunc(version);
 
-                rt_instr = Instruction{ .trunc_sat = version };
+                rt_instr = Instruction{ .misc = version };
             },
         }
 
@@ -1378,7 +1378,7 @@ pub const ParseIterator = struct {
             .@"local.get",
             .@"local.set",
             .@"local.tee",
-            .trunc_sat,
+            .misc,
             => {},
             else => try self.validator.validate(instr),
         }

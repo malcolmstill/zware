@@ -151,7 +151,7 @@ pub const Validator = struct {
             .@"local.get",
             .@"local.set",
             .@"local.tee",
-            .trunc_sat,
+            .misc,
             => {
                 // These instructions are handle separately
                 unreachable;
