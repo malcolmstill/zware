@@ -427,14 +427,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.load";
+        const meta = code[ip].@"i32.load";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u32, offset, address);
+        const value = try memory.read(u32, meta.offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
@@ -442,14 +439,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load";
+        const meta = code[ip].@"i64.load";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u64, offset, address);
+        const value = try memory.read(u64, meta.offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
@@ -457,14 +451,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"f32.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"f32.load";
+        const meta = code[ip].@"f32.load";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(f32, offset, address);
+        const value = try memory.read(f32, meta.offset, address);
 
         self.pushOperandNoCheck(f32, value);
 
@@ -472,14 +463,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"f64.load"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"f64.load";
+        const meta = code[ip].@"f64.load";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(f64, offset, address);
+        const value = try memory.read(f64, meta.offset, address);
 
         self.pushOperandNoCheck(f64, value);
 
@@ -487,14 +475,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.load8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.load8_s";
+        const meta = code[ip].@"i32.load8_s";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(i8, offset, address);
+        const value = try memory.read(i8, meta.offset, address);
 
         self.pushOperandNoCheck(i32, value);
 
@@ -502,14 +487,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.load8_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.load8_u";
+        const meta = code[ip].@"i32.load8_u";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u8, offset, address);
+        const value = try memory.read(u8, meta.offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
@@ -517,14 +499,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.load16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.load16_s";
+        const meta = code[ip].@"i32.load16_s";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(i16, offset, address);
+        const value = try memory.read(i16, meta.offset, address);
 
         self.pushOperandNoCheck(i32, value);
 
@@ -532,14 +511,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.load16_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.load16_u";
+        const meta = code[ip].@"i32.load16_u";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u16, offset, address);
+        const value = try memory.read(u16, meta.offset, address);
 
         self.pushOperandNoCheck(u32, value);
 
@@ -547,14 +523,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load8_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load8_s";
+        const meta = code[ip].@"i64.load8_s";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(i8, offset, address);
+        const value = try memory.read(i8, meta.offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
@@ -562,14 +535,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load8_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load8_u";
+        const meta = code[ip].@"i64.load8_u";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u8, offset, address);
+        const value = try memory.read(u8, meta.offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
@@ -577,14 +547,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load16_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load16_s";
+        const meta = code[ip].@"i64.load16_s";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(i16, offset, address);
+        const value = try memory.read(i16, meta.offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
@@ -592,14 +559,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load16_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load16_u";
+        const meta = code[ip].@"i64.load16_u";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u16, offset, address);
+        const value = try memory.read(u16, meta.offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
@@ -607,14 +571,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load32_s"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load32_s";
+        const meta = code[ip].@"i64.load32_s";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(i32, offset, address);
+        const value = try memory.read(i32, meta.offset, address);
 
         self.pushOperandNoCheck(i64, value);
 
@@ -622,14 +583,11 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i64.load32_u"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.load32_u";
+        const meta = code[ip].@"i64.load32_u";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const address = self.popOperand(u32);
-
-        const value = try memory.read(u32, offset, address);
+        const value = try memory.read(u32, meta.offset, address);
 
         self.pushOperandNoCheck(u64, value);
 
@@ -637,127 +595,109 @@ pub const VirtualMachine = struct {
     }
 
     fn @"i32.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.store";
+        const meta = code[ip].@"i32.store";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = self.popOperand(u32);
         const address = self.popOperand(u32);
 
-        try memory.write(u32, offset, address, value);
+        try memory.write(u32, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.store";
+        const meta = code[ip].@"i64.store";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = self.popOperand(u64);
         const address = self.popOperand(u32);
 
-        try memory.write(u64, offset, address, value);
+        try memory.write(u64, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"f32.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"f32.store";
+        const meta = code[ip].@"f32.store";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = self.popOperand(f32);
         const address = self.popOperand(u32);
 
-        try memory.write(f32, offset, address, value);
+        try memory.write(f32, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"f64.store"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"f64.store";
+        const meta = code[ip].@"f64.store";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = self.popOperand(f64);
         const address = self.popOperand(u32);
 
-        try memory.write(f64, offset, address, value);
+        try memory.write(f64, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.store8"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.store8";
+        const meta = code[ip].@"i32.store8";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = @truncate(u8, self.popOperand(u32));
         const address = self.popOperand(u32);
 
-        try memory.write(u8, offset, address, value);
+        try memory.write(u8, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i32.store16"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i32.store16";
+        const meta = code[ip].@"i32.store16";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = @truncate(u16, self.popOperand(u32));
         const address = self.popOperand(u32);
 
-        try memory.write(u16, offset, address, value);
+        try memory.write(u16, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store8"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.store8";
+        const meta = code[ip].@"i64.store8";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = @truncate(u8, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        try memory.write(u8, offset, address, value);
+        try memory.write(u8, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store16"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.store16";
+        const meta = code[ip].@"i64.store16";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = @truncate(u16, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        try memory.write(u16, offset, address, value);
+        try memory.write(u16, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"i64.store32"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const load_data = code[ip].@"i64.store32";
+        const meta = code[ip].@"i64.store32";
 
         const memory = try self.inst.getMemory(0);
-
-        const offset = load_data.offset;
         const value = @truncate(u32, self.popOperand(u64));
         const address = self.popOperand(u32);
 
-        try memory.write(u32, offset, address, value);
+        try memory.write(u32, meta.offset, address, value);
 
         return dispatch(self, ip + 1, code);
     }
