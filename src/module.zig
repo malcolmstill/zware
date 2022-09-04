@@ -699,7 +699,7 @@ pub const Module = struct {
 
                 try self.local_types.append(.{ .count = type_count, .value_type = local_type });
             }
-            if (locals_count > 0x100000000) return error.TooManyLocals;
+            if (locals_count >= 0x100000000) return error.TooManyLocals;
 
             const code_start = rd.context.pos;
             const code_length = try math.sub(usize, size, code_start - offset);
