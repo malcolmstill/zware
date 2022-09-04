@@ -115,8 +115,8 @@ pub const Validator = struct {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
-    pub fn validateTrunc(v: *Validator, trunc_type: MiscOpcode) !void {
-        switch (trunc_type) {
+    pub fn validateTrunc(v: *Validator, misc_type: MiscOpcode) !void {
+        switch (misc_type) {
             .@"i32.trunc_sat_f32_s",
             .@"i32.trunc_sat_f32_u",
             => {
