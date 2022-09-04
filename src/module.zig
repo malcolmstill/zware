@@ -658,6 +658,45 @@ pub const Module = struct {
                         .data = self.module[data_start..rd.context.pos],
                     });
                 },
+                5 => {
+                    const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const ref_type = try std.meta.intToEnum(RefType, rtype);
+                    std.log.info("ref_type = {}", .{ref_type});
+
+                    const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+                    std.log.info("expression count = {}", .{expr_count});
+
+                    var j: usize = 0;
+                    while (j < expr_count) : (j += 1) {
+                        const expr_start = rd.context.pos;
+                        const expr = self.module[expr_start..];
+                        const meta = try opcode.findExprEnd(expr);
+
+                        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                        std.log.info("parsed_code = {any}", .{parsed_code});
+
+                        // FIXME: I think we need to store different types of elements from now on
+                        // try self.elements.list.append(Segment{
+                        //     .index = 0,
+                        //     .start = parsed_code.start,
+                        //     .count = data_length,
+                        //     .data = self.module[data_start..rd.context.pos],
+                        // });
+                    }
+                },
                 else => return error.ValidatorElemTypeNotImplemented,
             }
         }
@@ -857,12 +896,15 @@ pub const Module = struct {
 
         while (try it.next()) |instr| {
             switch (instr) {
-                .@"i32.const" => |_| {},
-                .@"i64.const" => |_| {},
-                .@"f32.const" => |_| {},
-                .@"f64.const" => |_| {},
-                .@"global.get" => |_| {},
-                .end => |_| {},
+                .@"i32.const",
+                .@"i64.const",
+                .@"f32.const",
+                .@"f64.const",
+                .@"global.get",
+                .@"ref.null",
+                .@"ref.func",
+                .end,
+                => |_| {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.parsed_code.append(instr);

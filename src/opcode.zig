@@ -218,7 +218,7 @@ pub const OpcodeIterator = struct {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
-        const instr = @intToEnum(Opcode, self.code[0]);
+        const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
@@ -283,6 +283,12 @@ pub const OpcodeIterator = struct {
             },
             .@"f32.const" => self.code = self.code[4..],
             .@"f64.const" => self.code = self.code[8..],
+            .@"ref.null" => {
+                _ = try readULEB128Mem(i32, &self.code);
+            },
+            .@"ref.func" => {
+                _ = try readULEB128Mem(u32, &self.code);
+            },
             .misc => self.code = self.code[1..],
             else => {},
         }

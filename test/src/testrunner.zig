@@ -582,6 +582,13 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "illegal opcode")) {
+                        switch (err) {
+                            error.IllegalOpcode => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "magic header not detected")) {
                         switch (err) {
                             error.MagicNumberNotFound => continue,
