@@ -658,6 +658,57 @@ pub const Module = struct {
                         .data = self.module[data_start..rd.context.pos],
                     });
                 },
+                2 => {
+                    const table_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
+
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // read elemkind (0x00)
+                    _ = rd.readByte() catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+                    const data_start = rd.context.pos;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                    }
+
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.elements.list.append(Segment{
+                        .index = table_index,
+                        .start = parsed_code.start,
+                        .count = data_length,
+                        .data = self.module[data_start..rd.context.pos],
+                    });
+                },
                 5 => {
                     const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -697,7 +748,10 @@ pub const Module = struct {
                         // });
                     }
                 },
-                else => return error.ValidatorElemTypeNotImplemented,
+                else => {
+                    std.log.err("elem type = {} not implemented", .{elem_type});
+                    return error.ValidatorElemTypeNotImplemented;
+                },
             }
         }
     }
