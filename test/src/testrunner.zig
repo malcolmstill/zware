@@ -589,6 +589,13 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "malformed reference type")) {
+                        switch (err) {
+                            error.MalformedRefType => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "magic header not detected")) {
                         switch (err) {
                             error.MagicNumberNotFound => continue,

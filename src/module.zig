@@ -14,7 +14,7 @@ const ParseIterator = instruction.ParseIterator;
 const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
 const NumType = common.NumType;
-const RefType = common.ValueType;
+const RefType = common.RefType;
 const ValueType = common.ValueType;
 const Import = common.Import;
 const Export = common.Export;
@@ -664,7 +664,7 @@ pub const Module = struct {
                         else => return err,
                     };
 
-                    const ref_type = try std.meta.intToEnum(RefType, rtype);
+                    const ref_type = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
                     std.log.info("ref_type = {}", .{ref_type});
 
                     const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
