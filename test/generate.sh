@@ -3,7 +3,7 @@
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
 TESTSUITE_DIR=$SCRIPT_DIR/testsuite
 GENERATED_DIR=$SCRIPT_DIR/testsuite-generated
-WAST2JSON_CMD="wast2json" 
+WAST2JSON_CMD="/Users/klltkr/wabt/build/wast2json" # FIXME: temporary custom build of wabt for https://github.com/WebAssembly/wabt/pull/1932
 
 pushd $GENERATED_DIR
 
