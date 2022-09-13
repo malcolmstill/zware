@@ -723,6 +723,8 @@ pub const Module = struct {
         };
         self.codes.count = count;
 
+        if (count == 0) return;
+
         const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
 
         var i: usize = 0;
