@@ -864,6 +864,8 @@ fn valueTypeFromString(s: []const u8) !ValueType {
     if (mem.eql(u8, s, "i64")) return ValueType.I64;
     if (mem.eql(u8, s, "f32")) return ValueType.F32;
     if (mem.eql(u8, s, "f64")) return ValueType.F64;
+    if (mem.eql(u8, s, "funcref")) return ValueType.FuncRef;
+    if (mem.eql(u8, s, "externref")) return ValueType.ExternRef;
     return error.UnknownType;
 }
 

@@ -62,6 +62,8 @@ pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
         -0x02 => .I64,
         -0x03 => .F32,
         -0x04 => .F64,
+        -0x10 => .FuncRef,
+        -0x11 => .ExternRef,
         else => error.UnexpectedBlockType,
     };
 }
