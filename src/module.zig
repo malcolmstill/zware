@@ -25,6 +25,8 @@ const Global = common.Global;
 const Element = common.Element;
 const Code = function.Code;
 const Segment = common.Segment;
+const ElementSegment = common.ElementSegment;
+const ElementSegmentMode = common.ElementSegmentMode;
 const Tag = common.Tag;
 const LocalType = common.LocalType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
@@ -48,7 +50,8 @@ pub const Module = struct {
     globals: Section(Global),
     exports: Section(Export),
     start: ?u32,
-    elements: Section(Segment),
+    elements: Section(ElementSegment),
+    element_init_offsets: ArrayList(usize),
     codes: Section(Code),
     datas: Section(Segment),
     parsed_code: ArrayList(Instruction),
@@ -71,7 +74,8 @@ pub const Module = struct {
             .globals = Section(Global).init(alloc),
             .exports = Section(Export).init(alloc),
             .start = null,
-            .elements = Section(Segment).init(alloc),
+            .elements = Section(ElementSegment).init(alloc),
+            .element_init_offsets = ArrayList(usize).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(Segment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
@@ -80,6 +84,8 @@ pub const Module = struct {
             .function_index_start = null,
         };
     }
+
+    // fn deinit?
 
     pub fn decode(self: *Module) !void {
         const rd = self.buf.reader();
@@ -635,7 +641,9 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-                    const data_start = rd.context.pos;
+                    // const data_start = rd.context.pos;
+
+                    const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
@@ -647,24 +655,34 @@ pub const Module = struct {
                         };
 
                         if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(.@"ref.func");
+                        try self.element_init_offsets.append(init_offset);
                     }
 
-                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+                    // offset code
+                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
-                    try self.elements.list.append(Segment{
-                        .index = table_index,
-                        .start = parsed_code.start,
+                    // The parsed code defines the offset of the data
+                    //
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
                         .count = data_length,
-                        .data = self.module[data_start..rd.context.pos],
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = 0,
+                            .offset = parsed_offset_code.start,
+                        } },
                     });
                 },
                 2 => {
-                    const table_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                    const tableidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
 
-                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const expr_start = rd.context.pos;
                     const expr = self.module[expr_start..];
@@ -675,7 +693,7 @@ pub const Module = struct {
                         else => return err,
                     };
 
-                    // read elemkind (0x00)
+                    // read elemkind (only 0x00 == .FuncRef supported)
                     _ = rd.readByte() catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
@@ -686,7 +704,9 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-                    const data_start = rd.context.pos;
+                    // const data_start = rd.context.pos;
+
+                    const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
@@ -698,31 +718,40 @@ pub const Module = struct {
                         };
 
                         if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(.@"ref.func");
+                        try self.element_init_offsets.append(init_offset);
                     }
 
-                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
-                    try self.elements.list.append(Segment{
-                        .index = table_index,
-                        .start = parsed_code.start,
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
                         .count = data_length,
-                        .data = self.module[data_start..rd.context.pos],
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = tableidx,
+                            .offset = parsed_offset_code.start,
+                        } },
                     });
                 },
-                5 => {
+                5 => { // Passive
                     const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
 
-                    const ref_type = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
-                    std.log.info("ref_type = {}", .{ref_type});
+                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
+                    std.log.info("ref_type = {}", .{reftype});
 
                     const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
                     std.log.info("expression count = {}", .{expr_count});
+
+                    const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
@@ -735,18 +764,20 @@ pub const Module = struct {
                             else => return err,
                         };
 
-                        const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+                        const init_offset = self.parsed_code.items.len;
+                        const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .FuncRef);
+                        try self.element_init_offsets.append(init_offset);
 
                         std.log.info("parsed_code = {any}", .{parsed_code});
-
-                        // FIXME: I think we need to store different types of elements from now on
-                        // try self.elements.list.append(Segment{
-                        //     .index = 0,
-                        //     .start = parsed_code.start,
-                        //     .count = data_length,
-                        //     .data = self.module[data_start..rd.context.pos],
-                        // });
                     }
+
+                    // FIXME: I think we need to store different types of elements from now on
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = reftype,
+                        .init = first_init_offset,
+                        .count = expr_count,
+                        .mode = ElementSegmentMode.Passive,
+                    });
                 },
                 else => {
                     std.log.err("elem type = {} not implemented", .{elem_type});
@@ -935,15 +966,15 @@ pub const Module = struct {
     };
 
     pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !StartWithDepth {
-        // _ = try opcode.findFunctionEnd(code);
+        _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
         var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..]);
 
         const in: [0]ValueType = [_]ValueType{} ** 0;
-        var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-        out[0] = value_type;
+        const out: [1]ValueType = [_]ValueType{value_type} ** 1;
+
         try it.validator.pushControlFrame(
             .block,
             in[0..0],
@@ -973,7 +1004,7 @@ pub const Module = struct {
     }
 
     pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !StartWithDepth {
-        // _ = try opcode.findFunctionEnd(code);
+        _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 

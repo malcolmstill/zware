@@ -577,7 +577,7 @@ pub fn main() anyerror!void {
                             error.EndOfStream => continue,
                             error.CouldntFindExprEnd => continue,
                             error.ElementsCountMismatch => continue,
-                            // error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
+                            error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
                             else => {},
                         }
                     }
@@ -699,7 +699,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "junk after last section")) {
+                    if (mem.eql(u8, trap, "unexpected content after last section")) {
                         switch (err) {
                             error.MultipleStartSections => continue,
                             else => {},

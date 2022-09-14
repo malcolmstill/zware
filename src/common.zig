@@ -116,6 +116,28 @@ pub const Segment = struct {
     data: []const u8,
 };
 
+pub const ElementSegment = struct {
+    reftype: RefType,
+    init: usize, // Offset into element_init_offset of first init expression code offset
+    count: u32, // Number of element_init_offset values for this segment (we have an array of initialisation functions)
+    mode: ElementSegmentMode,
+};
+
+pub const ElementSegmentType = enum {
+    Passive,
+    Active,
+    Declarative,
+};
+
+pub const ElementSegmentMode = union(ElementSegmentType) {
+    Passive: void,
+    Active: struct {
+        tableidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+    Declarative: void,
+};
+
 pub const Tag = enum(u8) {
     Func,
     Table,

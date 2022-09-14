@@ -190,9 +190,14 @@ pub const Instance = struct {
     fn checkElements(self: *Instance) !void {
         // 4b. Check all elements
         for (self.module.elements.list.items) |segment| {
-            const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.start, u32, .{});
-            if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
+            switch (segment.mode) {
+                .Passive, .Declarative => continue,
+                .Active => |meta| {
+                    const table = try self.getTable(meta.tableidx);
+                    const offset = try self.invokeExpression(meta.offset, u32, .{});
+                    if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
+                },
+            }
         }
     }
 
@@ -210,14 +215,21 @@ pub const Instance = struct {
     fn instantiateElements(self: *Instance) !void {
         // 5b. If all our elements were good, initialise them
         for (self.module.elements.list.items) |segment| {
-            const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.start, u32, .{});
+            switch (segment.mode) {
+                .Passive, .Declarative => continue,
+                .Active => |meta| {
+                    const table = try self.getTable(meta.tableidx);
+                    const offset = try self.invokeExpression(meta.offset, u32, .{});
 
-            var data = segment.data;
-            var j: usize = 0;
-            while (j < segment.count) : (j += 1) {
-                const value = try opcode.readULEB128Mem(u32, &data);
-                try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
+                    // FIXME
+                    std.log.info("instantiateElements [table = {}, offset = {}]", .{ table, offset });
+                    // var data = segment.data;
+                    // var j: usize = 0;
+                    // while (j < segment.count) : (j += 1) {
+                    //     const value = try opcode.readULEB128Mem(u32, &data);
+                    //     try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
+                    // }
+                },
             }
         }
     }
