@@ -2209,6 +2209,33 @@ pub const VirtualMachine = struct {
                 std.log.warn("data.drop not implemented", .{});
                 return error.Trap;
             },
+            .@"table.init" => |table_init_meta| {
+                const tableidx = table_init_meta.tableidx;
+                const elemidx = table_init_meta.elemidx;
+
+                const table = try self.inst.getTable(tableidx);
+                // TODO: try self.inst.module.getElement(elemidx);
+                const elem = self.inst.module.elements.list.items[elemidx];
+
+                const n = self.popOperand(i32);
+                const s = self.popOperand(i32);
+                const d = self.popOperand(i32);
+
+                if (s + n > elem.count) return error.Trap;
+                if (d + n > table.size()) return error.Trap;
+                if (n == 0) return;
+
+                std.log.warn("table.init not implemented [x = {}, y = {}, n = {}, s = {}, d = {}]", .{
+                    tableidx,
+                    elemidx,
+                    n,
+                    s,
+                    d,
+                });
+
+                std.log.info("elem = {}", .{elem});
+                return error.Trap;
+            },
         }
     }
 

@@ -401,88 +401,86 @@ pub fn main() anyerror!void {
                             in[i] = arg;
                         }
 
-                        // Test the result
-                        if (mem.eql(u8, trap, "integer divide by zero")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.DivisionByZero => continue,
-                                else => return error.TestsuiteExpectedDivideByZero,
+                        if (instance.invoke(field, in, out, .{})) |_| {
+                            return error.TestsuiteExpectedTrap;
+                        } else |err| {
+                            // Test the result
+                            if (mem.eql(u8, trap, "integer divide by zero")) {
+                                switch (err) {
+                                    error.DivisionByZero => continue,
+                                    else => return error.TestsuiteExpectedDivideByZero,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "integer overflow")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.Overflow => continue,
-                                else => return error.TestsuiteExpectedOverflow,
+                            if (mem.eql(u8, trap, "integer overflow")) {
+                                switch (err) {
+                                    error.Overflow => continue,
+                                    else => return error.TestsuiteExpectedOverflow,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.InvalidConversion => continue,
-                                else => return error.TestsuiteExpectedInvalidConversion,
+                            if (mem.eql(u8, trap, "invalid conversion to integer")) {
+                                switch (err) {
+                                    error.InvalidConversion => continue,
+                                    else => return error.TestsuiteExpectedInvalidConversion,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "out of bounds memory access")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.OutOfBoundsMemoryAccess => continue,
-                                else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                            if (mem.eql(u8, trap, "out of bounds memory access")) {
+                                switch (err) {
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.IndirectCallTypeMismatch => continue,
-                                else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                            if (mem.eql(u8, trap, "indirect call type mismatch")) {
+                                switch (err) {
+                                    error.IndirectCallTypeMismatch => continue,
+                                    else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.UndefinedElement => continue,
-                                error.OutOfBoundsMemoryAccess => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUndefinedElement;
-                                },
+                            if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
+                                switch (err) {
+                                    error.UndefinedElement => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUndefinedElement;
+                                    },
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.UndefinedElement => continue,
-                                error.OutOfBoundsMemoryAccess => continue,
-                                error.IndirectCallTypeMismatch => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUnitialized;
-                                },
+                            if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
+                                switch (err) {
+                                    error.UndefinedElement => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    error.IndirectCallTypeMismatch => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnitialized;
+                                    },
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "unreachable")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedUnreachable;
-                            } else |err| switch (err) {
-                                error.TrapUnreachable => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUnreachable;
-                                },
+                            if (mem.eql(u8, trap, "out of bounds table access")) {
+                                switch (err) {
+                                    error.Trap => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnreachable;
+                                    },
+                                }
+                            }
+
+                            if (mem.eql(u8, trap, "unreachable")) {
+                                switch (err) {
+                                    error.TrapUnreachable => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnreachable;
+                                    },
+                                }
                             }
                         }
                     },

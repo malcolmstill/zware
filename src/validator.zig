@@ -165,6 +165,12 @@ pub const Validator = struct {
                 // FIXME: check the value of dataCountSection against dataidx of data.drop
                 if (!v.dataCountSection) return error.InstructionRequiresDataCountSection;
             },
+            .@"table.init" => {
+                // validate x y?
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+            },
         }
     }
 

@@ -494,6 +494,12 @@ pub const MiscInstruction = union(MiscOpcode) {
     @"i64.trunc_sat_f64_u": void,
     @"memory.init": u32,
     @"data.drop": u32,
+    // @"memory.copy": void,
+    // @"memory.fill": void,
+    @"table.init": struct {
+        tableidx: u32,
+        elemidx: u32,
+    },
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1402,6 +1408,7 @@ pub const ParseIterator = struct {
             },
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
+                std.log.info("misc opcode = {}", .{version});
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
 
@@ -1421,6 +1428,15 @@ pub const ParseIterator = struct {
                     .@"data.drop" => {
                         const dataidx = try opcode.readULEB128Mem(u32, &self.code);
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"data.drop" = dataidx } };
+                    },
+                    .@"table.init" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
+                            .tableidx = tableidx,
+                            .elemidx = elemidx,
+                        } } };
                     },
                 }
             },
