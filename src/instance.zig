@@ -221,14 +221,11 @@ pub const Instance = struct {
                     const table = try self.getTable(meta.tableidx);
                     const offset = try self.invokeExpression(meta.offset, u32, .{});
 
-                    // FIXME
-                    std.log.info("instantiateElements [table = {}, offset = {}]", .{ table, offset });
-                    // var data = segment.data;
-                    // var j: usize = 0;
-                    // while (j < segment.count) : (j += 1) {
-                    //     const value = try opcode.readULEB128Mem(u32, &data);
-                    //     try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
-                    // }
+                    for (self.module.element_init_offsets.items[segment.init .. segment.init + segment.count]) |expr, j| {
+                        const funcidx = try self.invokeExpression(expr, u32, .{});
+
+                        try table.set(@intCast(u32, offset + j), try self.funcHandle(funcidx));
+                    }
                 },
             }
         }

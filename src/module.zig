@@ -649,15 +649,18 @@ pub const Module = struct {
                     while (j < data_length) : (j += 1) {
                         // When we pre-process all this data we can just store this
                         // but for the moment we're just using it to skip over
-                        const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
                             error.EndOfStream => return error.UnexpectedEndOfInput,
                             else => return err,
                         };
 
-                        if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        std.log.info("elemn funcidx = {}", .{funcidx});
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(.@"ref.func");
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -712,15 +715,16 @@ pub const Module = struct {
                     while (j < data_length) : (j += 1) {
                         // When we pre-process all this data we can just store this
                         // but for the moment we're just using it to skip over
-                        const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
                             error.EndOfStream => return error.UnexpectedEndOfInput,
                             else => return err,
                         };
 
-                        if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(.@"ref.func");
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 

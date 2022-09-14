@@ -478,7 +478,7 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend32_s": void,
     @"ref.null": void, // FIXME: fix type
     @"ref.is_null": void,
-    @"ref.func": void, // FIXME: fix type
+    @"ref.func": u32,
     misc: MiscInstruction,
 };
 
@@ -1395,7 +1395,7 @@ pub const ParseIterator = struct {
             .@"ref.func" => {
                 const funcidx = try opcode.readULEB128Mem(u32, &self.code);
                 std.log.info("ref.func funcidx = {}", .{funcidx});
-                rt_instr = Instruction.@"ref.func";
+                rt_instr = Instruction{ .@"ref.func" = funcidx };
             },
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
