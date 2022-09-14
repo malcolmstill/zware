@@ -546,6 +546,7 @@ pub fn main() anyerror!void {
                     error.ValidatorNotStartFunctionType => continue,
                     error.ValidatorElemUnknownFunctionIndex => continue,
                     error.ValidatorElseBranchExpected => continue,
+                    error.ValidatorMutableGlobalInConstantExpr => continue,
                     else => {
                         std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

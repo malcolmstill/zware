@@ -517,7 +517,7 @@ pub const ParseIterator = struct {
     continuation_stack: []usize,
     continuation_stack_ptr: usize,
 
-    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize) ParseIterator {
+    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize, is_constant: bool) ParseIterator {
         return ParseIterator{
             .code = function,
             .code_ptr = parsed_code.items.len,
@@ -529,7 +529,7 @@ pub const ParseIterator = struct {
             // TODO: what type of allocator is this?
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
-            .validator = Validator.init(module.alloc, module.dataCount != null),
+            .validator = Validator.init(module.alloc, module.dataCount != null, is_constant),
             .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
         };

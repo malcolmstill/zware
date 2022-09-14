@@ -15,12 +15,14 @@ pub const Validator = struct {
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
     dataCountSection: bool,
+    is_constant: bool,
 
-    pub fn init(alloc: mem.Allocator, dataCountSection: bool) Validator {
+    pub fn init(alloc: mem.Allocator, dataCountSection: bool, is_constant: bool) Validator {
         return Validator{
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
             .dataCountSection = dataCountSection,
+            .is_constant = is_constant,
         };
     }
 
@@ -111,6 +113,7 @@ pub const Validator = struct {
     }
 
     pub fn validateGlobalGet(v: *Validator, global: Global) !void {
+        if (v.is_constant and global.mutability == .Mutable) return error.ValidatorMutableGlobalInConstantExpr;
         try v.pushOperand(ValueTypeUnknown{ .Known = global.value_type });
     }
 
