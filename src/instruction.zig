@@ -9,6 +9,7 @@ const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
+const RefType = @import("common.zig").RefType;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
@@ -476,7 +477,7 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
-    @"ref.null": void, // FIXME: fix type
+    @"ref.null": RefType,
     @"ref.is_null": void,
     @"ref.func": u32,
     misc: MiscInstruction,
@@ -1385,13 +1386,17 @@ pub const ParseIterator = struct {
             .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
             .@"ref.null" => {
-                const reftype = try opcode.readULEB128Mem(i32, &self.code);
+                const rtype = try opcode.readULEB128Mem(i32, &self.code);
+                const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
+
+                try self.validator.validateRefNull(reftype);
                 std.log.info("ref.null reftype = {}", .{reftype});
-                rt_instr = Instruction.@"ref.null";
+                rt_instr = Instruction{ .@"ref.null" = reftype };
             },
             .@"ref.is_null" => rt_instr = Instruction.@"ref.is_null",
             .@"ref.func" => {
                 const funcidx = try opcode.readULEB128Mem(u32, &self.code);
+                // validate funcidx exists?
                 std.log.info("ref.func funcidx = {}", .{funcidx});
                 rt_instr = Instruction{ .@"ref.func" = funcidx };
             },
@@ -1438,6 +1443,7 @@ pub const ParseIterator = struct {
             .@"local.set",
             .@"local.tee",
             .misc,
+            .@"ref.null",
             => {},
             else => try self.validator.validate(instr),
         }

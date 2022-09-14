@@ -4,6 +4,7 @@ const LinearFifo = std.fifo.LinearFifo;
 const ArrayList = std.ArrayList;
 const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("common.zig").ValueType;
+const RefType = @import("common.zig").RefType;
 const Global = @import("common.zig").Global;
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
@@ -118,6 +119,13 @@ pub const Validator = struct {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
     }
 
+    pub fn validateRefNull(v: *Validator, reftype: RefType) !void {
+        switch (reftype) {
+            .FuncRef => _ = try v.pushOperand(ValueTypeUnknown{ .Known = .FuncRef }),
+            .ExternRef => _ = try v.pushOperand(ValueTypeUnknown{ .Known = .ExternRef }),
+        }
+    }
+
     pub fn validateMisc(v: *Validator, misc_type: MiscOpcode) !void {
         switch (misc_type) {
             .@"i32.trunc_sat_f32_s",
@@ -172,6 +180,7 @@ pub const Validator = struct {
             .@"local.get",
             .@"local.set",
             .@"local.tee",
+            .@"ref.null",
             .misc,
             => {
                 // These instructions are handled separately
@@ -490,9 +499,6 @@ pub const Validator = struct {
             },
             .@"f64.const" => {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
-            },
-            .@"ref.null" => {
-                _ = try v.pushOperand(ValueTypeUnknown.Unknown);
             },
             .@"ref.is_null" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
