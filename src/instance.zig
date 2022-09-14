@@ -195,7 +195,9 @@ pub const Instance = struct {
                 .Active => |meta| {
                     const table = try self.getTable(meta.tableidx);
                     const offset = try self.invokeExpression(meta.offset, u32, .{});
-                    if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
+
+                    const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
+                    if (index > table.size()) return error.OutOfBoundsMemoryAccess;
                 },
             }
         }

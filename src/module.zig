@@ -882,7 +882,7 @@ pub const Module = struct {
                         .mode = ElementSegmentMode.Passive,
                     });
                 },
-                7 => { // Passive
+                7 => { // Declarative
                     const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
