@@ -304,29 +304,52 @@ pub fn main() anyerror!void {
 
                         for (expected) |result, i| {
                             const value_type = try valueTypeFromString(result.@"type");
-                            if (mem.startsWith(u8, result.value, "nan:")) {
-                                if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
-                                    continue;
-                                }
-                                if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
-                                    continue;
-                                }
+                            switch (value_type) {
+                                .I32, .I64, .F32, .F64 => {
+                                    if (mem.startsWith(u8, result.value, "nan:")) {
+                                        if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                            continue;
+                                        }
+                                        if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                            continue;
+                                        }
 
-                                std.debug.print("(result) invoke = {s}\n", .{field});
-                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.print("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
-                                return error.TestsuiteTestFailureTrapResult;
-                            }
+                                        std.debug.print("(result) invoke = {s}\n", .{field});
+                                        std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                        std.debug.print("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                                        return error.TestsuiteTestFailureTrapResult;
+                                    }
 
-                            const result_value = try fmt.parseInt(u64, result.value, 10);
-                            // Otherwise
-                            errdefer {
-                                std.debug.print("(result) invoke = {s}\n", .{field});
-                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
-                            }
-                            if (result_value != out[expected.len - i - 1]) {
-                                return error.TestsuiteTestFailureTrapResult;
+                                    const result_value = try fmt.parseInt(u64, result.value, 10);
+                                    // Otherwise
+                                    errdefer {
+                                        std.debug.print("(result) invoke = {s}\n", .{field});
+                                        std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                        std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
+                                    }
+                                    if (result_value != out[expected.len - i - 1]) {
+                                        return error.TestsuiteTestFailureTrapResult;
+                                    }
+                                },
+                                .FuncRef, .ExternRef => {
+                                    if (mem.eql(u8, result.value, "null")) {
+                                        if (out[expected.len - i - 1] != 0) {
+                                            return error.TestsuiteTestFailureTrapResult;
+                                        }
+                                    } else {
+                                        const result_value = try fmt.parseInt(u64, result.value, 10);
+                                        // Otherwise
+                                        errdefer {
+                                            std.debug.print("(result) invoke = {s}\n", .{field});
+                                            std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                            std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
+                                        }
+                                        if (result_value != out[expected.len - i - 1]) {
+                                            return error.TestsuiteTestFailureTrapResult;
+                                        }
+                                    }
+                                },
+                                .V128 => return error.SIMDNotImplemented,
                             }
                         }
                     },

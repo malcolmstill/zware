@@ -820,6 +820,8 @@ pub const ParseIterator = struct {
             .@"global.set" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
 
+                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
+
                 const global = self.module.globals.list.items[@intCast(usize, index)];
                 try self.validator.validateGlobalSet(global);
 
