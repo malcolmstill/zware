@@ -773,6 +773,38 @@ pub const Module = struct {
                         } },
                     });
                 },
+                4 => {
+                    const table_index = 0;
+
+                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+
+                    const parsed_offset_code = try self.readConstantExpression(.I32);
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const init_expression_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < init_expression_count) : (j += 1) {
+                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
+                        try self.element_init_offsets.append(parsed_init_code.start);
+                    }
+
+                    // The parsed code defines the offset of the data
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = init_expression_count,
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = 0,
+                            .offset = parsed_offset_code.start,
+                        } },
+                    });
+                },
                 5 => { // Passive
                     const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -817,6 +849,21 @@ pub const Module = struct {
                 },
             }
         }
+    }
+
+    fn readConstantExpression(self: *Module, value_type: ValueType) !StartWithDepth {
+        const rd = self.buf.reader();
+
+        const expr_start = rd.context.pos;
+        const expr = self.module[expr_start..];
+        const meta = try opcode.findExprEnd(expr);
+
+        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], value_type);
     }
 
     fn decodeDataCountSection(self: *Module, size: u32) !void {
