@@ -797,6 +797,7 @@ pub fn main() anyerror!void {
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     error.MismatchedMutability => continue,
+                    error.MismatchedGlobalType => continue,
                     else => {
                         std.debug.print("(unlinkable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
