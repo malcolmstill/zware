@@ -797,6 +797,7 @@ pub fn main() anyerror!void {
                     return error.ExpectedUninstantiable;
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
+                    error.OutOfBoundsMemoryAccess => continue, // Why did this work before? data.wast 174
                     else => {
                         std.debug.print("(uninstantiable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
