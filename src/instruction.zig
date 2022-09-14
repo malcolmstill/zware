@@ -783,20 +783,18 @@ pub const ParseIterator = struct {
             },
             .call_indirect => {
                 const type_index = try opcode.readULEB128Mem(u32, &self.code);
-                const table_reserved = try opcode.readByte(&self.code);
-
                 if (type_index >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
-                if (self.module.tables.list.items.len != 1) return error.ValidatorCallIndirectNoTable;
+
+                const tableidx = try opcode.readByte(&self.code);
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
                 const function_type = self.module.types.list.items[@intCast(usize, type_index)];
                 try self.validator.validateCallIndirect(function_type);
 
-                if (table_reserved != 0) return error.MalformedCallIndirectReserved;
-
                 rt_instr = Instruction{
                     .call_indirect = .{
                         .@"type" = type_index,
-                        .table = table_reserved,
+                        .table = tableidx,
                     },
                 };
             },

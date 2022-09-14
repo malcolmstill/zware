@@ -251,8 +251,7 @@ pub const OpcodeIterator = struct {
             },
             .call_indirect => {
                 _ = try readULEB128Mem(u32, &self.code);
-                const reserved = try readByte(&self.code);
-                if (reserved != 0) return error.MalformedCallIndirectReserved;
+                _ = try readByte(&self.code); // is byte correct?
             },
             .@"i32.load",
             .@"i64.load",

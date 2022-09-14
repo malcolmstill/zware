@@ -518,7 +518,6 @@ pub fn main() anyerror!void {
                     error.ValidatorConstantExpressionRequired => continue,
                     error.ValidatorUnknownGlobal => continue,
                     error.ValidatorInvalidTypeIndex => continue,
-                    error.ValidatorMultipleTables => continue,
                     error.ValidatorMultipleMemories => continue,
                     error.LocalGetIndexOutOfBounds => continue,
                     error.LocalSetIndexOutOfBounds => continue,
@@ -643,7 +642,6 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "zero byte expected")) {
                         switch (err) {
-                            error.MalformedCallIndirectReserved => continue,
                             error.MalformedMemoryReserved => continue,
                             else => {},
                         }

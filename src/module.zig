@@ -359,8 +359,6 @@ pub const Module = struct {
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
-        if (self.tables.list.items.len > 0) return error.ValidatorMultipleTables;
-
         const rd = self.buf.reader();
 
         const tag = rd.readByte() catch |err| switch (err) {
