@@ -882,6 +882,34 @@ pub const Module = struct {
                         .mode = ElementSegmentMode.Passive,
                     });
                 },
+                7 => { // Passive
+                    const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
+
+                    const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < expr_count) : (j += 1) {
+                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
+                        try self.element_init_offsets.append(parsed_init_code.start);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = reftype,
+                        .init = first_init_offset,
+                        .count = expr_count,
+                        .mode = ElementSegmentMode.Declarative,
+                    });
+                },
                 else => {
                     std.log.err("elem type = {} not implemented", .{elem_type});
                     return error.ValidatorElemTypeNotImplemented;
