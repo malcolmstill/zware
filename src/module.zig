@@ -674,6 +674,45 @@ pub const Module = struct {
                         } },
                     });
                 },
+                1 => {
+                    // read elemkind (only 0x00 == .FuncRef supported)
+                    _ = rd.readByte() catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = data_length,
+                        .mode = ElementSegmentMode.Passive,
+                    });
+                },
                 2 => {
                     const tableidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
