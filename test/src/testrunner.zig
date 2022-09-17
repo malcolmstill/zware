@@ -542,6 +542,7 @@ pub fn main() anyerror!void {
                     error.ValidatorMultipleMemories => continue,
                     error.LocalGetIndexOutOfBounds => continue,
                     error.LocalSetIndexOutOfBounds => continue,
+                    error.LocalTeeIndexOutOfBounds => continue,
                     error.ValidatorDataMemoryReferenceInvalid => continue,
                     error.ValidatorUnknownMemory => continue,
                     error.ValidatorMemoryMinGreaterThanMax => continue,
