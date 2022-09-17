@@ -153,13 +153,13 @@ pub const Instance = struct {
 
     fn instantiateMemories(self: *Instance) !void {
         // 3a. Initialise memories
-        for (self.module.memories.list.items) |mem_size, i| {
-            if (mem_size.import != null) {
+        for (self.module.memories.list.items) |memtype, i| {
+            if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
                 // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
-                if (!common.limitMatch(imported_mem.size(), imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
+                if (!common.limitMatch(imported_mem.size(), imported_mem.max, memtype.limits.min, memtype.limits.max)) return error.ImportedMemoryNotBigEnough;
             } else {
-                const handle = try self.store.addMemory(mem_size.min, mem_size.max);
+                const handle = try self.store.addMemory(memtype.limits.min, memtype.limits.max);
                 try self.memaddrs.append(handle);
             }
         }
@@ -167,12 +167,13 @@ pub const Instance = struct {
 
     fn instantiateTables(self: *Instance) !void {
         // 3b. Initialise tables
-        for (self.module.tables.list.items) |table_size, i| {
-            if (table_size.import != null) {
+        for (self.module.tables.list.items) |tabletype, i| {
+            if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
-                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) return error.ImportedTableNotBigEnough;
+                if (imported_table.reftype != tabletype.reftype) return error.ImportedTableRefTypeMismatch;
+                if (!common.limitMatch(imported_table.min, imported_table.max, tabletype.limits.min, tabletype.limits.max)) return error.ImportedTableNotBigEnough;
             } else {
-                const handle = try self.store.addTable(table_size.min, table_size.max);
+                const handle = try self.store.addTable(tabletype.reftype, tabletype.limits.min, tabletype.limits.max);
                 try self.tableaddrs.append(handle);
             }
         }

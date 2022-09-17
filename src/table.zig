@@ -1,12 +1,14 @@
 const std = @import("std");
 const mem = std.mem;
+const RefType = @import("common.zig").RefType;
 
 pub const Table = struct {
     data: []?usize,
     min: u32,
     max: ?u32,
+    reftype: RefType,
 
-    pub fn init(alloc: mem.Allocator, min: u32, max: ?u32) !Table {
+    pub fn init(alloc: mem.Allocator, reftype: RefType, min: u32, max: ?u32) !Table {
         const data = try alloc.alloc(?usize, min);
         mem.set(?usize, data, null);
 
@@ -14,6 +16,7 @@ pub const Table = struct {
             .data = data,
             .min = min,
             .max = max,
+            .reftype = reftype,
         };
     }
 

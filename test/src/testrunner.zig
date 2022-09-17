@@ -114,7 +114,7 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
 
     // Init spec test table
-    const table_handle = try store.addTable(10, 20);
+    const table_handle = try store.addTable(.FuncRef, 10, 20);
     const spectest_table_name = "table";
 
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
@@ -792,6 +792,7 @@ pub fn main() anyerror!void {
                 } else |err| switch (err) {
                     error.ImportedMemoryNotBigEnough => continue,
                     error.ImportedTableNotBigEnough => continue,
+                    error.ImportedTableRefTypeMismatch => continue,
                     error.ImportNotFound => continue,
                     error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
                     error.Overflow => continue,

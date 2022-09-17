@@ -25,7 +25,17 @@ pub fn limitMatch(min_imported: u32, max_imported: ?u32, min_stated: u32, max_st
 pub const Limit = struct {
     min: u32,
     max: ?u32,
+};
+
+pub const MemType = struct {
     import: ?u32,
+    limits: Limit,
+};
+
+pub const TableType = struct {
+    import: ?u32,
+    reftype: RefType,
+    limits: Limit,
 };
 
 pub const Mutability = enum(u8) {

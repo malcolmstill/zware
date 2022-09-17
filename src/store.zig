@@ -8,6 +8,7 @@ const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
+const RefType = @import("common.zig").RefType;
 const ValueType = @import("common.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
 
@@ -103,9 +104,9 @@ pub const ArrayListStore = struct {
         return &self.tables.items[handle];
     }
 
-    pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !usize {
+    pub fn addTable(self: *ArrayListStore, reftype: RefType, entries: u32, max: ?u32) !usize {
         const tbl_ptr = try self.tables.addOne();
-        tbl_ptr.* = try Table.init(self.alloc, entries, max);
+        tbl_ptr.* = try Table.init(self.alloc, reftype, entries, max);
         return self.tables.items.len - 1;
     }
 

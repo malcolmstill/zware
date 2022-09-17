@@ -20,6 +20,8 @@ const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
 const LimitType = common.LimitType;
+const MemType = common.MemType;
+const TableType = common.TableType;
 const Mutability = common.Mutability;
 const Global = common.Global;
 const Element = common.Element;
@@ -45,8 +47,8 @@ pub const Module = struct {
     types: Section(FuncType),
     imports: Section(Import),
     functions: Section(common.Function),
-    tables: Section(Limit),
-    memories: Section(Limit),
+    tables: Section(TableType),
+    memories: Section(MemType),
     globals: Section(Global),
     exports: Section(Export),
     start: ?u32,
@@ -69,8 +71,8 @@ pub const Module = struct {
             .types = Section(FuncType).init(alloc),
             .imports = Section(Import).init(alloc),
             .functions = Section(common.Function).init(alloc),
-            .tables = Section(Limit).init(alloc),
-            .memories = Section(Limit).init(alloc),
+            .tables = Section(TableType).init(alloc),
+            .memories = Section(MemType).init(alloc),
             .globals = Section(Global).init(alloc),
             .exports = Section(Export).init(alloc),
             .start = null,
@@ -361,7 +363,7 @@ pub const Module = struct {
     fn decodeTable(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
 
-        _ = rd.readEnum(RefType, .Little) catch |err| switch (err) {
+        const reftype = rd.readEnum(RefType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
@@ -378,10 +380,13 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                try self.tables.list.append(Limit{
-                    .min = min,
-                    .max = null,
+                try self.tables.list.append(TableType{
                     .import = import,
+                    .reftype = reftype,
+                    .limits = Limit{
+                        .min = min,
+                        .max = null,
+                    },
                 });
             },
             .MinMax => {
@@ -397,10 +402,13 @@ pub const Module = struct {
 
                 if (min > max) return error.ValidatorTableMinGreaterThanMax;
 
-                try self.tables.list.append(Limit{
-                    .min = min,
-                    .max = max,
+                try self.tables.list.append(TableType{
                     .import = import,
+                    .reftype = reftype,
+                    .limits = Limit{
+                        .min = min,
+                        .max = max,
+                    },
                 });
             },
         }
@@ -439,10 +447,12 @@ pub const Module = struct {
 
                 if (min > 65536) return error.ValidatorMemoryMinTooLarge;
 
-                try self.memories.list.append(Limit{
-                    .min = min,
-                    .max = null,
+                try self.memories.list.append(MemType{
                     .import = import,
+                    .limits = Limit{
+                        .min = min,
+                        .max = null,
+                    },
                 });
             },
             .MinMax => {
@@ -460,10 +470,12 @@ pub const Module = struct {
                 if (min > 65536) return error.ValidatorMemoryMinTooLarge;
                 if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
 
-                try self.memories.list.append(Limit{
-                    .min = min,
-                    .max = max,
+                try self.memories.list.append(MemType{
                     .import = import,
+                    .limits = Limit{
+                        .min = min,
+                        .max = max,
+                    },
                 });
             },
         }
