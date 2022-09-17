@@ -59,7 +59,7 @@ pub const Instance = struct {
         try self.instantiateMemories();
         try self.instantiateTables();
         try self.checkData();
-        try self.checkElements();
+        // try self.checkElements(); // FIXME: remove once all tests passing
         try self.instantiateData();
         try self.instantiateElements();
 
@@ -189,21 +189,22 @@ pub const Instance = struct {
         }
     }
 
-    fn checkElements(self: *Instance) !void {
-        // 4b. Check all elements
-        for (self.module.elements.list.items) |segment| {
-            switch (segment.mode) {
-                .Passive, .Declarative => continue,
-                .Active => |meta| {
-                    const table = try self.getTable(meta.tableidx);
-                    const offset = try self.invokeExpression(meta.offset, u32, .{});
+    // fn checkElements(self: *Instance) !void {
+    //     // 4b. Check all elements
+    //     for (self.module.elements.list.items) |segment| {
+    //         std.log.info("checkElements = {any}", .{segment});
+    //         switch (segment.mode) {
+    //             .Passive, .Declarative => continue,
+    //             .Active => |meta| {
+    //                 const table = try self.getTable(meta.tableidx);
+    //                 const offset = try self.invokeExpression(meta.offset, u32, .{});
 
-                    const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
-                    if (index > table.size()) return error.OutOfBoundsMemoryAccess;
-                },
-            }
-        }
-    }
+    //                 const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
+    //                 if (index > table.size()) return error.OutOfBoundsMemoryAccess;
+    //             },
+    //         }
+    //     }
+    // }
 
     fn instantiateData(self: *Instance) !void {
         // 5a. Mutate all data
@@ -224,6 +225,9 @@ pub const Instance = struct {
                 .Active => |meta| {
                     const table = try self.getTable(meta.tableidx);
                     const offset = try self.invokeExpression(meta.offset, u32, .{});
+
+                    const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
+                    if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
                     for (self.module.element_init_offsets.items[segment.init .. segment.init + segment.count]) |expr, j| {
                         const funcidx = try self.invokeExpression(expr, u32, .{});
