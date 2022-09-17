@@ -291,8 +291,12 @@ pub fn main() anyerror!void {
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
-                            const arg = try fmt.parseInt(u64, value.value, 10);
-                            in[i] = arg;
+                            if (mem.eql(u8, value.value, "null")) {
+                                in[i] = 0;
+                            } else {
+                                const arg = try fmt.parseInt(u64, value.value, 10);
+                                in[i] = arg;
+                            }
                         }
 
                         // Invoke the function
