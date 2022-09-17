@@ -198,7 +198,7 @@ pub const MiscOpcode = enum(u8) {
     @"memory.init",
     @"data.drop",
     @"memory.copy",
-    // @"memory.fill",
+    @"memory.fill",
     @"table.init" = 0x0c,
 };
 

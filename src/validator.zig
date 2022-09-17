@@ -177,6 +177,11 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
+            .@"memory.fill" => {
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+            },
             .@"table.init" => {
                 // validate x y?
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });

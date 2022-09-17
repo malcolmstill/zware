@@ -498,7 +498,7 @@ pub const MiscInstruction = union(MiscOpcode) {
         src_memidx: u8,
         dest_memidx: u8,
     },
-    // @"memory.fill": void,
+    @"memory.fill": u8,
     @"table.init": struct {
         tableidx: u32,
         elemidx: u32,
@@ -1453,6 +1453,12 @@ pub const ParseIterator = struct {
                             .src_memidx = src_memidx,
                             .dest_memidx = dest_memidx,
                         } } };
+                    },
+                    .@"memory.fill" => {
+                        const memidx = try opcode.readByte(&self.code);
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);

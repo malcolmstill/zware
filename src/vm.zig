@@ -2239,6 +2239,26 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"memory.fill" => {
+                const n = self.popOperand(u32);
+                const value = self.popOperand(u32);
+                const dest = self.popOperand(u32);
+
+                const memory = try self.inst.getMemory(0);
+                const mem_size = memory.sizeBytes();
+
+                if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+                if (n == 0) return;
+
+                var i: u32 = 0;
+                while (i < n) : (i += 1) {
+                    // FIXME: no check
+                    // FIXME: take single address which is u33 (for write / read)
+                    try memory.write(u8, 0, dest + i, @truncate(u8, value));
+                }
+
+                return dispatch(self, ip + 1, code);
+            },
             .@"table.init" => |table_init_meta| {
                 const tableidx = table_init_meta.tableidx;
                 const elemidx = table_init_meta.elemidx;
