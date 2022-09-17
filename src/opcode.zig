@@ -17,6 +17,7 @@ pub const Opcode = enum(u8) {
     call_indirect = 0x11,
     drop = 0x1a,
     select = 0x1b,
+    select_t = 0x1c,
     @"local.get" = 0x20,
     @"local.set" = 0x21,
     @"local.tee" = 0x22,

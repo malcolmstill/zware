@@ -807,6 +807,15 @@ pub const ParseIterator = struct {
             },
             .drop => rt_instr = Instruction.drop,
             .select => rt_instr = Instruction.select,
+            .select_t => {
+                const type_count = try opcode.readULEB128Mem(u32, &self.code);
+                if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
+                const valuetype_raw = try opcode.readULEB128Mem(i32, &self.code);
+                const valuetype = try std.meta.intToEnum(ValueType, valuetype_raw);
+
+                try self.validator.validateSelectT(valuetype);
+                rt_instr = Instruction.select;
+            },
             .@"global.get" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
 
@@ -1462,6 +1471,7 @@ pub const ParseIterator = struct {
             .@"local.tee",
             .misc,
             .@"ref.null",
+            .select_t,
             => {},
             else => try self.validator.validate(instr),
         }

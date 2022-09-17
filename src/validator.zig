@@ -38,6 +38,13 @@ pub const Validator = struct {
         try v.pushControlFrame(.loop, in_operands, out_operands);
     }
 
+    pub fn validateSelectT(v: *Validator, valuetype: ValueType) !void {
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = valuetype });
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = valuetype });
+        try v.pushOperand(ValueTypeUnknown{ .Known = valuetype });
+    }
+
     pub fn validateIf(v: *Validator, in_operands: []const ValueType, out_operands: []const ValueType) !void {
         _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
         try v.popOperands(in_operands);
@@ -191,6 +198,7 @@ pub const Validator = struct {
             .@"local.tee",
             .@"ref.null",
             .misc,
+            .select_t,
             => {
                 // These instructions are handled separately
                 unreachable;
