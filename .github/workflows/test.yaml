@@ -22,7 +22,7 @@ jobs:
       - run: zig build --build-file test/build.zig --prefix ./
       - run: cp bin/testrunner testrunner
       - run: cp test/testsuite-generated/* ./
-      - run: sh test/run-generated.sh
+      - run: bash test/run-generated.sh
       # - run: ./testrunner address.json
       # - run: ./testrunner align.json
       # - run: ./testrunner binary-leb128.json
