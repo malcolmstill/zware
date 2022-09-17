@@ -361,11 +361,10 @@ pub const Module = struct {
     fn decodeTable(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
 
-        const tag = rd.readByte() catch |err| switch (err) {
+        _ = rd.readEnum(RefType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
-        if (tag != 0x70) return error.ExpectedTable;
 
         const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
