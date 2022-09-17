@@ -156,7 +156,8 @@ pub const Instance = struct {
         for (self.module.memories.list.items) |mem_size, i| {
             if (mem_size.import != null) {
                 const imported_mem = try self.getMemory(i);
-                if (!common.limitMatch(imported_mem.min, imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
+                // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
+                if (!common.limitMatch(imported_mem.size(), imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
             } else {
                 const handle = try self.store.addMemory(mem_size.min, mem_size.max);
                 try self.memaddrs.append(handle);

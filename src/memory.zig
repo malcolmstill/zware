@@ -21,9 +21,8 @@ pub const Memory = struct {
         };
     }
 
-    // TODO: is usize correct here?
-    pub fn size(self: *Memory) usize {
-        return self.data.items.len;
+    pub fn size(self: *Memory) u32 {
+        return @truncate(u32, self.data.items.len);
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
