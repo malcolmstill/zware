@@ -207,6 +207,7 @@ const OpcodeMeta = struct {
     offset: usize, // offset from start of function
 };
 
+// Only used by findFunctionEnd / findExprEnd...can we get rid of this (and only use ParseIterator)?
 pub const OpcodeIterator = struct {
     function: []const u8,
     code: []const u8,
@@ -242,6 +243,11 @@ pub const OpcodeIterator = struct {
             .block,
             .loop,
             => _ = try readULEB128Mem(u32, &self.code),
+            .select_t => {
+                const type_count = try readULEB128Mem(u32, &self.code);
+                if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
+                _ = try readULEB128Mem(i32, &self.code);
+            },
             .@"memory.size", .@"memory.grow" => {
                 const reserved = try readByte(&self.code);
                 if (reserved != 0) return error.MalformedMemoryReserved;
