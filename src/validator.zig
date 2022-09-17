@@ -617,10 +617,14 @@ pub const Validator = struct {
     }
 };
 
-fn isNum(_: ValueTypeUnknown) bool {
-    // TODO: for version 1.1 value type may be ref type
-    // so we'll have to update this:
-    return true;
+fn isNum(valuetype: ValueTypeUnknown) bool {
+    return switch (valuetype) {
+        .Unknown => true,
+        .Known => |k| switch (k) {
+            .I32, .I64, .F32, .F64 => true,
+            else => false,
+        },
+    };
 }
 
 fn valueTypeEqual(v1: ValueTypeUnknown, v2: ValueTypeUnknown) bool {

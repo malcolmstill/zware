@@ -574,6 +574,7 @@ pub fn main() anyerror!void {
                     error.ValidatorElseBranchExpected => continue,
                     error.ValidatorMutableGlobalInConstantExpr => continue,
                     error.OnlyOneSelectTTypeSupported => continue,
+                    error.ExpectingBothNum => continue,
                     else => {
                         std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
