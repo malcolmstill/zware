@@ -58,7 +58,7 @@ pub const Instance = struct {
         try self.instantiateGlobals();
         try self.instantiateMemories();
         try self.instantiateTables();
-        try self.checkData();
+        // try self.checkData();
         // try self.checkElements(); // FIXME: remove once all tests passing
         try self.instantiateData();
         try self.instantiateElements();
@@ -179,16 +179,16 @@ pub const Instance = struct {
         }
     }
 
-    fn checkData(self: *Instance) !void {
-        // 4a. Check all data
-        for (self.module.datas.list.items) |data| {
-            const handle = self.memaddrs.items[data.index];
-            const memory = try self.store.memory(handle);
+    // fn checkData(self: *Instance) !void {
+    //     // 4a. Check all data
+    //     for (self.module.datas.list.items) |data| {
+    //         const handle = self.memaddrs.items[data.index];
+    //         const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.start, u32, .{});
-            try memory.check(offset, data.data);
-        }
-    }
+    //         const offset = try self.invokeExpression(data.start, u32, .{});
+    //         try memory.check(offset, data.data);
+    //     }
+    // }
 
     // fn checkElements(self: *Instance) !void {
     //     // 4b. Check all elements
