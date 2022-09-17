@@ -197,7 +197,7 @@ pub const MiscOpcode = enum(u8) {
     @"i64.trunc_sat_f64_u",
     @"memory.init",
     @"data.drop",
-    // @"memory.copy",
+    @"memory.copy",
     // @"memory.fill",
     @"table.init" = 0x0c,
 };
@@ -219,6 +219,7 @@ pub const OpcodeIterator = struct {
         };
     }
 
+    // FIXME: memory.copy support
     pub fn next(self: *OpcodeIterator) !?OpcodeMeta {
         if (self.code.len == 0) return null;
 

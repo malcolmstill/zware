@@ -21,8 +21,13 @@ pub const Memory = struct {
         };
     }
 
+    // Return the size of the memory (in pages)
     pub fn size(self: *Memory) u32 {
         return @truncate(u32, self.data.items.len);
+    }
+
+    pub fn sizeBytes(self: *Memory) u33 {
+        return PAGE_SIZE * self.size();
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
