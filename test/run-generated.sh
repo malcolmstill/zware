@@ -9,7 +9,7 @@ pushd $GENERATED_DIR
 
 $BIN_DIR/testrunner address.json
 $BIN_DIR/testrunner align.json
-# $BIN_DIR/testrunner binary-leb128.json
+$BIN_DIR/testrunner binary-leb128.json
 $BIN_DIR/testrunner binary.json
 $BIN_DIR/testrunner block.json
 $BIN_DIR/testrunner br_if.json
