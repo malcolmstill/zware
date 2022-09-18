@@ -121,11 +121,22 @@ pub const Export = struct {
 
 pub const Element = struct {};
 
-pub const Segment = struct {
-    index: u32,
-    start: usize, // Initialisation code start
-    count: u32, // Number of elements in data (useful when data is not []u8)
+pub const DataSegment = struct {
     data: []const u8,
+    mode: DataSegmentMode,
+};
+
+pub const DataSegmentType = enum {
+    Passive,
+    Active,
+};
+
+pub const DataSegmentMode = union(DataSegmentType) {
+    Passive: void,
+    Active: struct {
+        memidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
 };
 
 pub const ElementSegment = struct {

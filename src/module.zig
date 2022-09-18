@@ -26,7 +26,8 @@ const Mutability = common.Mutability;
 const Global = common.Global;
 const Element = common.Element;
 const Code = function.Code;
-const Segment = common.Segment;
+const DataSegment = common.DataSegment;
+const DataSegmentMode = common.DataSegmentMode;
 const ElementSegment = common.ElementSegment;
 const ElementSegmentMode = common.ElementSegmentMode;
 const Tag = common.Tag;
@@ -55,7 +56,7 @@ pub const Module = struct {
     elements: Section(ElementSegment),
     element_init_offsets: ArrayList(usize),
     codes: Section(Code),
-    datas: Section(Segment),
+    datas: Section(DataSegment),
     parsed_code: ArrayList(Instruction),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
@@ -79,7 +80,7 @@ pub const Module = struct {
             .elements = Section(ElementSegment).init(alloc),
             .element_init_offsets = ArrayList(usize).init(alloc),
             .codes = Section(Code).init(alloc),
-            .datas = Section(Segment).init(alloc),
+            .datas = Section(DataSegment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
@@ -1045,41 +1046,66 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const mem_idx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            const data_section_type = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
-            if (mem_idx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+            switch (data_section_type) {
+                0 => {
+                    const memidx = 0;
 
-            const expr_start = rd.context.pos;
-            const expr = self.module[expr_start..];
-            const meta = try opcode.findExprEnd(expr);
+                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
 
-            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            const data_start = rd.context.pos;
-            rd.skipBytes(data_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            try self.datas.list.append(Segment{
-                .index = mem_idx,
-                .start = parsed_code.start,
-                .count = data_length,
-                .data = self.module[data_start..rd.context.pos],
-            });
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.datas.list.append(DataSegment{
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = DataSegmentMode{ .Active = .{
+                            .memidx = 0,
+                            .offset = parsed_code.start,
+                        } },
+                    });
+                },
+                1 => {
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    try self.datas.list.append(DataSegment{
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = .Passive,
+                    });
+                },
+                else => return error.UnknownDataSectionType,
+            }
         }
     }
 

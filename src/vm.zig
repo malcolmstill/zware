@@ -2201,9 +2201,27 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
                 return dispatch(self, ip + 1, code);
             },
-            .@"memory.init" => |_| {
-                std.log.warn("memory.init not implemented", .{});
-                return error.Trap;
+            .@"memory.init" => |meta| {
+                const n = self.popOperand(u32);
+                const src = self.popOperand(u32);
+                const dest = self.popOperand(u32);
+
+                const memory = try self.inst.getMemory(meta.memidx);
+                const mem_size = memory.sizeBytes();
+                const data = self.inst.module.datas.list.items[meta.dataidx];
+
+                if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+                if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+                if (n == 0) {
+                    return dispatch(self, ip + 1, code);
+                }
+
+                var i: u32 = 0;
+                while (i < n) : (i += 1) {
+                    try memory.write(u8, 0, dest + i, data.data[i]);
+                }
+
+                return dispatch(self, ip + 1, code);
             },
             .@"data.drop" => |_| {
                 std.log.warn("data.drop not implemented", .{});

@@ -210,11 +210,16 @@ pub const Instance = struct {
     fn instantiateData(self: *Instance) !void {
         // 5a. Mutate all data
         for (self.module.datas.list.items) |data| {
-            const handle = self.memaddrs.items[data.index];
-            const memory = try self.store.memory(handle);
+            switch (data.mode) {
+                .Passive => continue,
+                .Active => |active| {
+                    const handle = self.memaddrs.items[active.memidx];
+                    const memory = try self.store.memory(handle);
 
-            const offset = try self.invokeExpression(data.start, u32, .{});
-            try memory.copy(offset, data.data);
+                    const offset = try self.invokeExpression(active.offset, u32, .{});
+                    try memory.copy(offset, data.data);
+                },
+            }
         }
     }
 

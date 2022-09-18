@@ -492,7 +492,10 @@ pub const MiscInstruction = union(MiscOpcode) {
     @"i64.trunc_sat_f32_u": void,
     @"i64.trunc_sat_f64_s": void,
     @"i64.trunc_sat_f64_u": void,
-    @"memory.init": u32,
+    @"memory.init": struct {
+        dataidx: u32,
+        memidx: u32,
+    },
     @"data.drop": u32,
     @"memory.copy": struct {
         src_memidx: u8,
@@ -1422,7 +1425,7 @@ pub const ParseIterator = struct {
             },
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
-                std.log.info("misc opcode = {}", .{version});
+                // std.log.info("misc opcode = {}", .{version});
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
 
@@ -1437,7 +1440,16 @@ pub const ParseIterator = struct {
                     .@"i64.trunc_sat_f64_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f64_u" },
                     .@"memory.init" => {
                         const dataidx = try opcode.readULEB128Mem(u32, &self.code);
-                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.init" = dataidx } };
+                        const memidx = try opcode.readByte(&self.code);
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+                        rt_instr = Instruction{
+                            .misc = MiscInstruction{
+                                .@"memory.init" = .{
+                                    .dataidx = dataidx,
+                                    .memidx = memidx,
+                                },
+                            },
+                        };
                     },
                     .@"data.drop" => {
                         const dataidx = try opcode.readULEB128Mem(u32, &self.code);
