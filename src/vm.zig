@@ -2219,7 +2219,9 @@ pub const VirtualMachine = struct {
 
                 if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
                 if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (n == 0) return;
+                if (n == 0) {
+                    return dispatch(self, ip + 1, code);
+                }
 
                 if (dest <= src) {
                     var i: u32 = 0;
@@ -2248,7 +2250,9 @@ pub const VirtualMachine = struct {
                 const mem_size = memory.sizeBytes();
 
                 if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (n == 0) return;
+                if (n == 0) {
+                    return dispatch(self, ip + 1, code);
+                }
 
                 var i: u32 = 0;
                 while (i < n) : (i += 1) {
