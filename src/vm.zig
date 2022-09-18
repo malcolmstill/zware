@@ -2210,7 +2210,7 @@ pub const VirtualMachine = struct {
                 const mem_size = memory.sizeBytes();
                 const data = self.inst.module.datas.list.items[meta.dataidx];
 
-                if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+                if (@as(u33, src) + @as(u33, n) > data.data.len) return error.OutOfBoundsMemoryAccess;
                 if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
                 if (n == 0) {
                     return dispatch(self, ip + 1, code);
@@ -2218,14 +2218,14 @@ pub const VirtualMachine = struct {
 
                 var i: u32 = 0;
                 while (i < n) : (i += 1) {
-                    try memory.write(u8, 0, dest + i, data.data[i]);
+                    try memory.write(u8, 0, dest + i, data.data[src + i]);
                 }
 
                 return dispatch(self, ip + 1, code);
             },
             .@"data.drop" => |_| {
-                std.log.warn("data.drop not implemented", .{});
-                return error.Trap;
+                // TODO: implement data.drop (as an optimisation only)
+                return dispatch(self, ip + 1, code);
             },
             .@"memory.copy" => {
                 const n = self.popOperand(u32);

@@ -163,14 +163,12 @@ pub const Validator = struct {
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I64 });
             },
             .@"memory.init" => {
-                if (!v.dataCountSection) return error.InstructionRequiresDataCountSection;
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"data.drop" => {
-                // FIXME: check the value of dataCountSection against dataidx of data.drop
-                if (!v.dataCountSection) return error.InstructionRequiresDataCountSection;
+                //
             },
             .@"memory.copy" => {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
@@ -183,7 +181,6 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"table.init" => {
-                // validate x y?
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });

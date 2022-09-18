@@ -1441,6 +1441,10 @@ pub const ParseIterator = struct {
                     .@"memory.init" => {
                         const dataidx = try opcode.readULEB128Mem(u32, &self.code);
                         const memidx = try opcode.readByte(&self.code);
+
+                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        if (!(dataidx < data_count)) return error.InvalidDataIndex;
+
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                         rt_instr = Instruction{
                             .misc = MiscInstruction{
@@ -1453,6 +1457,10 @@ pub const ParseIterator = struct {
                     },
                     .@"data.drop" => {
                         const dataidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        if (!(dataidx < data_count)) return error.InvalidDataIndex;
+
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"data.drop" = dataidx } };
                     },
                     .@"memory.copy" => {

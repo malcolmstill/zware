@@ -219,7 +219,6 @@ pub const OpcodeIterator = struct {
         };
     }
 
-    // FIXME: memory.copy support
     pub fn next(self: *OpcodeIterator) !?OpcodeMeta {
         if (self.code.len == 0) return null;
 
@@ -299,7 +298,28 @@ pub const OpcodeIterator = struct {
             .@"ref.func" => {
                 _ = try readULEB128Mem(u32, &self.code);
             },
-            .misc => self.code = self.code[1..],
+            .misc => {
+                const misc_instruction_code = try readULEB128Mem(u32, &self.code);
+                const misc_instruction = std.meta.intToEnum(MiscOpcode, misc_instruction_code) catch return error.IllegalMiscOpcode;
+
+                switch (misc_instruction) {
+                    .@"memory.init" => {
+                        _ = try readULEB128Mem(u32, &self.code); // dataidx
+                        _ = try readByte(&self.code); // memidx
+                    },
+                    .@"memory.copy" => {
+                        _ = try readByte(&self.code); // src memidx
+                        _ = try readByte(&self.code); // dest memidx
+                    },
+                    .@"memory.fill" => {
+                        _ = try readByte(&self.code); // memidx
+                    },
+                    .@"data.drop" => {
+                        _ = try readULEB128Mem(u32, &self.code); // dataidx
+                    },
+                    else => {},
+                }
+            },
             else => {},
         }
 
