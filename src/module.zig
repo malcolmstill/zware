@@ -1104,7 +1104,48 @@ pub const Module = struct {
                         .mode = .Passive,
                     });
                 },
-                else => return error.UnknownDataSectionType,
+                2 => {
+                    const memidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
+
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.datas.list.append(DataSegment{
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = DataSegmentMode{ .Active = .{
+                            .memidx = 0,
+                            .offset = parsed_code.start,
+                        } },
+                    });
+                },
+                else => {
+                    std.log.err("unknown data section type {}", .{data_section_type});
+                    return error.UnknownDataSectionType;
+                },
             }
         }
     }
