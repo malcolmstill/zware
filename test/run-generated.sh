@@ -55,7 +55,10 @@ $BIN_DIR/testrunner local_get.json
 $BIN_DIR/testrunner local_set.json
 $BIN_DIR/testrunner local_tee.json
 $BIN_DIR/testrunner loop.json
+$BIN_DIR/testrunner memory_copy.json
+$BIN_DIR/testrunner memory_fill.json
 $BIN_DIR/testrunner memory_grow.json
+$BIN_DIR/testrunner memory_init.json
 $BIN_DIR/testrunner memory_redundancy.json
 $BIN_DIR/testrunner memory_size.json
 $BIN_DIR/testrunner memory_trap.json
