@@ -247,34 +247,29 @@ pub const Instance = struct {
 
     pub fn getFunc(self: *Instance, index: usize) !Function {
         if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        const handle = self.funcaddrs.items[index];
-        return try self.store.function(handle);
-    }
-
-    pub fn funcHandle(self: *Instance, index: usize) !usize {
-        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        return self.funcaddrs.items[index];
+        const funcaddr = self.funcaddrs.items[index];
+        return try self.store.function(funcaddr);
     }
 
     // Lookup a memory in store via the modules index
     pub fn getMemory(self: *Instance, index: usize) !*Memory {
         // TODO: with a verified program we shouldn't need to check this
         if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
-        const handle = self.memaddrs.items[index];
-        return try self.store.memory(handle);
+        const memaddr = self.memaddrs.items[index];
+        return try self.store.memory(memaddr);
     }
 
     pub fn getTable(self: *Instance, index: usize) !*Table {
         // TODO: with a verified program we shouldn't need to check this
         if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
-        const handle = self.tableaddrs.items[index];
-        return try self.store.table(handle);
+        const tableaddr = self.tableaddrs.items[index];
+        return try self.store.table(tableaddr);
     }
 
     pub fn getGlobal(self: *Instance, index: usize) !*Global {
         if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
-        const handle = self.globaladdrs.items[index];
-        return try self.store.global(handle);
+        const globaladdr = self.globaladdrs.items[index];
+        return try self.store.global(globaladdr);
     }
 
     // invoke
