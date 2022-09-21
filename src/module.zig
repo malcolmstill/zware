@@ -62,6 +62,7 @@ pub const Module = struct {
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
     dataCount: ?u32 = null,
+    references: ArrayList(u32),
 
     pub fn init(alloc: mem.Allocator, module: []const u8) Module {
         return Module{
@@ -85,6 +86,7 @@ pub const Module = struct {
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .function_index_start = null,
+            .references = ArrayList(u32).init(alloc),
         };
     }
 
@@ -584,7 +586,10 @@ pub const Module = struct {
             };
 
             switch (tag) {
-                .Func => if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction,
+                .Func => {
+                    if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction;
+                    try self.references.append(index);
+                },
                 .Table => if (index >= self.tables.list.items.len) return error.ValidatorExportUnknownTable,
                 .Mem => if (index >= self.memories.list.items.len) return error.ValidatorExportUnknownMemory,
                 .Global => if (index >= self.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
@@ -665,6 +670,8 @@ pub const Module = struct {
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
+                        try self.references.append(funcidx);
+
                         const init_offset = self.parsed_code.items.len;
                         try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
                         try self.parsed_code.append(Instruction.@"return");
@@ -711,6 +718,8 @@ pub const Module = struct {
                         };
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
                         try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
@@ -767,6 +776,8 @@ pub const Module = struct {
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
+                        try self.references.append(funcidx);
+
                         const init_offset = self.parsed_code.items.len;
                         try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
                         try self.parsed_code.append(Instruction.@"return");
@@ -810,6 +821,8 @@ pub const Module = struct {
                         };
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
                         try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });

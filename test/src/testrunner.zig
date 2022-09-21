@@ -292,7 +292,7 @@ pub fn main() anyerror!void {
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
                             if (mem.eql(u8, value.value, "null")) {
-                                in[i] = 0;
+                                in[i] = VirtualMachine.REF_NULL;
                             } else {
                                 const arg = try fmt.parseInt(u64, value.value, 10);
                                 in[i] = arg;
@@ -331,13 +331,14 @@ pub fn main() anyerror!void {
                                         std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                                         std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
                                     }
+                                    std.log.info("out = {any}", .{out});
                                     if (result_value != out[expected.len - i - 1]) {
                                         return error.TestsuiteTestFailureTrapResult;
                                     }
                                 },
                                 .FuncRef, .ExternRef => {
                                     if (mem.eql(u8, result.value, "null")) {
-                                        if (out[expected.len - i - 1] != 0) {
+                                        if (out[expected.len - i - 1] != VirtualMachine.REF_NULL) {
                                             return error.TestsuiteTestFailureTrapResult;
                                         }
                                     } else {
@@ -577,6 +578,8 @@ pub fn main() anyerror!void {
                     error.ExpectingBothNum => continue,
                     error.InstructionRequiresDataCountSection => continue,
                     error.InvalidDataIndex => continue,
+                    error.ValidatorInvalidFunction => continue,
+                    error.ValidatorUnreferencedFunction => continue,
                     else => {
                         std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

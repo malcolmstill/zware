@@ -38,6 +38,9 @@ pub const Instance = struct {
     memaddrs: ArrayList(usize),
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
+    // TODO: exports (this was in 1.0...why didn't we need it)
+    // TODO: elemaddrs
+    // TODO: dataaddrs
 
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{

@@ -65,6 +65,9 @@ $BIN_DIR/testrunner memory_trap.json
 $BIN_DIR/testrunner memory.json
 $BIN_DIR/testrunner names.json
 $BIN_DIR/testrunner nop.json
+$BIN_DIR/testrunner ref_func.json
+$BIN_DIR/testrunner ref_is_null.json
+$BIN_DIR/testrunner ref_null.json
 $BIN_DIR/testrunner return.json
 $BIN_DIR/testrunner select.json
 $BIN_DIR/testrunner skip-stack-guard-page.json

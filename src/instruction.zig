@@ -10,6 +10,7 @@ const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const RefType = @import("common.zig").RefType;
+const ValueTypeUnknown = @import("validator.zig").ValueTypeUnknown;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
@@ -36,6 +37,8 @@ pub const RuntimeOpcode = enum(u8) {
     @"local.tee" = 0x22,
     @"global.get" = 0x23,
     @"global.set" = 0x24,
+    @"table.get" = 0x25,
+    @"table.set" = 0x26,
     @"i32.load" = 0x28,
     @"i64.load" = 0x29,
     @"f32.load" = 0x2a,
@@ -251,6 +254,8 @@ pub const Instruction = union(RuntimeOpcode) {
     @"local.tee": u32,
     @"global.get": u32,
     @"global.set": u32,
+    @"table.get": u32, // tableidx
+    @"table.set": u32, // tableidx
     @"i32.load": struct {
         alignment: u32,
         offset: u32,
@@ -528,6 +533,7 @@ pub const ParseIterator = struct {
     locals: ?[]LocalType,
     continuation_stack: []usize,
     continuation_stack_ptr: usize,
+    is_constant: bool,
 
     pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize, is_constant: bool) ParseIterator {
         return ParseIterator{
@@ -544,6 +550,7 @@ pub const ParseIterator = struct {
             .validator = Validator.init(module.alloc, module.dataCount != null, is_constant),
             .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
+            .is_constant = is_constant,
         };
     }
 
@@ -841,6 +848,38 @@ pub const ParseIterator = struct {
                 try self.validator.validateGlobalSet(global);
 
                 rt_instr = Instruction{ .@"global.set" = index };
+            },
+            .@"table.get" => {
+                const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
+
+                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
+                const reftype: ValueType = switch (table.reftype) {
+                    .FuncRef => .FuncRef,
+                    .ExternRef => .ExternRef,
+                };
+
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try self.validator.pushOperand(ValueTypeUnknown{ .Known = reftype });
+
+                rt_instr = Instruction{ .@"table.get" = tableidx };
+            },
+            .@"table.set" => {
+                const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
+
+                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
+                const reftype: ValueType = switch (table.reftype) {
+                    .FuncRef => .FuncRef,
+                    .ExternRef => .ExternRef,
+                };
+
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+
+                rt_instr = Instruction{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
@@ -1413,14 +1452,28 @@ pub const ParseIterator = struct {
                 const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
 
                 try self.validator.validateRefNull(reftype);
-                std.log.info("ref.null reftype = {}", .{reftype});
                 rt_instr = Instruction{ .@"ref.null" = reftype };
             },
             .@"ref.is_null" => rt_instr = Instruction.@"ref.is_null",
             .@"ref.func" => {
                 const funcidx = try opcode.readULEB128Mem(u32, &self.code);
-                // validate funcidx exists?
-                std.log.info("ref.func funcidx = {}", .{funcidx});
+                if (funcidx >= self.module.functions.list.items.len) return error.ValidatorInvalidFunction;
+
+                // Gather funcidx* from constant expressions
+                if (self.is_constant) {
+                    try self.module.references.append(funcidx);
+                } else {
+                    // For functions, check that the funcidx has already been referenced
+                    var in_references = false;
+                    for (self.module.references.items) |ref_funcidx| {
+                        if (funcidx == ref_funcidx) {
+                            in_references = true;
+                        }
+                    }
+
+                    if (!in_references) return error.ValidatorUnreferencedFunction;
+                }
+
                 rt_instr = Instruction{ .@"ref.func" = funcidx };
             },
             .misc => {
@@ -1512,6 +1565,8 @@ pub const ParseIterator = struct {
             .misc,
             .@"ref.null",
             .select_t,
+            .@"table.get",
+            .@"table.set",
             => {},
             else => try self.validator.validate(instr),
         }

@@ -72,7 +72,7 @@ pub const VirtualMachine = struct {
     const lookup = [256]InstructionFunction{
         @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
         call,               call_indirect,      fast_call,            impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             select,                 impl_ni,                impl_ni,                impl_ni,
-        @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        impl_ni,              impl_ni,           impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
+        @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        @"table.get",         @"table.set",      impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
         @"i64.load8_s",     @"i64.load8_u",     @"i64.load16_s",      @"i64.load16_u",      @"i64.load32_s",      @"i64.load32_u",      @"i32.store",      @"i64.store",         @"f32.store",         @"f64.store",         @"i32.store8",        @"i32.store16",     @"i64.store8",          @"i64.store16",         @"i64.store32",         @"memory.size",
         @"memory.grow",     @"i32.const",       @"i64.const",         @"f32.const",         @"f64.const",         @"i32.eqz",           @"i32.eq",         @"i32.ne",            @"i32.lt_s",          @"i32.lt_u",          @"i32.gt_s",          @"i32.gt_u",        @"i32.le_s",            @"i32.le_u",            @"i32.ge_s",            @"i32.ge_u",
         @"i64.eqz",         @"i64.eq",          @"i64.ne",            @"i64.lt_s",          @"i64.lt_u",          @"i64.gt_s",          @"i64.gt_u",       @"i64.le_s",          @"i64.le_u",          @"i64.ge_s",          @"i64.ge_u",          @"f32.eq",          @"f32.ne",              @"f32.lt",              @"f32.gt",              @"f32.le",
@@ -83,7 +83,7 @@ pub const VirtualMachine = struct {
         @"f64.add",         @"f64.sub",         @"f64.mul",           @"f64.div",           @"f64.min",           @"f64.max",           @"f64.copysign",   @"i32.wrap_i64",      @"i32.trunc_f32_s",   @"i32.trunc_f32_u",   @"i32.trunc_f64_s",   @"i32.trunc_f64_u", @"i64.extend_i32_s",    @"i64.extend_i32_u",    @"i64.trunc_f32_s",     @"i64.trunc_f32_u",
         @"i64.trunc_f64_s", @"i64.trunc_f64_u", @"f32.convert_i32_s", @"f32.convert_i32_u", @"f32.convert_i64_s", @"f32.convert_i64_u", @"f32.demote_f64", @"f64.convert_i32_s", @"f64.convert_i32_u", @"f64.convert_i64_s", @"f64.convert_i64_u", @"f64.promote_f32", @"i32.reinterpret_f32", @"i64.reinterpret_f64", @"f32.reinterpret_i32", @"f64.reinterpret_i64",
         @"i32.extend8_s",   @"i32.extend16_s",  @"i64.extend8_s",     @"i64.extend16_s",    @"i64.extend32_s",    impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        @"ref.null",        impl_ni,            @"ref.func",          impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
+        @"ref.null",        @"ref.is_null",     @"ref.func",          impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            misc,                   impl_ni,                impl_ni,                impl_ni,
     };
@@ -93,6 +93,8 @@ pub const VirtualMachine = struct {
 
         return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
+
+    pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
     fn impl_ni(_: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         std.debug.print("not implemented: {any}\n", .{code[ip]});
@@ -422,6 +424,34 @@ pub const VirtualMachine = struct {
         const global = try self.inst.getGlobal(global_index);
 
         global.value = value;
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.get"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
+        const tableidx = code[ip].@"table.get";
+        const table = try self.inst.getTable(tableidx);
+
+        const index = self.popOperand(u32);
+        const ref = try table.get(index);
+
+        if (ref) |r| {
+            self.pushOperandNoCheck(u64, r);
+        } else {
+            self.pushOperandNoCheck(u64, REF_NULL);
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.set"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
+        const tableidx = code[ip].@"table.set";
+        const table = try self.inst.getTable(tableidx);
+
+        const ref = self.popOperand(u64);
+        const index = self.popOperand(u32);
+
+        try table.set(index, ref);
 
         return dispatch(self, ip + 1, code);
     }
@@ -2016,7 +2046,19 @@ pub const VirtualMachine = struct {
     }
 
     fn @"ref.null"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        self.pushOperandNoCheck(u64, 0); // ?
+        self.pushOperandNoCheck(u64, REF_NULL);
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"ref.is_null"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
+        const value = self.popOperand(u64);
+
+        if (value == REF_NULL) {
+            self.pushOperandNoCheck(u64, 1);
+        } else {
+            self.pushOperandNoCheck(u64, 0);
+        }
 
         return dispatch(self, ip + 1, code);
     }
@@ -2024,7 +2066,9 @@ pub const VirtualMachine = struct {
     fn @"ref.func"(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
         const funcidx = code[ip].@"ref.func";
 
-        self.pushOperandNoCheck(u64, funcidx);
+        const ref = self.inst.funcaddrs.items[funcidx]; // Not sure about this at all, this could still coincidentally be zero?
+
+        self.pushOperandNoCheck(u64, ref);
 
         return dispatch(self, ip + 1, code);
     }

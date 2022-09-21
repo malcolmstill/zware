@@ -206,6 +206,8 @@ pub const Validator = struct {
             .@"ref.null",
             .misc,
             .select_t,
+            .@"table.get",
+            .@"table.set",
             => {
                 // These instructions are handled separately
                 unreachable;
@@ -525,7 +527,7 @@ pub const Validator = struct {
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .F64 });
             },
             .@"ref.is_null" => {
-                _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
+                _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown); // Is this right? Do we need UnknownRefType + UnknownValueType
                 _ = try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"ref.func" => {
@@ -534,7 +536,7 @@ pub const Validator = struct {
         }
     }
 
-    fn pushOperand(v: *Validator, t: ValueTypeUnknown) !void {
+    pub fn pushOperand(v: *Validator, t: ValueTypeUnknown) !void {
         defer v.trackMaxDepth();
         try v.op_stack.append(t);
     }
@@ -549,7 +551,7 @@ pub const Validator = struct {
         return v.op_stack.pop();
     }
 
-    fn popOperandExpecting(v: *Validator, expected: ValueTypeUnknown) !ValueTypeUnknown {
+    pub fn popOperandExpecting(v: *Validator, expected: ValueTypeUnknown) !ValueTypeUnknown {
         const actual = try v.popOperand();
 
         const actual_type: ValueType = switch (actual) {
@@ -656,7 +658,7 @@ const ValueTypeUnknownTag = enum {
     Unknown,
 };
 
-const ValueTypeUnknown = union(ValueTypeUnknownTag) {
+pub const ValueTypeUnknown = union(ValueTypeUnknownTag) {
     Known: ValueType,
     Unknown: void,
 };
