@@ -227,9 +227,9 @@ pub const VirtualMachine = struct {
     }
 
     fn call(self: *VirtualMachine, ip: usize, code: []Instruction) WasmError!void {
-        const function_index = code[ip].call;
+        const funcidx = code[ip].call;
 
-        const function = try self.inst.getFunc(function_index);
+        const function = try self.inst.getFunc(funcidx);
         var next_ip = ip;
 
         switch (function) {

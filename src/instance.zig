@@ -236,18 +236,18 @@ pub const Instance = struct {
                     if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
                     for (self.module.element_init_offsets.items[segment.init .. segment.init + segment.count]) |expr, j| {
-                        const funcidx = try self.invokeExpression(expr, u32, .{});
+                        const funcaddr = try self.invokeExpression(expr, u32, .{});
 
-                        try table.set(@intCast(u32, offset + j), try self.funcHandle(funcidx));
+                        try table.set(@intCast(u32, offset + j), funcaddr);
                     }
                 },
             }
         }
     }
 
-    pub fn getFunc(self: *Instance, index: usize) !Function {
-        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        const funcaddr = self.funcaddrs.items[index];
+    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
+        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        const funcaddr = self.funcaddrs.items[funcidx];
         return try self.store.function(funcaddr);
     }
 
