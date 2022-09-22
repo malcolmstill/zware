@@ -511,6 +511,9 @@ pub const MiscInstruction = union(MiscOpcode) {
         elemidx: u32,
         tableidx: u32,
     },
+    @"elem.drop": struct {
+        elemidx: u32,
+    },
     @"table.copy": struct {
         src_tableidx: u32,
         dest_tableidx: u32,
@@ -1547,6 +1550,13 @@ pub const ParseIterator = struct {
                             .elemidx = elemidx,
                             .tableidx = tableidx,
                         } } };
+                    },
+                    .@"elem.drop" => {
+                        const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorUnknownElement;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
                         const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);

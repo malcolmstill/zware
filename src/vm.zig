@@ -2347,6 +2347,10 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"elem.drop" => |_| {
+                // TODO: implement elem.drop (as an optimisation only)
+                return dispatch(self, ip + 1, code);
+            },
             .@"table.copy" => |misc_meta| {
                 const src_tableidx = misc_meta.src_tableidx;
                 const dest_tableidx = misc_meta.dest_tableidx;

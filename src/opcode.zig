@@ -202,6 +202,7 @@ pub const MiscOpcode = enum(u8) {
     @"memory.copy" = 0x0a,
     @"memory.fill" = 0x0b,
     @"table.init" = 0x0c,
+    @"elem.drop" = 0x0d,
     @"table.copy" = 0x0e,
 };
 
@@ -332,6 +333,9 @@ pub const OpcodeIterator = struct {
                     .@"table.init" => {
                         _ = try readULEB128Mem(u32, &self.code); // elemidx
                         _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                    .@"elem.drop" => {
+                        _ = try readULEB128Mem(u32, &self.code); // elemidx
                     },
                     .@"table.copy" => {
                         _ = try readULEB128Mem(u32, &self.code); // src_tableidx
