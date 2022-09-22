@@ -275,13 +275,13 @@ pub const VirtualMachine = struct {
         var module = self.inst.module;
 
         const op_func_type_index = call_indirect_instruction.@"type";
-        const table_index = call_indirect_instruction.table;
+        const tableidx = call_indirect_instruction.table;
 
         // Read lookup index from stack
         const lookup_index = self.popOperand(u32);
-        const table = try self.inst.getTable(table_index);
-        const function_handle = try table.lookup(lookup_index);
-        const function = try self.inst.store.function(function_handle);
+        const table = try self.inst.getTable(tableidx);
+        const funcaddr = try table.lookup(lookup_index);
+        const function = try self.inst.store.function(funcaddr);
 
         var next_ip = ip;
 
@@ -2326,31 +2326,26 @@ pub const VirtualMachine = struct {
                 return dispatch(self, ip + 1, code);
             },
             .@"table.init" => |table_init_meta| {
-                const tableidx = table_init_meta.tableidx;
                 const elemidx = table_init_meta.elemidx;
+                const tableidx = table_init_meta.tableidx;
 
+                const elem = try self.inst.getElem(elemidx);
                 const table = try self.inst.getTable(tableidx);
-                // TODO: try self.inst.module.getElement(elemidx);
-                const elem = self.inst.module.elements.list.items[elemidx];
 
-                const n = self.popOperand(i32);
-                const s = self.popOperand(i32);
-                const d = self.popOperand(i32);
+                const n = self.popOperand(u32);
+                const s = self.popOperand(u32);
+                const d = self.popOperand(u32);
 
-                if (s + n > elem.count) return error.Trap;
+                if (s + n > elem.elem.len) return error.Trap;
                 if (d + n > table.size()) return error.Trap;
                 if (n == 0) return;
 
-                std.log.warn("table.init not implemented [x = {}, y = {}, n = {}, s = {}, d = {}]", .{
-                    tableidx,
-                    elemidx,
-                    n,
-                    s,
-                    d,
-                });
+                var i: u32 = 0;
+                while (i < n) : (i += 1) {
+                    try table.set(d + i, elem.elem[s + i]);
+                }
 
-                std.log.info("elem = {}", .{elem});
-                return error.Trap;
+                return dispatch(self, ip + 1, code);
             },
         }
     }

@@ -31,6 +31,8 @@ pub const WasmError = error{
     BadTableIndex,
     TableIndexOutOfBounds,
     BadGlobalIndex,
+    ElemIndexOutOfBounds,
+    BadElemAddr,
     GlobalIndexOutOfBounds,
     NegativeDenominator,
     Trap,

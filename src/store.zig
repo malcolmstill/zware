@@ -6,6 +6,7 @@ const Function = @import("function.zig").Function;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
+const Elem = @import("elem.zig").Elem;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
 const RefType = @import("common.zig").RefType;
@@ -32,6 +33,7 @@ pub const ArrayListStore = struct {
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(Global),
+    elems: ArrayList(Elem),
     imports: ArrayList(ImportExport),
     instances: ArrayList(Instance),
 
@@ -42,6 +44,7 @@ pub const ArrayListStore = struct {
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(Global).init(alloc),
+            .elems = ArrayList(Elem).init(alloc),
             .imports = ArrayList(ImportExport).init(alloc),
             .instances = ArrayList(Instance).init(alloc),
         };
@@ -120,6 +123,17 @@ pub const ArrayListStore = struct {
         glbl_ptr.* = value;
 
         return self.globals.items.len - 1;
+    }
+
+    pub fn elem(self: *ArrayListStore, elemaddr: usize) !*Elem {
+        if (elemaddr >= self.elems.items.len) return error.BadElemAddr;
+        return &self.elems.items[elemaddr];
+    }
+
+    pub fn addElem(self: *ArrayListStore, reftype: RefType, count: u32) !usize {
+        const elem_ptr = try self.elems.addOne();
+        elem_ptr.* = try Elem.init(self.alloc, reftype, count);
+        return self.elems.items.len - 1;
     }
 
     pub fn instance(self: *ArrayListStore, handle: usize) !*Instance {

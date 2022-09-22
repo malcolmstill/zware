@@ -508,8 +508,8 @@ pub const MiscInstruction = union(MiscOpcode) {
     },
     @"memory.fill": u8,
     @"table.init": struct {
-        tableidx: u32,
         elemidx: u32,
+        tableidx: u32,
     },
 };
 
@@ -1534,12 +1534,12 @@ pub const ParseIterator = struct {
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
-                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
                         const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
-                            .tableidx = tableidx,
                             .elemidx = elemidx,
+                            .tableidx = tableidx,
                         } } };
                     },
                 }

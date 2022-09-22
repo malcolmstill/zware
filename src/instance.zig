@@ -10,6 +10,7 @@ const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
+const Elem = @import("elem.zig").Elem;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
@@ -40,6 +41,7 @@ pub const Instance = struct {
     globaladdrs: ArrayList(usize),
     // TODO: exports (this was in 1.0...why didn't we need it)
     // TODO: elemaddrs
+    elemaddrs: ArrayList(usize),
     // TODO: dataaddrs
 
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
@@ -50,6 +52,7 @@ pub const Instance = struct {
             .memaddrs = ArrayList(usize).init(alloc),
             .tableaddrs = ArrayList(usize).init(alloc),
             .globaladdrs = ArrayList(usize).init(alloc),
+            .elemaddrs = ArrayList(usize).init(alloc),
         };
     }
 
@@ -227,18 +230,27 @@ pub const Instance = struct {
     }
 
     fn instantiateElements(self: *Instance) !void {
-        // 5b. If all our elements were good, initialise them
-        for (self.module.elements.list.items) |segment| {
-            switch (segment.mode) {
-                .Passive, .Declarative => continue,
+        for (self.module.elements.list.items) |elemtype, k| {
+            const elemaddr = try self.store.addElem(elemtype.reftype, elemtype.count);
+            try self.elemaddrs.append(elemaddr);
+            var elem = try self.store.elem(elemaddr);
+
+            switch (elemtype.mode) {
+                .Passive, .Declarative => {
+                    for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
+                        const funcaddr = try self.invokeExpression(expr, u32, .{});
+
+                        try elem.set(@intCast(u32, j), funcaddr);
+                    }
+                },
                 .Active => |meta| {
                     const table = try self.getTable(meta.tableidx);
                     const offset = try self.invokeExpression(meta.offset, u32, .{});
 
-                    const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
+                    const index = math.add(u32, offset, elemtype.count) catch return error.OutOfBoundsMemoryAccess;
                     if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
-                    for (self.module.element_init_offsets.items[segment.init .. segment.init + segment.count]) |expr, j| {
+                    for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
                         const funcaddr = try self.invokeExpression(expr, u32, .{});
 
                         try table.set(@intCast(u32, offset + j), funcaddr);
@@ -273,6 +285,12 @@ pub const Instance = struct {
         if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
         const globaladdr = self.globaladdrs.items[index];
         return try self.store.global(globaladdr);
+    }
+
+    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
+        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
+        const elemaddr = self.elemaddrs.items[elemidx];
+        return try self.store.elem(elemaddr);
     }
 
     // invoke
