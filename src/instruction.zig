@@ -511,6 +511,10 @@ pub const MiscInstruction = union(MiscOpcode) {
         elemidx: u32,
         tableidx: u32,
     },
+    @"table.copy": struct {
+        src_tableidx: u32,
+        dest_tableidx: u32,
+    },
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1537,9 +1541,22 @@ pub const ParseIterator = struct {
                         const elemidx = try opcode.readULEB128Mem(u32, &self.code);
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
 
+                        // FIXME: validate elemidx + tableidx
+
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
                             .elemidx = elemidx,
                             .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"table.copy" => {
+                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const dest_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        // FIXME: validate tablidx
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.copy" = .{
+                            .src_tableidx = src_tableidx,
+                            .dest_tableidx = dest_tableidx,
                         } } };
                     },
                 }

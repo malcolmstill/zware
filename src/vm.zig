@@ -2347,6 +2347,28 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"table.copy" => |misc_meta| {
+                const src_tableidx = misc_meta.src_tableidx;
+                const dest_tableidx = misc_meta.dest_tableidx;
+
+                const src_table = try self.inst.getTable(src_tableidx);
+                const dest_table = try self.inst.getTable(dest_tableidx);
+
+                const n = self.popOperand(u32);
+                const s = self.popOperand(u32);
+                const d = self.popOperand(u32);
+
+                if (s + n > src_table.size()) return error.Trap;
+                if (d + n > dest_table.size()) return error.Trap;
+                if (n == 0) return;
+
+                var i: u32 = 0;
+                while (i < n) : (i += 1) {
+                    try dest_table.set(d + i, try src_table.lookup(s + i));
+                }
+
+                return dispatch(self, ip + 1, code);
+            },
         }
     }
 

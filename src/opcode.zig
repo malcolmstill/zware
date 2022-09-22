@@ -189,19 +189,20 @@ pub const Opcode = enum(u8) {
 };
 
 pub const MiscOpcode = enum(u8) {
-    @"i32.trunc_sat_f32_s",
-    @"i32.trunc_sat_f32_u",
-    @"i32.trunc_sat_f64_s",
-    @"i32.trunc_sat_f64_u",
-    @"i64.trunc_sat_f32_s",
-    @"i64.trunc_sat_f32_u",
-    @"i64.trunc_sat_f64_s",
-    @"i64.trunc_sat_f64_u",
-    @"memory.init",
-    @"data.drop",
-    @"memory.copy",
-    @"memory.fill",
+    @"i32.trunc_sat_f32_s" = 0x00,
+    @"i32.trunc_sat_f32_u" = 0x01,
+    @"i32.trunc_sat_f64_s" = 0x02,
+    @"i32.trunc_sat_f64_u" = 0x03,
+    @"i64.trunc_sat_f32_s" = 0x04,
+    @"i64.trunc_sat_f32_u" = 0x05,
+    @"i64.trunc_sat_f64_s" = 0x06,
+    @"i64.trunc_sat_f64_u" = 0x07,
+    @"memory.init" = 0x08,
+    @"data.drop" = 0x09,
+    @"memory.copy" = 0x0a,
+    @"memory.fill" = 0x0b,
     @"table.init" = 0x0c,
+    @"table.copy" = 0x0e,
 };
 
 const OpcodeMeta = struct {
@@ -305,6 +306,15 @@ pub const OpcodeIterator = struct {
                 const misc_instruction = std.meta.intToEnum(MiscOpcode, misc_instruction_code) catch return error.IllegalMiscOpcode;
 
                 switch (misc_instruction) {
+                    .@"i32.trunc_sat_f32_s",
+                    .@"i32.trunc_sat_f32_u",
+                    .@"i32.trunc_sat_f64_s",
+                    .@"i32.trunc_sat_f64_u",
+                    .@"i64.trunc_sat_f32_s",
+                    .@"i64.trunc_sat_f32_u",
+                    .@"i64.trunc_sat_f64_s",
+                    .@"i64.trunc_sat_f64_u",
+                    => {},
                     .@"memory.init" => {
                         _ = try readULEB128Mem(u32, &self.code); // dataidx
                         _ = try readByte(&self.code); // memidx
@@ -319,7 +329,15 @@ pub const OpcodeIterator = struct {
                     .@"data.drop" => {
                         _ = try readULEB128Mem(u32, &self.code); // dataidx
                     },
-                    else => {},
+                    .@"table.init" => {
+                        _ = try readULEB128Mem(u32, &self.code); // elemidx
+                        _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                    .@"table.copy" => {
+                        _ = try readULEB128Mem(u32, &self.code); // src_tableidx
+                        _ = try readULEB128Mem(u32, &self.code); // dest_tableidx
+                    },
+                    // else => {},
                 }
             },
             else => {},

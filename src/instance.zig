@@ -230,7 +230,7 @@ pub const Instance = struct {
     }
 
     fn instantiateElements(self: *Instance) !void {
-        for (self.module.elements.list.items) |elemtype, k| {
+        for (self.module.elements.list.items) |elemtype| {
             const elemaddr = try self.store.addElem(elemtype.reftype, elemtype.count);
             try self.elemaddrs.append(elemaddr);
             var elem = try self.store.elem(elemaddr);
