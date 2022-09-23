@@ -1,18 +1,21 @@
 const std = @import("std");
 const mem = std.mem;
 const RefType = @import("common.zig").RefType;
+const ArrayList = std.ArrayList;
 
 pub const Table = struct {
-    data: []?usize,
+    alloc: mem.Allocator,
+    data: ArrayList(?usize),
     min: u32,
     max: ?u32,
     reftype: RefType,
 
     pub fn init(alloc: mem.Allocator, reftype: RefType, min: u32, max: ?u32) !Table {
-        const data = try alloc.alloc(?usize, min);
-        mem.set(?usize, data, null);
+        var data = ArrayList(?usize).init(alloc);
+        try data.appendNTimes(null, min);
 
         return Table{
+            .alloc = alloc,
             .data = data,
             .min = min,
             .max = max,
@@ -21,21 +24,33 @@ pub const Table = struct {
     }
 
     pub fn lookup(self: *Table, index: u32) !usize {
-        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
-        return self.data[index] orelse return error.UndefinedElement;
+        if (index >= self.data.items.len) return error.OutOfBoundsMemoryAccess;
+        return self.data.items[index] orelse return error.UndefinedElement;
     }
 
     pub fn get(self: *Table, index: u32) !?usize {
-        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
-        return self.data[index];
+        if (index >= self.data.items.len) return error.OutOfBoundsMemoryAccess;
+        return self.data.items[index];
     }
 
     pub fn set(self: *Table, index: u32, value: ?usize) !void {
-        if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
-        self.data[index] = value;
+        if (index >= self.data.items.len) return error.OutOfBoundsMemoryAccess;
+        self.data.items[index] = value;
     }
 
     pub fn size(self: *Table) usize {
-        return self.data.len;
+        return self.data.items.len;
+    }
+
+    pub fn grow(self: *Table, n: u32) !usize {
+        if (self.max) |max| {
+            if (self.data.items.len + n > max) return error.TableGrowWouldExceedMax;
+        }
+
+        const old_size = self.data.items.len;
+
+        try self.data.appendNTimes(null, n);
+
+        return old_size;
     }
 };

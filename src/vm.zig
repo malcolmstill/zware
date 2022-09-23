@@ -2391,6 +2391,22 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"table.grow" => |misc_meta| {
+                const tableidx = misc_meta.tableidx;
+
+                const table = try self.inst.getTable(tableidx);
+
+                const n = self.popOperand(u32);
+                _ = self.popOperand(u64);
+
+                if (table.grow(n)) |old_size| {
+                    self.pushOperandNoCheck(u32, @intCast(u32, old_size));
+                } else |_| {
+                    self.pushOperandNoCheck(i32, @as(i32, -1));
+                }
+
+                return dispatch(self, ip + 1, code);
+            },
         }
     }
 
