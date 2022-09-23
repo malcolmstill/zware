@@ -80,6 +80,7 @@ $BIN_DIR/testrunner table_get.json
 $BIN_DIR/testrunner table_init.json
 $BIN_DIR/testrunner table_set.json
 $BIN_DIR/testrunner table_size.json
+$BIN_DIR/testrunner table-sub.json
 $BIN_DIR/testrunner table.json
 # $BIN_DIR/testrunner token.json
 # $BIN_DIR/testrunner traps.json

@@ -1552,6 +1552,10 @@ pub const ParseIterator = struct {
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
+                        const elemtype = self.module.elements.list.items[elemidx];
+                        const tabletype = self.module.tables.list.items[tableidx];
+                        if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
+
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
                             .elemidx = elemidx,
                             .tableidx = tableidx,
@@ -1569,6 +1573,10 @@ pub const ParseIterator = struct {
                         if (dest_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
                         const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
                         if (src_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const dest_tabletype = self.module.tables.list.items[dest_tableidx];
+                        const src_tabletype = self.module.tables.list.items[src_tableidx];
+                        if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.copy" = .{
                             .dest_tableidx = dest_tableidx,
