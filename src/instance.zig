@@ -235,29 +235,25 @@ pub const Instance = struct {
             try self.elemaddrs.append(elemaddr);
             var elem = try self.store.elem(elemaddr);
 
-            switch (elemtype.mode) {
-                .Passive, .Declarative => {
-                    for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
-                        const funcaddr = try self.invokeExpression(expr, u32, .{});
+            for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
+                const funcaddr = try self.invokeExpression(expr, u32, .{});
+                try elem.set(@intCast(u32, j), funcaddr);
+            }
 
-                        try elem.set(@intCast(u32, j), funcaddr);
-                    }
-                },
-                .Active => |meta| {
-                    const table = try self.getTable(meta.tableidx);
-                    const offset = try self.invokeExpression(meta.offset, u32, .{});
+            if (elemtype.mode != .Passive) {
+                elem.dropped = true;
+            }
 
-                    const index = math.add(u32, offset, elemtype.count) catch return error.OutOfBoundsMemoryAccess;
-                    if (index > table.size()) return error.OutOfBoundsMemoryAccess;
+            if (elemtype.mode == .Active) {
+                const table = try self.getTable(elemtype.mode.Active.tableidx);
+                const offset = try self.invokeExpression(elemtype.mode.Active.offset, u32, .{});
 
-                    for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
-                        const funcaddr = try self.invokeExpression(expr, u32, .{});
+                const index = math.add(u32, offset, elemtype.count) catch return error.OutOfBoundsMemoryAccess;
+                if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
-                        try elem.set(@intCast(u32, j), funcaddr);
-                        try table.set(@intCast(u32, offset + j), funcaddr);
-                    }
-                    elem.dropped = true;
-                },
+                for (elem.elem) |funcaddr, i| {
+                    try table.set(@intCast(u32, offset + i), funcaddr);
+                }
             }
         }
     }
