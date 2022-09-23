@@ -78,6 +78,7 @@ $BIN_DIR/testrunner switch.json
 $BIN_DIR/testrunner table_copy.json
 $BIN_DIR/testrunner table_fill.json
 $BIN_DIR/testrunner table_get.json
+$BIN_DIR/testrunner table_grow.json
 $BIN_DIR/testrunner table_init.json
 $BIN_DIR/testrunner table_set.json
 $BIN_DIR/testrunner table_size.json
