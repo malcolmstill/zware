@@ -194,10 +194,10 @@ pub const Validator = struct {
                 _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"table.grow" => {
-                _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
+                // _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                // _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
 
-                try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+                // try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
             .@"table.size" => {
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });

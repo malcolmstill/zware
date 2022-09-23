@@ -2397,10 +2397,14 @@ pub const VirtualMachine = struct {
                 const table = try self.inst.getTable(tableidx);
 
                 const n = self.popOperand(u32);
-                _ = self.popOperand(u64);
+                const ref = self.popOperand(u64);
 
                 if (table.grow(n)) |old_size| {
-                    self.pushOperandNoCheck(u32, @intCast(u32, old_size));
+                    self.pushOperandNoCheck(u32, old_size);
+                    var i: u32 = 0;
+                    while (i < n) : (i += 1) {
+                        try table.set(old_size + i, ref);
+                    }
                 } else |_| {
                     self.pushOperandNoCheck(i32, @as(i32, -1));
                 }

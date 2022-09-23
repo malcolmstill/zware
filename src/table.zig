@@ -1,5 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
+const math = std.math;
 const RefType = @import("common.zig").RefType;
 const ArrayList = std.ArrayList;
 
@@ -42,12 +43,15 @@ pub const Table = struct {
         return self.data.items.len;
     }
 
-    pub fn grow(self: *Table, n: u32) !usize {
+    pub fn grow(self: *Table, n: u32) !u32 {
+        const len = math.cast(u32, self.data.items.len) orelse return error.TableGrowToolarge;
+        _ = try math.add(u32, len, n);
+
         if (self.max) |max| {
             if (self.data.items.len + n > max) return error.TableGrowWouldExceedMax;
         }
 
-        const old_size = self.data.items.len;
+        const old_size = math.cast(u32, self.data.items.len) orelse return error.TableGrowToolarge;
 
         try self.data.appendNTimes(null, n);
 

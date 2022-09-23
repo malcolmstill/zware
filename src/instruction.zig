@@ -1590,6 +1590,17 @@ pub const ParseIterator = struct {
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
+                        const table = self.module.tables.list.items[tableidx];
+                        const reftype: ValueType = switch (table.reftype) {
+                            .FuncRef => .FuncRef,
+                            .ExternRef => .ExternRef,
+                        };
+
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+
+                        try self.validator.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.grow" = .{
                             .tableidx = tableidx,
                         } } };
