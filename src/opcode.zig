@@ -338,8 +338,8 @@ pub const OpcodeIterator = struct {
                         _ = try readULEB128Mem(u32, &self.code); // elemidx
                     },
                     .@"table.copy" => {
-                        _ = try readULEB128Mem(u32, &self.code); // src_tableidx
                         _ = try readULEB128Mem(u32, &self.code); // dest_tableidx
+                        _ = try readULEB128Mem(u32, &self.code); // src_tableidx
                     },
                     // else => {},
                 }

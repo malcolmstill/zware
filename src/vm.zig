@@ -2326,11 +2326,13 @@ pub const VirtualMachine = struct {
                 return dispatch(self, ip + 1, code);
             },
             .@"table.init" => |table_init_meta| {
-                const elemidx = table_init_meta.elemidx;
                 const tableidx = table_init_meta.tableidx;
+                const elemidx = table_init_meta.elemidx;
 
-                const elem = try self.inst.getElem(elemidx);
                 const table = try self.inst.getTable(tableidx);
+                const elem = try self.inst.getElem(elemidx);
+
+                if (elem.dropped) return error.Trap;
 
                 const n = self.popOperand(u32);
                 const s = self.popOperand(u32);
@@ -2347,16 +2349,19 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
-            .@"elem.drop" => |_| {
-                // TODO: implement elem.drop (as an optimisation only)
+            .@"elem.drop" => |misc_meta| {
+                const elemidx = misc_meta.elemidx;
+                const elem = try self.inst.getElem(elemidx);
+                elem.dropped = true;
+
                 return dispatch(self, ip + 1, code);
             },
             .@"table.copy" => |misc_meta| {
-                const src_tableidx = misc_meta.src_tableidx;
                 const dest_tableidx = misc_meta.dest_tableidx;
+                const src_tableidx = misc_meta.src_tableidx;
 
-                const src_table = try self.inst.getTable(src_tableidx);
                 const dest_table = try self.inst.getTable(dest_tableidx);
+                const src_table = try self.inst.getTable(src_tableidx);
 
                 const n = self.popOperand(u32);
                 const s = self.popOperand(u32);
@@ -2366,9 +2371,16 @@ pub const VirtualMachine = struct {
                 if (d + n > dest_table.size()) return error.Trap;
                 if (n == 0) return;
 
-                var i: u32 = 0;
-                while (i < n) : (i += 1) {
-                    try dest_table.set(d + i, try src_table.lookup(s + i));
+                if (d <= s) {
+                    var i: u32 = 0;
+                    while (i < n) : (i += 1) {
+                        try dest_table.set(d + i, try src_table.get(s + i));
+                    }
+                } else {
+                    var i: u32 = 0;
+                    while (i < n) : (i += 1) {
+                        try dest_table.set(d + n - 1 - i, try src_table.get(s + n - 1 - i));
+                    }
                 }
 
                 return dispatch(self, ip + 1, code);

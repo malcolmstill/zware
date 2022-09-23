@@ -30,7 +30,7 @@ pub const Table = struct {
         return self.data[index];
     }
 
-    pub fn set(self: *Table, index: u32, value: usize) !void {
+    pub fn set(self: *Table, index: u32, value: ?usize) !void {
         if (index >= self.data.len) return error.OutOfBoundsMemoryAccess;
         self.data[index] = value;
     }

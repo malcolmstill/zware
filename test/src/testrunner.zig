@@ -331,7 +331,6 @@ pub fn main() anyerror!void {
                                         std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
                                         std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
                                     }
-                                    std.log.info("out = {any}", .{out});
                                     if (result_value != out[expected.len - i - 1]) {
                                         return error.TestsuiteTestFailureTrapResult;
                                     }
@@ -580,6 +579,7 @@ pub fn main() anyerror!void {
                     error.InvalidDataIndex => continue,
                     error.ValidatorInvalidFunction => continue,
                     error.ValidatorUnreferencedFunction => continue,
+                    error.ValidatorInvalidElementIndex => continue,
                     else => {
                         std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;

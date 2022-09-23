@@ -253,8 +253,10 @@ pub const Instance = struct {
                     for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
                         const funcaddr = try self.invokeExpression(expr, u32, .{});
 
+                        try elem.set(@intCast(u32, j), funcaddr);
                         try table.set(@intCast(u32, offset + j), funcaddr);
                     }
+                    elem.dropped = true;
                 },
             }
         }

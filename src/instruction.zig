@@ -508,15 +508,15 @@ pub const MiscInstruction = union(MiscOpcode) {
     },
     @"memory.fill": u8,
     @"table.init": struct {
-        elemidx: u32,
         tableidx: u32,
+        elemidx: u32,
     },
     @"elem.drop": struct {
         elemidx: u32,
     },
     @"table.copy": struct {
-        src_tableidx: u32,
         dest_tableidx: u32,
+        src_tableidx: u32,
     },
 };
 
@@ -1542,9 +1542,9 @@ pub const ParseIterator = struct {
                     },
                     .@"table.init" => {
                         const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
-
-                        // FIXME: validate elemidx + tableidx
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
                             .elemidx = elemidx,
@@ -1554,19 +1554,19 @@ pub const ParseIterator = struct {
                     .@"elem.drop" => {
                         const elemidx = try opcode.readULEB128Mem(u32, &self.code);
 
-                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorUnknownElement;
+                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
-                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
                         const dest_tableidx = try opcode.readULEB128Mem(u32, &self.code);
-
-                        // FIXME: validate tablidx
+                        if (dest_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (src_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.copy" = .{
-                            .src_tableidx = src_tableidx,
                             .dest_tableidx = dest_tableidx,
+                            .src_tableidx = src_tableidx,
                         } } };
                     },
                 }

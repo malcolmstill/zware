@@ -6,6 +6,7 @@ pub const Elem = struct {
     @"type": RefType,
     elem: []u32,
     alloc: mem.Allocator,
+    dropped: bool = false,
 
     pub fn init(alloc: mem.Allocator, reftype: RefType, count: u32) !Elem {
         const elem = try alloc.alloc(u32, count);
