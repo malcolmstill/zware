@@ -2416,6 +2416,27 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"table.fill" => |misc_meta| {
+                const tableidx = misc_meta.tableidx;
+
+                const table = try self.inst.getTable(tableidx);
+
+                const n = self.popOperand(u32);
+                const ref = self.popOperand(u64);
+                const d = self.popOperand(u32);
+
+                _ = math.add(u32, d, n) catch return error.Trap;
+
+                if (d + n > table.size()) return error.Trap;
+                if (n == 0) return;
+
+                var i: u32 = 0;
+                while (i < n) : (i += 1) {
+                    try table.set(d + i, ref);
+                }
+
+                return dispatch(self, ip + 1, code);
+            },
         }
     }
 

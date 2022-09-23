@@ -202,6 +202,12 @@ pub const Validator = struct {
             .@"table.size" => {
                 try v.pushOperand(ValueTypeUnknown{ .Known = .I32 });
             },
+            .@"table.fill" => {
+                // Now in instruction.zig...we should move more validation therein
+                // _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                // _ = try v.popOperandExpecting(ValueTypeUnknown.Unknown);
+                // _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+            },
         }
     }
 

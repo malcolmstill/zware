@@ -524,6 +524,9 @@ pub const MiscInstruction = union(MiscOpcode) {
     @"table.size": struct {
         tableidx: u32,
     },
+    @"table.fill": struct {
+        tableidx: u32,
+    },
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1596,6 +1599,24 @@ pub const ParseIterator = struct {
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.size" = .{
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"table.fill" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const table = self.module.tables.list.items[tableidx];
+                        const reftype: ValueType = switch (table.reftype) {
+                            .FuncRef => .FuncRef,
+                            .ExternRef => .ExternRef,
+                        };
+
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.fill" = .{
                             .tableidx = tableidx,
                         } } };
                     },
