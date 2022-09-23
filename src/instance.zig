@@ -11,6 +11,7 @@ const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
 const Elem = @import("elem.zig").Elem;
+const Data = @import("data.zig").Data;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
@@ -40,9 +41,8 @@ pub const Instance = struct {
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
     // TODO: exports (this was in 1.0...why didn't we need it)
-    // TODO: elemaddrs
     elemaddrs: ArrayList(usize),
-    // TODO: dataaddrs
+    dataaddrs: ArrayList(usize),
 
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{
@@ -53,6 +53,7 @@ pub const Instance = struct {
             .tableaddrs = ArrayList(usize).init(alloc),
             .globaladdrs = ArrayList(usize).init(alloc),
             .elemaddrs = ArrayList(usize).init(alloc),
+            .dataaddrs = ArrayList(usize).init(alloc),
         };
     }
 
@@ -185,45 +186,26 @@ pub const Instance = struct {
         }
     }
 
-    // fn checkData(self: *Instance) !void {
-    //     // 4a. Check all data
-    //     for (self.module.datas.list.items) |data| {
-    //         const handle = self.memaddrs.items[data.index];
-    //         const memory = try self.store.memory(handle);
-
-    //         const offset = try self.invokeExpression(data.start, u32, .{});
-    //         try memory.check(offset, data.data);
-    //     }
-    // }
-
-    // fn checkElements(self: *Instance) !void {
-    //     // 4b. Check all elements
-    //     for (self.module.elements.list.items) |segment| {
-    //         std.log.info("checkElements = {any}", .{segment});
-    //         switch (segment.mode) {
-    //             .Passive, .Declarative => continue,
-    //             .Active => |meta| {
-    //                 const table = try self.getTable(meta.tableidx);
-    //                 const offset = try self.invokeExpression(meta.offset, u32, .{});
-
-    //                 const index = math.add(u32, offset, segment.count) catch return error.OutOfBoundsMemoryAccess;
-    //                 if (index > table.size()) return error.OutOfBoundsMemoryAccess;
-    //             },
-    //         }
-    //     }
-    // }
-
     fn instantiateData(self: *Instance) !void {
-        // 5a. Mutate all data
-        for (self.module.datas.list.items) |data| {
-            switch (data.mode) {
+        for (self.module.datas.list.items) |datatype| {
+            const dataddr = try self.store.addData(datatype.count);
+            try self.dataaddrs.append(dataddr);
+            var data = try self.store.data(dataddr);
+
+            // TODO: Do we actually need to copy the data or just close over module bytes?
+            for (datatype.data) |byte, j| {
+                try data.set(j, byte);
+            }
+
+            switch (datatype.mode) {
                 .Passive => continue,
                 .Active => |active| {
-                    const handle = self.memaddrs.items[active.memidx];
-                    const memory = try self.store.memory(handle);
+                    const memaddr = self.memaddrs.items[active.memidx];
+                    const memory = try self.store.memory(memaddr);
 
                     const offset = try self.invokeExpression(active.offset, u32, .{});
                     try memory.copy(offset, data.data);
+                    data.dropped = true;
                 },
             }
         }
@@ -289,6 +271,12 @@ pub const Instance = struct {
         if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
         const elemaddr = self.elemaddrs.items[elemidx];
         return try self.store.elem(elemaddr);
+    }
+
+    pub fn getData(self: *Instance, dataidx: usize) !*Data {
+        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
+        const dataaddr = self.dataaddrs.items[dataidx];
+        return try self.store.data(dataaddr);
     }
 
     // invoke

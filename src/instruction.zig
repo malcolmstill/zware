@@ -1494,7 +1494,6 @@ pub const ParseIterator = struct {
             },
             .misc => {
                 const version = try opcode.readULEB128Mem(u32, &self.code);
-                // std.log.info("misc opcode = {}", .{version});
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
 

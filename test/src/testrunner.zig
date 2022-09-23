@@ -471,7 +471,7 @@ pub fn main() anyerror!void {
                                 }
                             }
 
-                            if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
+                            if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element") or mem.eql(u8, trap, "uninitialized element 2")) {
                                 switch (err) {
                                     error.UndefinedElement => continue,
                                     error.OutOfBoundsMemoryAccess => continue,

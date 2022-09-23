@@ -122,6 +122,7 @@ pub const Export = struct {
 pub const Element = struct {};
 
 pub const DataSegment = struct {
+    count: u32,
     data: []const u8,
     mode: DataSegmentMode,
 };

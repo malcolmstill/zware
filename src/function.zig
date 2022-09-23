@@ -37,6 +37,8 @@ pub const WasmError = error{
     NegativeDenominator,
     Trap,
     CheckStackSpace,
+    DataIndexOutOfBounds,
+    BadDataAddr,
 };
 
 pub const Function = union(enum) {

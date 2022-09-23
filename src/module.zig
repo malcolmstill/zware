@@ -1093,6 +1093,7 @@ pub const Module = struct {
                     const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     try self.datas.list.append(DataSegment{
+                        .count = data_length,
                         .data = self.module[data_start..rd.context.pos],
                         .mode = DataSegmentMode{ .Active = .{
                             .memidx = 0,
@@ -1113,6 +1114,7 @@ pub const Module = struct {
                     };
 
                     try self.datas.list.append(DataSegment{
+                        .count = data_length,
                         .data = self.module[data_start..rd.context.pos],
                         .mode = .Passive,
                     });
@@ -1148,6 +1150,7 @@ pub const Module = struct {
                     const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     try self.datas.list.append(DataSegment{
+                        .count = data_length,
                         .data = self.module[data_start..rd.context.pos],
                         .mode = DataSegmentMode{ .Active = .{
                             .memidx = 0,

@@ -13,8 +13,9 @@ $BIN_DIR/testrunner binary-leb128.json
 $BIN_DIR/testrunner binary.json
 $BIN_DIR/testrunner block.json
 $BIN_DIR/testrunner br_if.json
-$BIN_DIR/testrunner br.json
 $BIN_DIR/testrunner br_table.json
+$BIN_DIR/testrunner br.json
+$BIN_DIR/testrunner bulk.json
 $BIN_DIR/testrunner call_indirect.json
 $BIN_DIR/testrunner call.json
 $BIN_DIR/testrunner comments.json

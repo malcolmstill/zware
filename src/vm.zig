@@ -2252,13 +2252,15 @@ pub const VirtualMachine = struct {
 
                 const memory = try self.inst.getMemory(meta.memidx);
                 const mem_size = memory.sizeBytes();
-                const data = self.inst.module.datas.list.items[meta.dataidx];
+                const data = try self.inst.getData(meta.dataidx);
 
                 if (@as(u33, src) + @as(u33, n) > data.data.len) return error.OutOfBoundsMemoryAccess;
                 if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
                 if (n == 0) {
                     return dispatch(self, ip + 1, code);
                 }
+
+                if (data.dropped) return error.OutOfBoundsMemoryAccess;
 
                 var i: u32 = 0;
                 while (i < n) : (i += 1) {
@@ -2267,8 +2269,10 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
-            .@"data.drop" => |_| {
-                // TODO: implement data.drop (as an optimisation only)
+            .@"data.drop" => |dataidx| {
+                const data = try self.inst.getData(dataidx);
+                data.dropped = true;
+
                 return dispatch(self, ip + 1, code);
             },
             .@"memory.copy" => {
@@ -2332,8 +2336,6 @@ pub const VirtualMachine = struct {
                 const table = try self.inst.getTable(tableidx);
                 const elem = try self.inst.getElem(elemidx);
 
-                if (elem.dropped) return error.Trap;
-
                 const n = self.popOperand(u32);
                 const s = self.popOperand(u32);
                 const d = self.popOperand(u32);
@@ -2344,6 +2346,8 @@ pub const VirtualMachine = struct {
                 if (s + n > elem.elem.len) return error.Trap;
                 if (d + n > table.size()) return error.Trap;
                 if (n == 0) return;
+
+                if (elem.dropped) return error.Trap;
 
                 var i: u32 = 0;
                 while (i < n) : (i += 1) {
