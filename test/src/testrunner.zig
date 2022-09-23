@@ -493,6 +493,7 @@ pub fn main() anyerror!void {
                             if (mem.eql(u8, trap, "out of bounds table access")) {
                                 switch (err) {
                                     error.Trap => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
                                     else => {
                                         std.debug.print("Unexpected error: {}\n", .{err});
                                         return error.TestsuiteExpectedUnreachable;
