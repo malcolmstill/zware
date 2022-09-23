@@ -2338,6 +2338,9 @@ pub const VirtualMachine = struct {
                 const s = self.popOperand(u32);
                 const d = self.popOperand(u32);
 
+                _ = math.add(u32, s, n) catch return error.Trap;
+                _ = math.add(u32, d, n) catch return error.Trap;
+
                 if (s + n > elem.elem.len) return error.Trap;
                 if (d + n > table.size()) return error.Trap;
                 if (n == 0) return;
