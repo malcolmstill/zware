@@ -521,6 +521,9 @@ pub const MiscInstruction = union(MiscOpcode) {
     @"table.grow": struct {
         tableidx: u32,
     },
+    @"table.size": struct {
+        tableidx: u32,
+    },
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -1577,6 +1580,14 @@ pub const ParseIterator = struct {
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.grow" = .{
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"table.size" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.size" = .{
                             .tableidx = tableidx,
                         } } };
                     },

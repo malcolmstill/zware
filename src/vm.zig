@@ -2407,6 +2407,15 @@ pub const VirtualMachine = struct {
 
                 return dispatch(self, ip + 1, code);
             },
+            .@"table.size" => |misc_meta| {
+                const tableidx = misc_meta.tableidx;
+
+                const table = try self.inst.getTable(tableidx);
+
+                self.pushOperandNoCheck(u32, @intCast(u32, table.size()));
+
+                return dispatch(self, ip + 1, code);
+            },
         }
     }
 
