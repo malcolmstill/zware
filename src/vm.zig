@@ -3,9 +3,8 @@ const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
-const ValueType = @import("module.zig").ValueType;
+const ValType = @import("module.zig").ValType;
 const Instance = @import("instance.zig").Instance;
-const WasmError = @import("function.zig").WasmError;
 const Rr = @import("rr.zig").Rr;
 
 // VirtualMachine:
@@ -232,7 +231,7 @@ pub const VirtualMachine = struct {
         const function = try self.inst.getFunc(funcidx);
         var next_ip = ip;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 // Check we have enough stack space
                 try self.checkStackSpace(f.required_stack_space + f.locals_count);
@@ -244,16 +243,16 @@ pub const VirtualMachine = struct {
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
+                    .op_stack_len = self.op_ptr - function.params.len - f.locals_count,
                     .label_stack_len = self.label_ptr,
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .inst = self.inst,
-                }, f.locals_count + f.params.len);
+                }, f.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = f.results.len,
-                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_ptr - function.params.len - f.locals_count,
                     .branch_target = ip + 1,
                 });
 
@@ -272,8 +271,8 @@ pub const VirtualMachine = struct {
         const call_indirect_instruction = code[ip].call_indirect;
         var module = self.inst.module;
 
-        const op_func_type_index = call_indirect_instruction.@"type";
-        const tableidx = call_indirect_instruction.table;
+        const typeidx = call_indirect_instruction.typeidx;
+        const tableidx = call_indirect_instruction.tableidx;
 
         // Read lookup index from stack
         const lookup_index = self.popOperand(u32);
@@ -281,16 +280,14 @@ pub const VirtualMachine = struct {
         const funcaddr = try table.lookup(lookup_index);
         const function = try self.inst.store.function(funcaddr);
 
+        // Check that signatures match
+        const call_indirect_func_type = module.types.list.items[typeidx];
+        try function.checkSignatures(call_indirect_func_type);
+
         var next_ip = ip;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |func| {
-                // Check that signatures match
-                const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                if (!Module.signaturesEqual(func.params, func.results, call_indirect_func_type)) {
-                    return error.IndirectCallTypeMismatch;
-                }
-
                 // Check we have enough stack space
                 try self.checkStackSpace(func.required_stack_space + func.locals_count);
 
@@ -301,27 +298,22 @@ pub const VirtualMachine = struct {
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
+                    .op_stack_len = self.op_ptr - function.params.len - func.locals_count,
                     .label_stack_len = self.label_ptr,
-                    .return_arity = func.results.len,
+                    .return_arity = function.results.len,
                     .inst = self.inst,
-                }, func.locals_count + func.params.len);
+                }, func.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = func.results.len,
-                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_ptr - function.params.len - func.locals_count,
                     .branch_target = ip + 1,
                 });
 
                 next_ip = func.start;
             },
             .host_function => |host_func| {
-                const call_indirect_func_type = module.types.list.items[op_func_type_index];
-                if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) {
-                    return error.IndirectCallTypeMismatch;
-                }
-
                 try host_func.func(self);
 
                 next_ip = ip + 1;
@@ -378,37 +370,37 @@ pub const VirtualMachine = struct {
     }
 
     fn @"local.get"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.get";
+        const localidx = code[ip].@"local.get";
 
         const frame = self.peekFrame();
 
-        self.pushOperandNoCheck(u64, frame.locals[local_index]);
+        self.pushOperandNoCheck(u64, frame.locals[localidx]);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"local.set"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.set";
+        const localidx = code[ip].@"local.set";
 
         const frame = self.peekFrame();
-        frame.locals[local_index] = self.popOperand(u64);
+        frame.locals[localidx] = self.popOperand(u64);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"local.tee"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.tee";
+        const localidx = code[ip].@"local.tee";
 
         const frame = self.peekFrame();
-        frame.locals[local_index] = self.peekOperand();
+        frame.locals[localidx] = self.peekOperand();
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"global.get"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const global_index = code[ip].@"global.get";
+        const globalidx = code[ip].@"global.get";
 
-        const global = try self.inst.getGlobal(global_index);
+        const global = try self.inst.getGlobal(globalidx);
 
         self.pushOperandNoCheck(u64, global.value);
 
@@ -416,10 +408,10 @@ pub const VirtualMachine = struct {
     }
 
     fn @"global.set"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const global_index = code[ip].@"global.set";
+        const globalidx = code[ip].@"global.set";
         const value = self.popAnyOperand();
 
-        const global = try self.inst.getGlobal(global_index);
+        const global = try self.inst.getGlobal(globalidx);
 
         global.value = value;
 
@@ -2612,6 +2604,42 @@ pub const VirtualMachine = struct {
     }
 };
 
+pub const WasmError = error{
+    NotImplemented,
+    StackUnderflow,
+    StackOverflow,
+    TrapUnreachable,
+    LabelStackUnderflow,
+    LabelStackOverflow,
+    OperandStackUnderflow,
+    ControlStackUnderflow,
+    OperandStackOverflow,
+    FunctionIndexOutOfBounds,
+    BadFunctionIndex,
+    ControlStackOverflow,
+    BadInstanceIndex,
+    DivisionByZero,
+    Overflow,
+    InvalidConversion,
+    OutOfBoundsMemoryAccess,
+    MismatchedSignatures,
+    UndefinedElement,
+    //
+    BadMemoryIndex, // TODO: I think we won't see this with validation
+    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
+    BadTableIndex,
+    TableIndexOutOfBounds,
+    BadGlobalIndex,
+    ElemIndexOutOfBounds,
+    BadElemAddr,
+    GlobalIndexOutOfBounds,
+    NegativeDenominator,
+    Trap,
+    CheckStackSpace,
+    DataIndexOutOfBounds,
+    BadDataAddr,
+};
+
 const testing = std.testing;
 
 test "operand push / pop test" {
@@ -2663,3 +2691,4 @@ test "operand push / pop test" {
 
 //     try testing.expectEqual(@as(i32, -1), i.popOperand(i32));
 // }
+

@@ -118,7 +118,7 @@ pub const Memory = struct {
 
 const testing = std.testing;
 test "Memory test" {
-    const ArrayListStore = @import("store.zig").ArrayListStore;
+    const ArrayListStore = @import("../store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();

@@ -27,7 +27,7 @@ pub fn main() !void {
     var inst = try store.instance(index);
     try inst.instantiate(index);
 
-    const n = 28;
+    const n = 39;
     var in = [1]u64{n};
     var out = [1]u64{0};
     try inst.invoke("fib", in[0..], out[0..], .{});

@@ -3,38 +3,16 @@ const mem = std.mem;
 const leb = std.leb;
 const math = std.math;
 const unicode = std.unicode;
-const common = @import("common.zig");
+const ArrayList = std.ArrayList;
 const Rr = @import("rr.zig").Rr;
 const RrOpcode = @import("rr.zig").RrOpcode;
 const Instance = @import("instance.zig").Instance;
-const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const Parser = @import("parser.zig").Parser;
-const FuncType = common.FuncType;
-const NumType = @import("value_type.zig").NumType;
-const ValueType = @import("value_type.zig").ValueType;
-const RefType = @import("value_type.zig").RefType;
-const Import = common.Import;
-const Export = common.Export;
-const Limit = common.Limit;
-const LimitType = common.LimitType;
-const MemType = common.MemType;
-const TableType = common.TableType;
-const Mutability = common.Mutability;
-const Global = common.Global;
-const Element = common.Element;
-const Code = function.Code;
-const DataSegment = common.DataSegment;
-const DataSegmentMode = common.DataSegmentMode;
-const ElementSegment = common.ElementSegment;
-const ElementSegmentMode = common.ElementSegmentMode;
-const Tag = common.Tag;
-const LocalType = common.LocalType;
-const VirtualMachine = @import("vm.zig").VirtualMachine;
-const Store = @import("store.zig").ArrayListStore;
-const Function = @import("function.zig").Function;
-const function = @import("function.zig");
+const NumType = @import("valtype.zig").NumType;
+const ValType = @import("valtype.zig").ValType;
+const RefType = @import("valtype.zig").RefType;
 
 pub const Module = struct {
     decoded: bool = false,
@@ -45,10 +23,10 @@ pub const Module = struct {
     customs: Section(Custom),
     types: Section(FuncType),
     imports: Section(Import),
-    functions: Section(common.Function),
+    functions: Section(Function),
     tables: Section(TableType),
     memories: Section(MemType),
-    globals: Section(Global),
+    globals: Section(GlobalType),
     exports: Section(Export),
     start: ?u32,
     elements: Section(ElementSegment),
@@ -70,10 +48,10 @@ pub const Module = struct {
             .customs = Section(Custom).init(alloc),
             .types = Section(FuncType).init(alloc),
             .imports = Section(Import).init(alloc),
-            .functions = Section(common.Function).init(alloc),
+            .functions = Section(Function).init(alloc),
             .tables = Section(TableType).init(alloc),
             .memories = Section(MemType).init(alloc),
-            .globals = Section(Global).init(alloc),
+            .globals = Section(GlobalType).init(alloc),
             .exports = Section(Export).init(alloc),
             .start = null,
             .elements = Section(ElementSegment).init(alloc),
@@ -206,7 +184,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -223,7 +201,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -234,17 +212,17 @@ pub const Module = struct {
             var params = self.module[params_start..params_end];
             var results = self.module[results_start..results_end];
 
-            var params_value_type: []const ValueType = undefined;
-            params_value_type.ptr = @ptrCast([*]const ValueType, params.ptr);
-            params_value_type.len = params.len;
+            var params_valtype: []const ValType = undefined;
+            params_valtype.ptr = @ptrCast([*]const ValType, params.ptr);
+            params_valtype.len = params.len;
 
-            var results_value_type: []const ValueType = undefined;
-            results_value_type.ptr = @ptrCast([*]const ValueType, results.ptr);
-            results_value_type.len = results.len;
+            var results_valtype: []const ValType = undefined;
+            results_valtype.ptr = @ptrCast([*]const ValType, results.ptr);
+            results_valtype.len = results.len;
 
             try self.types.list.append(FuncType{
-                .params = params_value_type,
-                .results = results_value_type,
+                .params = params_valtype,
+                .results = results_valtype,
             });
         }
     }
@@ -329,19 +307,19 @@ pub const Module = struct {
 
     fn decodeFunction(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
-        const type_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+        const typeidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
 
-        if (type_index >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
+        if (typeidx >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
 
         if (import == null and self.function_index_start == null) {
             self.function_index_start = self.functions.list.items.len;
         }
 
-        try self.functions.list.append(common.Function{
-            .typeidx = type_index,
+        try self.functions.list.append(Function{
+            .typeidx = typeidx,
             .import = import,
         });
     }
@@ -500,7 +478,7 @@ pub const Module = struct {
     fn decodeGlobal(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
 
-        const global_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+        const global_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
@@ -535,8 +513,8 @@ pub const Module = struct {
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
         if (code != null and import != null) return error.ExpectedOneOrTheOther;
 
-        try self.globals.list.append(Global{
-            .value_type = global_type,
+        try self.globals.list.append(GlobalType{
+            .valtype = global_type,
             .mutability = mutability,
             .start = if (parsed_code) |pc| pc.start else null,
             .import = import,
@@ -605,17 +583,16 @@ pub const Module = struct {
         if (self.start != null) return error.MultipleStartSections;
         const rd = self.buf.reader();
 
-        const index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
 
-        if (index >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
-        const func = self.functions.list.items[index];
-        const function_type = self.types.list.items[func.typeidx];
-        if (function_type.params.len != 0 or function_type.results.len != 0) return error.ValidatorNotStartFunctionType;
+        const func = try self.functions.lookup(funcidx);
+        const functype = try self.types.lookup(func.typeidx);
+        if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
-        self.start = index;
+        self.start = funcidx;
     }
 
     fn decodeElementSection(self: *Module) !void {
@@ -636,9 +613,8 @@ pub const Module = struct {
 
             switch (elem_type) {
                 0 => {
-                    const table_index = 0;
-
-                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    const tableidx = 0;
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const expr_start = rd.context.pos;
                     const expr = self.module[expr_start..];
@@ -836,9 +812,8 @@ pub const Module = struct {
                     });
                 },
                 4 => {
-                    const table_index = 0;
-
-                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    const tableidx = 0;
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
@@ -941,7 +916,7 @@ pub const Module = struct {
         }
     }
 
-    fn readConstantExpression(self: *Module, value_type: ValueType) !StartWithDepth {
+    fn readConstantExpression(self: *Module, valtype: ValType) !StartWithDepth {
         const rd = self.buf.reader();
 
         const expr_start = rd.context.pos;
@@ -953,7 +928,7 @@ pub const Module = struct {
             else => return err,
         };
 
-        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], value_type);
+        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], valtype);
     }
 
     fn decodeDataCountSection(self: *Module, size: u32) !void {
@@ -1007,14 +982,14 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                const local_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                const local_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
 
                 locals_count += type_count;
 
-                try self.local_types.append(.{ .count = type_count, .value_type = local_type });
+                try self.local_types.append(.{ .count = type_count, .valtype = local_type });
             }
             if (locals_count >= 0x100000000) return error.TooManyLocals;
 
@@ -1203,15 +1178,15 @@ pub const Module = struct {
         max_depth: usize,
     };
 
-    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !StartWithDepth {
+    pub fn parseConstantCode(self: *Module, code: []const u8, valtype: ValType) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], true);
 
-        const in: [0]ValueType = [_]ValueType{} ** 0;
-        const out: [1]ValueType = [_]ValueType{value_type} ** 1;
+        const in: [0]ValType = [_]ValType{} ** 0;
+        const out: [1]ValType = [_]ValType{valtype} ** 1;
 
         try it.validator.pushControlFrame(
             .block,
@@ -1241,14 +1216,14 @@ pub const Module = struct {
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
-    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !StartWithDepth {
+    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, funcidx: usize) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], false);
 
-        try it.pushFunction(locals, func_index);
+        try it.pushFunction(locals, funcidx);
 
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
@@ -1266,21 +1241,6 @@ pub const Module = struct {
         }
 
         return error.ExportNotFound;
-    }
-
-    pub fn signaturesEqual(params: []const ValueType, results: []const ValueType, b: FuncType) bool {
-        if (params.len != b.params.len) return false;
-        if (results.len != b.results.len) return false;
-
-        for (params) |p_a, i| {
-            if (p_a != b.params[i]) return false;
-        }
-
-        for (results) |r_a, i| {
-            if (r_a != b.results[i]) return false;
-        }
-
-        return true;
     }
 
     pub fn print(module: *Module) void {
@@ -1313,6 +1273,18 @@ fn Section(comptime T: type) type {
         pub fn itemsSlice(self: *Self) []T {
             return self.list.items;
         }
+
+        pub fn lookup(self: *Self, idx: anytype) !T {
+            const index = switch (@TypeOf(idx)) {
+                u32 => idx,
+                usize => math.cast(u32, idx) orelse return error.IndexTooLarge,
+                else => @compileError("only u32 / usize supported"),
+            };
+
+            if (index >= self.list.items.len) return error.ValidatorInvalidIndex;
+
+            return self.list.items[index];
+        }
     };
 }
 
@@ -1337,9 +1309,138 @@ const SectionType = enum(u8) {
     DataCount = 0x0c,
 };
 
+const Code = struct {
+    start: usize,
+    locals_count: usize,
+    required_stack_space: usize,
+};
+
+pub const FuncType = struct {
+    params: []const ValType,
+    results: []const ValType,
+};
+
+pub const GlobalType = struct {
+    valtype: ValType,
+    mutability: Mutability,
+    start: ?usize,
+    import: ?u32,
+};
+
+const MemType = struct {
+    import: ?u32,
+    limits: Limit,
+};
+
+const TableType = struct {
+    import: ?u32,
+    reftype: RefType,
+    limits: Limit,
+};
+
+const DataSegment = struct {
+    count: u32,
+    data: []const u8,
+    mode: DataSegmentMode,
+};
+
+const DataSegmentType = enum {
+    Passive,
+    Active,
+};
+
+const DataSegmentMode = union(DataSegmentType) {
+    Passive: void,
+    Active: struct {
+        memidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+};
+
+pub const ElementSegment = struct {
+    reftype: RefType,
+    init: usize, // Offset into element_init_offset of first init expression code offset
+    count: u32, // Number of element_init_offset values for this segment (we have an array of initialisation functions)
+    mode: ElementSegmentMode,
+};
+
+pub const ElementSegmentType = enum {
+    Passive,
+    Active,
+    Declarative,
+};
+
+pub const ElementSegmentMode = union(ElementSegmentType) {
+    Passive: void,
+    Active: struct {
+        tableidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+    Declarative: void,
+};
+
+const LimitType = enum(u8) {
+    Min,
+    MinMax,
+};
+
+pub const Limit = struct {
+    min: u32,
+    max: ?u32,
+
+    pub fn checkMatch(self: Limit, min_imported: u32, max_imported: ?u32) !void {
+        if (min_imported < self.min) return error.LimitMismatch;
+        if (self.max) |defined_max| {
+            if (max_imported) |imported_max| {
+                if (!(imported_max <= defined_max)) {
+                    return error.LimitMismatch;
+                }
+            } else {
+                return error.LimitMismatch;
+            }
+        }
+    }
+};
+
+pub const Mutability = enum(u8) {
+    Immutable,
+    Mutable,
+};
+
+pub const Function = struct {
+    typeidx: u32,
+    import: ?u32,
+};
+
+pub const Import = struct {
+    module: []const u8,
+    name: []const u8,
+    desc_tag: Tag,
+    // desc: u8,
+};
+
+pub const Export = struct {
+    name: []const u8,
+    tag: Tag,
+    index: u32,
+};
+
+pub const Tag = enum(u8) {
+    Func,
+    Table,
+    Mem,
+    Global,
+};
+
+pub const LocalType = struct {
+    count: u32,
+    valtype: ValType,
+};
+
 const testing = std.testing;
 
 test "module loading (simple add function)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -1365,6 +1466,7 @@ test "module loading (simple add function)" {
 }
 
 test "module loading (fib)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -1414,6 +1516,7 @@ test "module loading (fib)" {
 }
 
 test "module loading (fact)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();

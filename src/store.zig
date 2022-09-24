@@ -2,16 +2,16 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
-const Function = @import("function.zig").Function;
-const Memory = @import("memory.zig").Memory;
-const Table = @import("table.zig").Table;
-const Global = @import("global.zig").Global;
-const Elem = @import("elem.zig").Elem;
-const Data = @import("data.zig").Data;
-const Import = @import("common.zig").Import;
-const Tag = @import("common.zig").Tag;
-const RefType = @import("value_type.zig").RefType;
-const ValueType = @import("value_type.zig").ValueType;
+const Function = @import("store/function.zig").Function;
+const Memory = @import("store/memory.zig").Memory;
+const Table = @import("store/table.zig").Table;
+const Global = @import("store/global.zig").Global;
+const Elem = @import("store/elem.zig").Elem;
+const Data = @import("store/data.zig").Data;
+const Import = @import("module.zig").Import;
+const Tag = @import("module.zig").Tag;
+const RefType = @import("valtype.zig").RefType;
+const ValType = @import("valtype.zig").ValType;
 const Instance = @import("instance.zig").Instance;
 
 // - Stores provide the runtime memory shared between modules

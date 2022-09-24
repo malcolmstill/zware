@@ -1,6 +1,5 @@
-const Range = @import("common.zig").Range;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
-const RefType = @import("value_type.zig").RefType;
+const RefType = @import("valtype.zig").RefType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
 pub const RrOpcode = enum(u8) {
@@ -226,8 +225,8 @@ pub const Rr = union(RrOpcode) {
     @"return": void,
     call: usize, // u32?
     call_indirect: struct {
-        @"type": u32,
-        table: u32,
+        typeidx: u32,
+        tableidx: u32,
     },
     fast_call: struct {
         start: u32,
@@ -516,4 +515,9 @@ pub const MiscRr = union(MiscOpcode) {
     @"table.fill": struct {
         tableidx: u32,
     },
+};
+
+pub const Range = struct {
+    offset: usize = 0,
+    count: usize = 0,
 };

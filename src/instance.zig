@@ -1,19 +1,17 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
-const common = @import("common.zig");
+const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
-const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
-const Memory = @import("memory.zig").Memory;
-const Table = @import("table.zig").Table;
-const Global = @import("global.zig").Global;
-const Elem = @import("elem.zig").Elem;
-const Data = @import("data.zig").Data;
+const Function = @import("store/function.zig").Function;
+const Memory = @import("store/memory.zig").Memory;
+const Table = @import("store/table.zig").Table;
+const Global = @import("store/global.zig").Global;
+const Elem = @import("store/elem.zig").Elem;
+const Data = @import("store/data.zig").Data;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
-const ArrayList = std.ArrayList;
-const Instruction = @import("function.zig").Instruction;
 
 const VirtualMachineOptions = struct {
     frame_stack_size: comptime_int = 1024,
@@ -56,6 +54,45 @@ pub const Instance = struct {
         };
     }
 
+    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
+        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        const funcaddr = self.funcaddrs.items[funcidx];
+        return try self.store.function(funcaddr);
+    }
+
+    // Lookup a memory in store via the modules index
+    pub fn getMemory(self: *Instance, index: usize) !*Memory {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
+        const memaddr = self.memaddrs.items[index];
+        return try self.store.memory(memaddr);
+    }
+
+    pub fn getTable(self: *Instance, index: usize) !*Table {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
+        const tableaddr = self.tableaddrs.items[index];
+        return try self.store.table(tableaddr);
+    }
+
+    pub fn getGlobal(self: *Instance, index: usize) !*Global {
+        if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
+        const globaladdr = self.globaladdrs.items[index];
+        return try self.store.global(globaladdr);
+    }
+
+    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
+        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
+        const elemaddr = self.elemaddrs.items[elemidx];
+        return try self.store.elem(elemaddr);
+    }
+
+    pub fn getData(self: *Instance, dataidx: usize) !*Data {
+        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
+        const dataaddr = self.dataaddrs.items[dataidx];
+        return try self.store.data(dataaddr);
+    }
+
     pub fn instantiate(self: *Instance, index: usize) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
@@ -64,8 +101,6 @@ pub const Instance = struct {
         try self.instantiateGlobals();
         try self.instantiateMemories();
         try self.instantiateTables();
-        // try self.checkData();
-        // try self.checkElements(); // FIXME: remove once all tests passing
         try self.instantiateData();
         try self.instantiateElements();
 
@@ -102,33 +137,25 @@ pub const Instance = struct {
             if (function_def.import) |_| {
                 // Check that the function defintion (which this module expects)
                 // is the same as the function in the store
-                const func_type = self.module.types.list.items[function_def.typeidx];
+                const functype = try self.module.types.lookup(function_def.typeidx);
                 const external_function = try self.getFunc(i);
-                switch (external_function) {
-                    .function => |ef| {
-                        if (!Module.signaturesEqual(ef.params, ef.results, func_type)) {
-                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
-                        }
-                    },
-                    .host_function => |hef| {
-                        if (!Module.signaturesEqual(hef.params, hef.results, func_type)) {
-                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
-                        }
-                    },
-                }
+
+                try external_function.checkSignatures(functype);
             } else {
-                // TODO: clean this up
-                const code = self.module.codes.list.items[i - imported_function_count];
-                const func = self.module.functions.list.items[i];
-                const func_type = self.module.types.list.items[func.typeidx];
+                const code = try self.module.codes.lookup(i - imported_function_count);
+                const func = try self.module.functions.lookup(i);
+                const functype = try self.module.types.lookup(func.typeidx);
+
                 const handle = try self.store.addFunction(Function{
-                    .function = .{
-                        .start = code.start,
-                        .required_stack_space = code.required_stack_space,
-                        .locals_count = code.locals_count,
-                        .params = func_type.params,
-                        .results = func_type.results,
-                        .instance = index,
+                    .params = functype.params,
+                    .results = functype.results,
+                    .subtype = .{
+                        .function = .{
+                            .start = code.start,
+                            .required_stack_space = code.required_stack_space,
+                            .locals_count = code.locals_count,
+                            .instance = index,
+                        },
                     },
                 });
 
@@ -139,18 +166,17 @@ pub const Instance = struct {
     }
 
     fn instantiateGlobals(self: *Instance) !void {
-        // 2. Initialise globals
         for (self.module.globals.list.items) |global_def, i| {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
-                if (imported_global.value_type != global_def.value_type) return error.MismatchedGlobalType;
+                if (imported_global.valtype != global_def.valtype) return error.MismatchedGlobalType;
             } else {
                 const value = if (global_def.start) |start| try self.invokeExpression(start, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
                     .value = value,
                     .mutability = global_def.mutability,
-                    .value_type = global_def.value_type,
+                    .valtype = global_def.valtype,
                 });
                 try self.globaladdrs.append(handle);
             }
@@ -158,12 +184,11 @@ pub const Instance = struct {
     }
 
     fn instantiateMemories(self: *Instance) !void {
-        // 3a. Initialise memories
         for (self.module.memories.list.items) |memtype, i| {
             if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
                 // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
-                if (!common.limitMatch(imported_mem.size(), imported_mem.max, memtype.limits.min, memtype.limits.max)) return error.ImportedMemoryNotBigEnough;
+                try memtype.limits.checkMatch(imported_mem.size(), imported_mem.max);
             } else {
                 const handle = try self.store.addMemory(memtype.limits.min, memtype.limits.max);
                 try self.memaddrs.append(handle);
@@ -172,12 +197,11 @@ pub const Instance = struct {
     }
 
     fn instantiateTables(self: *Instance) !void {
-        // 3b. Initialise tables
         for (self.module.tables.list.items) |tabletype, i| {
             if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
                 if (imported_table.reftype != tabletype.reftype) return error.ImportedTableRefTypeMismatch;
-                if (!common.limitMatch(imported_table.min, imported_table.max, tabletype.limits.min, tabletype.limits.max)) return error.ImportedTableNotBigEnough;
+                try tabletype.limits.checkMatch(imported_table.min, imported_table.max);
             } else {
                 const handle = try self.store.addTable(tabletype.reftype, tabletype.limits.min, tabletype.limits.max);
                 try self.tableaddrs.append(handle);
@@ -239,65 +263,25 @@ pub const Instance = struct {
         }
     }
 
-    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
-        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        const funcaddr = self.funcaddrs.items[funcidx];
-        return try self.store.function(funcaddr);
-    }
-
-    // Lookup a memory in store via the modules index
-    pub fn getMemory(self: *Instance, index: usize) !*Memory {
-        // TODO: with a verified program we shouldn't need to check this
-        if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
-        const memaddr = self.memaddrs.items[index];
-        return try self.store.memory(memaddr);
-    }
-
-    pub fn getTable(self: *Instance, index: usize) !*Table {
-        // TODO: with a verified program we shouldn't need to check this
-        if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
-        const tableaddr = self.tableaddrs.items[index];
-        return try self.store.table(tableaddr);
-    }
-
-    pub fn getGlobal(self: *Instance, index: usize) !*Global {
-        if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
-        const globaladdr = self.globaladdrs.items[index];
-        return try self.store.global(globaladdr);
-    }
-
-    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
-        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
-        const elemaddr = self.elemaddrs.items[elemidx];
-        return try self.store.elem(elemaddr);
-    }
-
-    pub fn getData(self: *Instance, dataidx: usize) !*Data {
-        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
-        const dataaddr = self.dataaddrs.items[dataidx];
-        return try self.store.data(dataaddr);
-    }
-
     // invoke
     //
     // Similar to invoke, but without some type checking
     pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: VirtualMachineOptions) !void {
-        // 1.
-        const index = try self.module.getExport(.Func, name);
-        if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
+        const funcidx = try self.module.getExport(.Func, name);
+        if (funcidx >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function = try self.getFunc(index);
+        const function = try self.getFunc(funcidx);
 
         var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
 
-                if (f.params.len != in.len) return error.ParamCountMismatch;
-                if (f.results.len != out.len) return error.ResultCountMismatch;
+                if (function.params.len != in.len) return error.ParamCountMismatch;
+                if (function.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
@@ -322,15 +306,15 @@ pub const Instance = struct {
                 try vm.pushFrame(VirtualMachine.Frame{
                     .op_stack_len = locals_start,
                     .label_stack_len = vm.label_ptr,
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .inst = function_instance,
-                }, f.locals_count + f.params.len);
+                }, f.locals_count + function.params.len);
 
                 // 7a.2. push label for our implicit function block. We know we don't have
                 // any code to execute after calling invoke, but we will need to
                 // pop a Label
                 try vm.pushLabel(VirtualMachine.Label{
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .op_stack_len = locals_start,
                     .branch_target = 0,
                 });
@@ -357,7 +341,7 @@ pub const Instance = struct {
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
