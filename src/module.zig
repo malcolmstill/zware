@@ -13,9 +13,6 @@ const Parser = @import("parser.zig").Parser;
 const NumType = @import("valtype.zig").NumType;
 const ValType = @import("valtype.zig").ValType;
 const RefType = @import("valtype.zig").RefType;
-const Code = @import("store/function.zig").Code;
-const VirtualMachine = @import("vm.zig").VirtualMachine;
-const Store = @import("store.zig").ArrayListStore;
 
 pub const Module = struct {
     decoded: bool = false,
@@ -1318,6 +1315,12 @@ const SectionType = enum(u8) {
     DataCount = 0x0c,
 };
 
+const Code = struct {
+    start: usize,
+    locals_count: usize,
+    required_stack_space: usize,
+};
+
 pub const FuncType = struct {
     params: []const ValType,
     results: []const ValType,
@@ -1430,6 +1433,7 @@ pub const LocalType = struct {
 const testing = std.testing;
 
 test "module loading (simple add function)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -1455,6 +1459,7 @@ test "module loading (simple add function)" {
 }
 
 test "module loading (fib)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();
@@ -1504,6 +1509,7 @@ test "module loading (fib)" {
 }
 
 test "module loading (fact)" {
+    const Store = @import("store.zig").ArrayListStore;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer _ = arena.deinit();

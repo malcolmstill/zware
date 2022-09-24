@@ -19,9 +19,3 @@ pub const Function = union(enum) {
         results: []const ValType,
     },
 };
-
-pub const Code = struct {
-    start: usize,
-    locals_count: usize,
-    required_stack_space: usize,
-};
