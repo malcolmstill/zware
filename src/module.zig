@@ -18,7 +18,6 @@ const RefType = @import("value_type.zig").RefType;
 const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
-const LimitType = common.LimitType;
 const MemType = common.MemType;
 const TableType = common.TableType;
 const Mutability = common.Mutability;
@@ -1335,6 +1334,11 @@ const SectionType = enum(u8) {
     Code = 0x0a,
     Data = 0x0b,
     DataCount = 0x0c,
+};
+
+const LimitType = enum(u8) {
+    Min,
+    MinMax,
 };
 
 const testing = std.testing;

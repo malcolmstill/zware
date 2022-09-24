@@ -2,13 +2,6 @@ const ValueType = @import("value_type.zig").ValueType;
 const RefType = @import("value_type.zig").RefType;
 const Instruction = @import("function.zig").Instruction;
 
-pub const LimitType = enum(u8) {
-    Min,
-    MinMax,
-};
-
-
-
 // Table / Memory
 pub const Limit = struct {
     min: u32,
