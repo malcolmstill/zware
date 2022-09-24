@@ -1,4 +1,3 @@
-const Range = @import("common.zig").Range;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const RefType = @import("valtype.zig").RefType;
 
@@ -516,4 +515,9 @@ pub const MiscRr = union(MiscOpcode) {
     @"table.fill": struct {
         tableidx: u32,
     },
+};
+
+pub const Range = struct {
+    offset: usize = 0,
+    count: usize = 0,
 };

@@ -3,29 +3,19 @@ const mem = std.mem;
 const leb = std.leb;
 const math = std.math;
 const unicode = std.unicode;
-const common = @import("common.zig");
+const ArrayList = std.ArrayList;
 const Rr = @import("rr.zig").Rr;
 const RrOpcode = @import("rr.zig").RrOpcode;
 const Instance = @import("instance.zig").Instance;
-const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const Parser = @import("parser.zig").Parser;
-const FuncType = common.FuncType;
 const NumType = @import("valtype.zig").NumType;
 const ValType = @import("valtype.zig").ValType;
 const RefType = @import("valtype.zig").RefType;
-const Import = common.Import;
-const Export = common.Export;
-const Limit = common.Limit;
-const Mutability = common.Mutability;
-const Code = function.Code;
-const Tag = common.Tag;
-const LocalType = common.LocalType;
+const Code = @import("function.zig").Code;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Store = @import("store.zig").ArrayListStore;
-const Function = @import("function.zig").Function;
-const function = @import("function.zig");
 
 pub const Module = struct {
     decoded: bool = false,
@@ -36,7 +26,7 @@ pub const Module = struct {
     customs: Section(Custom),
     types: Section(FuncType),
     imports: Section(Import),
-    functions: Section(common.Function),
+    functions: Section(Function),
     tables: Section(TableType),
     memories: Section(MemType),
     globals: Section(GlobalType),
@@ -61,7 +51,7 @@ pub const Module = struct {
             .customs = Section(Custom).init(alloc),
             .types = Section(FuncType).init(alloc),
             .imports = Section(Import).init(alloc),
-            .functions = Section(common.Function).init(alloc),
+            .functions = Section(Function).init(alloc),
             .tables = Section(TableType).init(alloc),
             .memories = Section(MemType).init(alloc),
             .globals = Section(GlobalType).init(alloc),
@@ -331,7 +321,7 @@ pub const Module = struct {
             self.function_index_start = self.functions.list.items.len;
         }
 
-        try self.functions.list.append(common.Function{
+        try self.functions.list.append(Function{
             .typeidx = type_index,
             .import = import,
         });
@@ -1328,6 +1318,11 @@ const SectionType = enum(u8) {
     DataCount = 0x0c,
 };
 
+pub const FuncType = struct {
+    params: []const ValType,
+    results: []const ValType,
+};
+
 pub const GlobalType = struct {
     valtype: ValType,
     mutability: Mutability,
@@ -1390,6 +1385,51 @@ pub const ElementSegmentMode = union(ElementSegmentType) {
 const LimitType = enum(u8) {
     Min,
     MinMax,
+};
+
+pub const Limit = struct {
+    min: u32,
+    max: ?u32,
+};
+
+pub const Mutability = enum(u8) {
+    Immutable,
+    Mutable,
+};
+
+pub const Function = struct {
+    typeidx: u32,
+    import: ?u32,
+};
+
+pub const Import = struct {
+    module: []const u8,
+    name: []const u8,
+    desc_tag: Tag,
+    // desc: u8,
+};
+
+pub const Export = struct {
+    name: []const u8,
+    tag: Tag,
+    index: u32,
+};
+
+pub const Tag = enum(u8) {
+    Func,
+    Table,
+    Mem,
+    Global,
+};
+
+pub const Range = struct {
+    offset: usize = 0,
+    count: usize = 0,
+};
+
+pub const LocalType = struct {
+    count: u32,
+    valtype: ValType,
 };
 
 const testing = std.testing;

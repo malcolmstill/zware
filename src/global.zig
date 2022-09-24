@@ -1,5 +1,5 @@
 const ValType = @import("valtype.zig").ValType;
-const Mutability = @import("common.zig").Mutability;
+const Mutability = @import("module.zig").Mutability;
 
 pub const Global = struct {
     valtype: ValType,
