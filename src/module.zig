@@ -614,9 +614,8 @@ pub const Module = struct {
 
             switch (elem_type) {
                 0 => {
-                    const table_index = 0;
-
-                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    const tableidx = 0;
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const expr_start = rd.context.pos;
                     const expr = self.module[expr_start..];
@@ -814,9 +813,8 @@ pub const Module = struct {
                     });
                 },
                 4 => {
-                    const table_index = 0;
-
-                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    const tableidx = 0;
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
