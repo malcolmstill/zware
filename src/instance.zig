@@ -103,9 +103,7 @@ pub const Instance = struct {
                 const func_type = self.module.types.list.items[function_def.typeidx];
                 const external_function = try self.getFunc(i);
 
-                if (!external_function.signaturesEqual(func_type)) {
-                    return error.ImportedFunctionTypeSignatureDoesNotMatch;
-                }
+                try external_function.checkSignatures(func_type);
             } else {
                 // TODO: clean this up
                 const code = self.module.codes.list.items[i - imported_function_count];

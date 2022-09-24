@@ -282,9 +282,7 @@ pub const VirtualMachine = struct {
 
         // Check that signatures match
         const call_indirect_func_type = module.types.list.items[typeidx];
-        if (!function.signaturesEqual(call_indirect_func_type)) {
-            return error.IndirectCallTypeMismatch;
-        }
+        try function.checkSignatures(call_indirect_func_type);
 
         var next_ip = ip;
 
@@ -2624,7 +2622,7 @@ pub const WasmError = error{
     Overflow,
     InvalidConversion,
     OutOfBoundsMemoryAccess,
-    IndirectCallTypeMismatch,
+    MismatchedSignatures,
     UndefinedElement,
     //
     BadMemoryIndex, // TODO: I think we won't see this with validation

@@ -20,18 +20,16 @@ pub const Function = struct {
         },
     },
 
-    pub fn signaturesEqual(self: Function, b: FuncType) bool {
-        if (self.params.len != b.params.len) return false;
-        if (self.results.len != b.results.len) return false;
+    pub fn checkSignatures(self: Function, b: FuncType) !void {
+        if (self.params.len != b.params.len) return error.MismatchedSignatures;
+        if (self.results.len != b.results.len) return error.MismatchedSignatures;
 
         for (self.params) |p_a, i| {
-            if (p_a != b.params[i]) return false;
+            if (p_a != b.params[i]) return error.MismatchedSignatures;
         }
 
         for (self.results) |r_a, i| {
-            if (r_a != b.results[i]) return false;
+            if (r_a != b.results[i]) return error.MismatchedSignatures;
         }
-
-        return true;
     }
 };

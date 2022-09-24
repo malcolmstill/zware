@@ -480,7 +480,7 @@ pub fn main() anyerror!void {
 
                             if (mem.eql(u8, trap, "indirect call type mismatch")) {
                                 switch (err) {
-                                    error.IndirectCallTypeMismatch => continue,
+                                    error.MismatchedSignatures => continue,
                                     else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
                                 }
                             }
@@ -500,7 +500,7 @@ pub fn main() anyerror!void {
                                 switch (err) {
                                     error.UndefinedElement => continue,
                                     error.OutOfBoundsMemoryAccess => continue,
-                                    error.IndirectCallTypeMismatch => continue,
+                                    error.MismatchedSignatures => continue,
                                     else => {
                                         std.debug.print("Unexpected error: {}\n", .{err});
                                         return error.TestsuiteExpectedUnitialized;
@@ -825,7 +825,7 @@ pub fn main() anyerror!void {
                     error.ImportedTableNotBigEnough => continue,
                     error.ImportedTableRefTypeMismatch => continue,
                     error.ImportNotFound => continue,
-                    error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
+                    error.MismatchedSignatures => continue,
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     error.MismatchedMutability => continue,
