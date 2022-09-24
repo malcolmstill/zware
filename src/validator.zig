@@ -5,7 +5,7 @@ const ArrayList = std.ArrayList;
 const FuncType = @import("common.zig").FuncType;
 const ValueType = @import("value_type.zig").ValueType;
 const RefType = @import("value_type.zig").RefType;
-const Global = @import("common.zig").Global;
+const GlobalType = @import("module.zig").GlobalType;
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const Module = @import("module.zig").Module;
@@ -119,14 +119,14 @@ pub const Validator = struct {
         try v.pushOperand(t);
     }
 
-    pub fn validateGlobalGet(v: *Validator, global: Global) !void {
-        if (v.is_constant and global.mutability == .Mutable) return error.ValidatorMutableGlobalInConstantExpr;
-        try v.pushOperand(ValueTypeUnknown{ .Known = global.value_type });
+    pub fn validateGlobalGet(v: *Validator, globaltype: GlobalType) !void {
+        if (v.is_constant and globaltype.mutability == .Mutable) return error.ValidatorMutableGlobalInConstantExpr;
+        try v.pushOperand(ValueTypeUnknown{ .Known = globaltype.value_type });
     }
 
-    pub fn validateGlobalSet(v: *Validator, global: Global) !void {
-        if (global.mutability == .Immutable) return error.ValidatorAttemptToMutateImmutableGlobal;
-        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = global.value_type });
+    pub fn validateGlobalSet(v: *Validator, globaltype: GlobalType) !void {
+        if (globaltype.mutability == .Immutable) return error.ValidatorAttemptToMutateImmutableGlobal;
+        _ = try v.popOperandExpecting(ValueTypeUnknown{ .Known = globaltype.value_type });
     }
 
     pub fn validateRefNull(v: *Validator, reftype: RefType) !void {

@@ -19,7 +19,6 @@ const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
 const Mutability = common.Mutability;
-const Global = common.Global;
 const Code = function.Code;
 const Tag = common.Tag;
 const LocalType = common.LocalType;
@@ -40,7 +39,7 @@ pub const Module = struct {
     functions: Section(common.Function),
     tables: Section(TableType),
     memories: Section(MemType),
-    globals: Section(Global),
+    globals: Section(GlobalType),
     exports: Section(Export),
     start: ?u32,
     elements: Section(ElementSegment),
@@ -65,7 +64,7 @@ pub const Module = struct {
             .functions = Section(common.Function).init(alloc),
             .tables = Section(TableType).init(alloc),
             .memories = Section(MemType).init(alloc),
-            .globals = Section(Global).init(alloc),
+            .globals = Section(GlobalType).init(alloc),
             .exports = Section(Export).init(alloc),
             .start = null,
             .elements = Section(ElementSegment).init(alloc),
@@ -527,7 +526,7 @@ pub const Module = struct {
         if (code == null and import == null) return error.ExpectedOneOrTheOther;
         if (code != null and import != null) return error.ExpectedOneOrTheOther;
 
-        try self.globals.list.append(Global{
+        try self.globals.list.append(GlobalType{
             .value_type = global_type,
             .mutability = mutability,
             .start = if (parsed_code) |pc| pc.start else null,
@@ -1327,6 +1326,13 @@ const SectionType = enum(u8) {
     Code = 0x0a,
     Data = 0x0b,
     DataCount = 0x0c,
+};
+
+pub const GlobalType = struct {
+    value_type: ValueType,
+    mutability: Mutability,
+    start: ?usize,
+    import: ?u32,
 };
 
 const MemType = struct {

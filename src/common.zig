@@ -20,13 +20,6 @@ pub const Function = struct {
     import: ?u32,
 };
 
-pub const Global = struct {
-    value_type: ValueType,
-    mutability: Mutability,
-    start: ?usize,
-    import: ?u32,
-};
-
 pub const Import = struct {
     module: []const u8,
     name: []const u8,
