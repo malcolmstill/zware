@@ -155,10 +155,12 @@ pub fn main() anyerror!void {
     var print_params = [_]ValType{.I32} ** 0;
     var print_results = [_]ValType{.I32} ** 0;
     const print_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print,
-            .params = print_params[0..],
-            .results = print_results[0..],
+        .params = print_params[0..],
+        .results = print_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print,
+            },
         },
     });
     const print_name = "print";
@@ -167,10 +169,12 @@ pub fn main() anyerror!void {
     var print_i32_params = [_]ValType{.I32} ** 1;
     var print_i32_results = [_]ValType{.I32} ** 0;
     const print_i32_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_i32,
-            .params = print_i32_params[0..],
-            .results = print_i32_results[0..],
+        .params = print_i32_params[0..],
+        .results = print_i32_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_i32,
+            },
         },
     });
     const print_i32_name = "print_i32";
@@ -180,10 +184,12 @@ pub fn main() anyerror!void {
     var print_i64_params = [_]ValType{.I64} ** 1;
     var print_i64_results = [_]ValType{.I64} ** 0;
     const print_i64_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_i64,
-            .params = print_i64_params[0..],
-            .results = print_i64_results[0..],
+        .params = print_i64_params[0..],
+        .results = print_i64_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_i64,
+            },
         },
     });
     const print_i64_name = "print_i64";
@@ -193,10 +199,12 @@ pub fn main() anyerror!void {
     var print_f32_params = [_]ValType{.F32} ** 1;
     var print_f32_results = [_]ValType{.F32} ** 0;
     const print_f32_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_f32,
-            .params = print_f32_params[0..],
-            .results = print_f32_results[0..],
+        .params = print_f32_params[0..],
+        .results = print_f32_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_f32,
+            },
         },
     });
     const print_f32_name = "print_f32";
@@ -206,10 +214,12 @@ pub fn main() anyerror!void {
     var print_f64_params = [_]ValType{.F64} ** 1;
     var print_f64_results = [_]ValType{.F64} ** 0;
     const print_f64_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_f64,
-            .params = print_f64_params[0..],
-            .results = print_f64_results[0..],
+        .params = print_f64_params[0..],
+        .results = print_f64_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_f64,
+            },
         },
     });
     const print_f64_name = "print_f64";
@@ -219,10 +229,12 @@ pub fn main() anyerror!void {
     var print_i32_f32_params: [2]ValType = [_]ValType{ .I32, .F32 };
     var print_i32_f32_results = [_]ValType{.F32} ** 0;
     const print_i32_f32_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_i32_f32,
-            .params = print_i32_f32_params[0..],
-            .results = print_i32_f32_results[0..],
+        .params = print_i32_f32_params[0..],
+        .results = print_i32_f32_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_i32_f32,
+            },
         },
     });
     const print_i32_f32_name = "print_i32_f32";
@@ -232,10 +244,12 @@ pub fn main() anyerror!void {
     var print_f64_f64_params: [2]ValType = [_]ValType{ .F64, .F64 };
     var print_f64_f64_results: [0]ValType = [_]ValType{};
     const print_f64_f64_handle = try store.addFunction(Function{
-        .host_function = .{
-            .func = print_f64_f64,
-            .params = print_f64_f64_params[0..],
-            .results = print_f64_f64_results[0..],
+        .params = print_f64_f64_params[0..],
+        .results = print_f64_f64_results[0..],
+        .subtype = .{
+            .host_function = .{
+                .func = print_f64_f64,
+            },
         },
     });
     const print_f64_f64_name = "print_f64_f64";

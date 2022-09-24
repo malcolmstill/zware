@@ -102,17 +102,9 @@ pub const Instance = struct {
                 // is the same as the function in the store
                 const func_type = self.module.types.list.items[function_def.typeidx];
                 const external_function = try self.getFunc(i);
-                switch (external_function) {
-                    .function => |ef| {
-                        if (!Module.signaturesEqual(ef.params, ef.results, func_type)) {
-                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
-                        }
-                    },
-                    .host_function => |hef| {
-                        if (!Module.signaturesEqual(hef.params, hef.results, func_type)) {
-                            return error.ImportedFunctionTypeSignatureDoesNotMatch;
-                        }
-                    },
+
+                if (!external_function.signaturesEqual(func_type)) {
+                    return error.ImportedFunctionTypeSignatureDoesNotMatch;
                 }
             } else {
                 // TODO: clean this up
@@ -120,13 +112,15 @@ pub const Instance = struct {
                 const func = self.module.functions.list.items[i];
                 const func_type = self.module.types.list.items[func.typeidx];
                 const handle = try self.store.addFunction(Function{
-                    .function = .{
-                        .start = code.start,
-                        .required_stack_space = code.required_stack_space,
-                        .locals_count = code.locals_count,
-                        .params = func_type.params,
-                        .results = func_type.results,
-                        .instance = index,
+                    .params = func_type.params,
+                    .results = func_type.results,
+                    .subtype = .{
+                        .function = .{
+                            .start = code.start,
+                            .required_stack_space = code.required_stack_space,
+                            .locals_count = code.locals_count,
+                            .instance = index,
+                        },
                     },
                 });
 
@@ -290,12 +284,12 @@ pub const Instance = struct {
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
 
-                if (f.params.len != in.len) return error.ParamCountMismatch;
-                if (f.results.len != out.len) return error.ResultCountMismatch;
+                if (function.params.len != in.len) return error.ParamCountMismatch;
+                if (function.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
@@ -320,15 +314,15 @@ pub const Instance = struct {
                 try vm.pushFrame(VirtualMachine.Frame{
                     .op_stack_len = locals_start,
                     .label_stack_len = vm.label_ptr,
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .inst = function_instance,
-                }, f.locals_count + f.params.len);
+                }, f.locals_count + function.params.len);
 
                 // 7a.2. push label for our implicit function block. We know we don't have
                 // any code to execute after calling invoke, but we will need to
                 // pop a Label
                 try vm.pushLabel(VirtualMachine.Label{
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .op_stack_len = locals_start,
                     .branch_target = 0,
                 });
@@ -355,7 +349,7 @@ pub const Instance = struct {
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 const function_instance = try self.store.instance(f.instance);
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));

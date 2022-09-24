@@ -1246,21 +1246,6 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn signaturesEqual(params: []const ValType, results: []const ValType, b: FuncType) bool {
-        if (params.len != b.params.len) return false;
-        if (results.len != b.results.len) return false;
-
-        for (params) |p_a, i| {
-            if (p_a != b.params[i]) return false;
-        }
-
-        for (results) |r_a, i| {
-            if (r_a != b.results[i]) return false;
-        }
-
-        return true;
-    }
-
     pub fn print(module: *Module) void {
         std.debug.print("    Types: {}\n", .{module.types.list.items.len});
         std.debug.print("Functions: {}\n", .{module.functions.list.items.len});

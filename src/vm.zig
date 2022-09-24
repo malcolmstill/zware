@@ -231,7 +231,7 @@ pub const VirtualMachine = struct {
         const function = try self.inst.getFunc(funcidx);
         var next_ip = ip;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |f| {
                 // Check we have enough stack space
                 try self.checkStackSpace(f.required_stack_space + f.locals_count);
@@ -243,16 +243,16 @@ pub const VirtualMachine = struct {
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
+                    .op_stack_len = self.op_ptr - function.params.len - f.locals_count,
                     .label_stack_len = self.label_ptr,
-                    .return_arity = f.results.len,
+                    .return_arity = function.results.len,
                     .inst = self.inst,
-                }, f.locals_count + f.params.len);
+                }, f.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = f.results.len,
-                    .op_stack_len = self.op_ptr - f.params.len - f.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_ptr - function.params.len - f.locals_count,
                     .branch_target = ip + 1,
                 });
 
@@ -280,16 +280,16 @@ pub const VirtualMachine = struct {
         const funcaddr = try table.lookup(lookup_index);
         const function = try self.inst.store.function(funcaddr);
 
+        // Check that signatures match
+        const call_indirect_func_type = module.types.list.items[typeidx];
+        if (!function.signaturesEqual(call_indirect_func_type)) {
+            return error.IndirectCallTypeMismatch;
+        }
+
         var next_ip = ip;
 
-        switch (function) {
+        switch (function.subtype) {
             .function => |func| {
-                // Check that signatures match
-                const call_indirect_func_type = module.types.list.items[typeidx];
-                if (!Module.signaturesEqual(func.params, func.results, call_indirect_func_type)) {
-                    return error.IndirectCallTypeMismatch;
-                }
-
                 // Check we have enough stack space
                 try self.checkStackSpace(func.required_stack_space + func.locals_count);
 
@@ -300,27 +300,22 @@ pub const VirtualMachine = struct {
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
-                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
+                    .op_stack_len = self.op_ptr - function.params.len - func.locals_count,
                     .label_stack_len = self.label_ptr,
-                    .return_arity = func.results.len,
+                    .return_arity = function.results.len,
                     .inst = self.inst,
-                }, func.locals_count + func.params.len);
+                }, func.locals_count + function.params.len);
 
                 // Our continuation is the code after call
                 try self.pushLabel(Label{
-                    .return_arity = func.results.len,
-                    .op_stack_len = self.op_ptr - func.params.len - func.locals_count,
+                    .return_arity = function.results.len,
+                    .op_stack_len = self.op_ptr - function.params.len - func.locals_count,
                     .branch_target = ip + 1,
                 });
 
                 next_ip = func.start;
             },
             .host_function => |host_func| {
-                const call_indirect_func_type = module.types.list.items[typeidx];
-                if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) {
-                    return error.IndirectCallTypeMismatch;
-                }
-
                 try host_func.func(self);
 
                 next_ip = ip + 1;
