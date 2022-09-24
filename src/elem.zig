@@ -1,6 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
-const RefType = @import("common.zig").RefType;
+const RefType = @import("value_type.zig").RefType;
 
 pub const Elem = struct {
     @"type": RefType,

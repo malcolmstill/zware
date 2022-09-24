@@ -10,12 +10,12 @@ const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
-const ParseIterator = instruction.ParseIterator;
+const Parser = @import("parser.zig").Parser;
 const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
-const NumType = common.NumType;
-const RefType = common.RefType;
-const ValueType = common.ValueType;
+const NumType = @import("value_type.zig").NumType;
+const ValueType = @import("value_type.zig").ValueType;
+const RefType = @import("value_type.zig").RefType;
 const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
@@ -1210,7 +1210,7 @@ pub const Module = struct {
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
-        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..], true);
+        var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], true);
 
         const in: [0]ValueType = [_]ValueType{} ** 0;
         const out: [1]ValueType = [_]ValueType{value_type} ** 1;
@@ -1248,7 +1248,7 @@ pub const Module = struct {
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
-        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..], false);
+        var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], false);
 
         try it.pushFunction(locals, func_index);
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const ValueType = @import("common.zig").ValueType;
+const ValueType = @import("value_type.zig").ValueType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Instance = @import("instance.zig").Instance;
 const Opcode = @import("instruction.zig").Opcode;

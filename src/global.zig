@@ -1,4 +1,4 @@
-const ValueType = @import("common.zig").ValueType;
+const ValueType = @import("value_type.zig").ValueType;
 const Mutability = @import("common.zig").Mutability;
 
 pub const Global = struct {

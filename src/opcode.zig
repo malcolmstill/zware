@@ -214,7 +214,7 @@ const OpcodeMeta = struct {
     offset: usize, // offset from start of function
 };
 
-// Only used by findFunctionEnd / findExprEnd...can we get rid of this (and only use ParseIterator)?
+// Only used by findFunctionEnd / findExprEnd...can we get rid of this (and only use Parser)?
 pub const OpcodeIterator = struct {
     function: []const u8,
     code: []const u8,
