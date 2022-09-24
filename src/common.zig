@@ -1,4 +1,4 @@
-const ValueType = @import("value_type.zig").ValueType;
+const ValType = @import("valtype.zig").ValType;
 
 pub const Limit = struct {
     min: u32,
@@ -11,8 +11,8 @@ pub const Mutability = enum(u8) {
 };
 
 pub const FuncType = struct {
-    params: []const ValueType,
-    results: []const ValueType,
+    params: []const ValType,
+    results: []const ValType,
 };
 
 pub const Function = struct {
@@ -47,5 +47,5 @@ pub const Range = struct {
 
 pub const LocalType = struct {
     count: u32,
-    value_type: ValueType,
+    valtype: ValType,
 };

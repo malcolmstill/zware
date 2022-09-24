@@ -5,7 +5,7 @@ pub const Store = @import("store.zig").ArrayListStore;
 pub const Function = @import("function.zig").Function;
 pub const Global = @import("global.zig").Global;
 pub const Memory = @import("memory.zig").Memory;
-pub const ValueType = @import("value_type.zig").ValueType;
+pub const ValType = @import("valtype.zig").ValType;
 pub const WasmError = @import("function.zig").WasmError;
 
 test {

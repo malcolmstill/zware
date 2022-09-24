@@ -1,6 +1,6 @@
 const Range = @import("common.zig").Range;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
-const RefType = @import("value_type.zig").RefType;
+const RefType = @import("valtype.zig").RefType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
 pub const RrOpcode = enum(u8) {

@@ -11,7 +11,7 @@ pub const RefType = enum(u8) {
     ExternRef = 0x6F,
 };
 
-pub const ValueType = enum(u8) {
+pub const ValType = enum(u8) {
     I32 = 0x7F,
     I64 = 0x7E,
     F32 = 0x7D,
@@ -21,7 +21,7 @@ pub const ValueType = enum(u8) {
     ExternRef = 0x6F,
 };
 
-pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
+pub fn valueTypeFromBlockType(block_type: i32) !ValType {
     return switch (block_type) {
         -0x01 => .I32,
         -0x02 => .I64,
@@ -33,13 +33,13 @@ pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
     };
 }
 
-pub fn toValueType(comptime t: type) ValueType {
+pub fn toValType(comptime t: type) ValType {
     return switch (t) {
         i32 => .I32,
         i64 => .I64,
         f32 => .F32,
         f64 => .F64,
         u32 => .I32,
-        else => @compileError("toValueType: unsupported type: " ++ @typeName(t)),
+        else => @compileError("toValType: unsupported type: " ++ @typeName(t)),
     };
 }

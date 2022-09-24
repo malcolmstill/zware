@@ -143,13 +143,13 @@ pub const Instance = struct {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
-                if (imported_global.value_type != global_def.value_type) return error.MismatchedGlobalType;
+                if (imported_global.valtype != global_def.valtype) return error.MismatchedGlobalType;
             } else {
                 const value = if (global_def.start) |start| try self.invokeExpression(start, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
                     .value = value,
                     .mutability = global_def.mutability,
-                    .value_type = global_def.value_type,
+                    .valtype = global_def.valtype,
                 });
                 try self.globaladdrs.append(handle);
             }

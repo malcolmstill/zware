@@ -1,8 +1,8 @@
-const ValueType = @import("value_type.zig").ValueType;
+const ValType = @import("valtype.zig").ValType;
 const Mutability = @import("common.zig").Mutability;
 
 pub const Global = struct {
-    value_type: ValueType,
+    valtype: ValType,
     mutability: Mutability,
     value: u64,
 };

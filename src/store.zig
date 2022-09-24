@@ -10,8 +10,8 @@ const Elem = @import("elem.zig").Elem;
 const Data = @import("data.zig").Data;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
-const RefType = @import("value_type.zig").RefType;
-const ValueType = @import("value_type.zig").ValueType;
+const RefType = @import("valtype.zig").RefType;
+const ValType = @import("valtype.zig").ValType;
 const Instance = @import("instance.zig").Instance;
 
 // - Stores provide the runtime memory shared between modules

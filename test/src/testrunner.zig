@@ -6,7 +6,7 @@ const math = std.math;
 const process = std.process;
 const json = std.json;
 const zware = @import("zware");
-const ValueType = zware.ValueType;
+const ValType = zware.ValType;
 const Module = zware.Module;
 const Instance = zware.Instance;
 const Store = zware.Store;
@@ -122,7 +122,7 @@ pub fn main() anyerror!void {
     // Initiliase spectest globals
     const i32_handle = try store.addGlobal(Global{
         .value = 666,
-        .value_type = .I32,
+        .valtype = .I32,
         .mutability = .Immutable,
     });
     const i32_name = "global_i32";
@@ -130,7 +130,7 @@ pub fn main() anyerror!void {
 
     const i64_handle = try store.addGlobal(Global{
         .value = 666,
-        .value_type = .I64,
+        .valtype = .I64,
         .mutability = .Immutable,
     });
     const i64_name = "global_i64";
@@ -138,7 +138,7 @@ pub fn main() anyerror!void {
 
     const f32_handle = try store.addGlobal(Global{
         .value = 666,
-        .value_type = .F32,
+        .valtype = .F32,
         .mutability = .Immutable,
     });
     const f32_name = "global_f32";
@@ -146,14 +146,14 @@ pub fn main() anyerror!void {
 
     const f64_handle = try store.addGlobal(Global{
         .value = 666,
-        .value_type = .F64,
+        .valtype = .F64,
         .mutability = .Immutable,
     });
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
 
-    var print_params = [_]ValueType{.I32} ** 0;
-    var print_results = [_]ValueType{.I32} ** 0;
+    var print_params = [_]ValType{.I32} ** 0;
+    var print_results = [_]ValType{.I32} ** 0;
     const print_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print,
@@ -164,8 +164,8 @@ pub fn main() anyerror!void {
     const print_name = "print";
     try store.@"export"(spectest_module[0..], print_name[0..], .Func, print_handle);
 
-    var print_i32_params = [_]ValueType{.I32} ** 1;
-    var print_i32_results = [_]ValueType{.I32} ** 0;
+    var print_i32_params = [_]ValType{.I32} ** 1;
+    var print_i32_results = [_]ValType{.I32} ** 0;
     const print_i32_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_i32,
@@ -177,8 +177,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_i32_name[0..], .Func, print_i32_handle);
 
     // print_i64
-    var print_i64_params = [_]ValueType{.I64} ** 1;
-    var print_i64_results = [_]ValueType{.I64} ** 0;
+    var print_i64_params = [_]ValType{.I64} ** 1;
+    var print_i64_results = [_]ValType{.I64} ** 0;
     const print_i64_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_i64,
@@ -190,8 +190,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_i64_name[0..], .Func, print_i64_handle);
 
     // export print_f32
-    var print_f32_params = [_]ValueType{.F32} ** 1;
-    var print_f32_results = [_]ValueType{.F32} ** 0;
+    var print_f32_params = [_]ValType{.F32} ** 1;
+    var print_f32_results = [_]ValType{.F32} ** 0;
     const print_f32_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_f32,
@@ -203,8 +203,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_f32_name[0..], .Func, print_f32_handle);
 
     // export print_f64
-    var print_f64_params = [_]ValueType{.F64} ** 1;
-    var print_f64_results = [_]ValueType{.F64} ** 0;
+    var print_f64_params = [_]ValType{.F64} ** 1;
+    var print_f64_results = [_]ValType{.F64} ** 0;
     const print_f64_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_f64,
@@ -216,8 +216,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_f64_name[0..], .Func, print_f64_handle);
 
     // export print_i32_f32
-    var print_i32_f32_params: [2]ValueType = [_]ValueType{ .I32, .F32 };
-    var print_i32_f32_results = [_]ValueType{.F32} ** 0;
+    var print_i32_f32_params: [2]ValType = [_]ValType{ .I32, .F32 };
+    var print_i32_f32_results = [_]ValType{.F32} ** 0;
     const print_i32_f32_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_i32_f32,
@@ -229,8 +229,8 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], print_i32_f32_name[0..], .Func, print_i32_f32_handle);
 
     // export print_i64_f64
-    var print_f64_f64_params: [2]ValueType = [_]ValueType{ .F64, .F64 };
-    var print_f64_f64_results: [0]ValueType = [_]ValueType{};
+    var print_f64_f64_params: [2]ValType = [_]ValType{ .F64, .F64 };
+    var print_f64_f64_results: [0]ValType = [_]ValType{};
     const print_f64_f64_handle = try store.addFunction(Function{
         .host_function = .{
             .func = print_f64_f64,
@@ -307,14 +307,14 @@ pub fn main() anyerror!void {
                         };
 
                         for (expected) |result, i| {
-                            const value_type = try valueTypeFromString(result.@"type");
-                            switch (value_type) {
+                            const valtype = try valueTypeFromString(result.@"type");
+                            switch (valtype) {
                                 .I32, .I64, .F32, .F64 => {
                                     if (mem.startsWith(u8, result.value, "nan:")) {
-                                        if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                        if (valtype == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
                                             continue;
                                         }
-                                        if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                        if (valtype == .F64 and math.isNan(@bitCast(f64, out[i]))) {
                                             continue;
                                         }
 
@@ -899,13 +899,13 @@ pub fn main() anyerror!void {
     }
 }
 
-fn valueTypeFromString(s: []const u8) !ValueType {
-    if (mem.eql(u8, s, "i32")) return ValueType.I32;
-    if (mem.eql(u8, s, "i64")) return ValueType.I64;
-    if (mem.eql(u8, s, "f32")) return ValueType.F32;
-    if (mem.eql(u8, s, "f64")) return ValueType.F64;
-    if (mem.eql(u8, s, "funcref")) return ValueType.FuncRef;
-    if (mem.eql(u8, s, "externref")) return ValueType.ExternRef;
+fn valueTypeFromString(s: []const u8) !ValType {
+    if (mem.eql(u8, s, "i32")) return ValType.I32;
+    if (mem.eql(u8, s, "i64")) return ValType.I64;
+    if (mem.eql(u8, s, "f32")) return ValType.F32;
+    if (mem.eql(u8, s, "f64")) return ValType.F64;
+    if (mem.eql(u8, s, "funcref")) return ValType.FuncRef;
+    if (mem.eql(u8, s, "externref")) return ValType.ExternRef;
     return error.UnknownType;
 }
 

@@ -1,5 +1,5 @@
 const std = @import("std");
-const ValueType = @import("value_type.zig").ValueType;
+const ValType = @import("valtype.zig").ValType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Instance = @import("instance.zig").Instance;
 const Range = @import("common.zig").Range;
@@ -45,14 +45,14 @@ pub const Function = union(enum) {
         locals_count: usize,
         start: usize,
         required_stack_space: usize,
-        params: []const ValueType,
-        results: []const ValueType,
+        params: []const ValType,
+        results: []const ValType,
         instance: usize,
     },
     host_function: struct {
         func: *const fn (*VirtualMachine) WasmError!void,
-        params: []const ValueType,
-        results: []const ValueType,
+        params: []const ValType,
+        results: []const ValType,
     },
 };
 

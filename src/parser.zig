@@ -8,21 +8,21 @@ const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
-const RefType = @import("value_type.zig").RefType;
-const ValueTypeUnknown = @import("validator.zig").ValueTypeUnknown;
-const valueTypeFromBlockType = @import("value_type.zig").valueTypeFromBlockType;
-const ValueType = @import("value_type.zig").ValueType;
+const RefType = @import("valtype.zig").RefType;
+const ValTypeUnknown = @import("validator.zig").ValTypeUnknown;
+const valueTypeFromBlockType = @import("valtype.zig").valueTypeFromBlockType;
+const ValType = @import("valtype.zig").ValType;
 const Rr = @import("rr.zig").Rr;
 const MiscRr = @import("rr.zig").MiscRr;
 
-const EMPTY = [0]ValueType{} ** 0;
-const I32_OUT = [1]ValueType{.I32} ** 1;
-const I64_OUT = [1]ValueType{.I64} ** 1;
-const F32_OUT = [1]ValueType{.F32} ** 1;
-const F64_OUT = [1]ValueType{.F64} ** 1;
-const V128_OUT = [1]ValueType{.V128} ** 1;
-const FUNCREF_OUT = [1]ValueType{.FuncRef} ** 1;
-const EXTERNREF_OUT = [1]ValueType{.ExternRef} ** 1;
+const EMPTY = [0]ValType{} ** 0;
+const I32_OUT = [1]ValType{.I32} ** 1;
+const I64_OUT = [1]ValType{.I64} ** 1;
+const F32_OUT = [1]ValType{.F32} ** 1;
+const F64_OUT = [1]ValType{.F64} ** 1;
+const V128_OUT = [1]ValType{.V128} ** 1;
+const FUNCREF_OUT = [1]ValType{.FuncRef} ** 1;
+const EXTERNREF_OUT = [1]ValType{.ExternRef} ** 1;
 
 pub const Parser = struct {
     function: []const u8,
@@ -31,7 +31,7 @@ pub const Parser = struct {
     parsed: *ArrayList(Rr),
     module: *Module,
     validator: Validator,
-    params: ?[]const ValueType,
+    params: ?[]const ValType,
     locals: ?[]LocalType,
     continuation_stack: []usize,
     continuation_stack_ptr: usize,
@@ -326,7 +326,7 @@ pub const Parser = struct {
                 const type_count = try opcode.readULEB128Mem(u32, &self.code);
                 if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
                 const valuetype_raw = try opcode.readULEB128Mem(i32, &self.code);
-                const valuetype = try std.meta.intToEnum(ValueType, valuetype_raw);
+                const valuetype = try std.meta.intToEnum(ValType, valuetype_raw);
 
                 try self.validator.validateSelectT(valuetype);
                 rt_instr = Rr.select;
@@ -357,13 +357,13 @@ pub const Parser = struct {
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
 
                 const table = self.module.tables.list.items[@intCast(usize, tableidx)];
-                const reftype: ValueType = switch (table.reftype) {
+                const reftype: ValType = switch (table.reftype) {
                     .FuncRef => .FuncRef,
                     .ExternRef => .ExternRef,
                 };
 
-                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                _ = try self.validator.pushOperand(ValueTypeUnknown{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                _ = try self.validator.pushOperand(ValTypeUnknown{ .Known = reftype });
 
                 rt_instr = Rr{ .@"table.get" = tableidx };
             },
@@ -373,13 +373,13 @@ pub const Parser = struct {
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
 
                 const table = self.module.tables.list.items[@intCast(usize, tableidx)];
-                const reftype: ValueType = switch (table.reftype) {
+                const reftype: ValType = switch (table.reftype) {
                     .FuncRef => .FuncRef,
                     .ExternRef => .ExternRef,
                 };
 
-                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
-                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
 
                 rt_instr = Rr{ .@"table.set" = tableidx };
             },
@@ -392,11 +392,11 @@ pub const Parser = struct {
                     try self.validator.validateLocalGet(params[index]);
                 } else {
                     const local_index = index - params.len;
-                    var local_type: ?ValueType = null;
+                    var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
                         if (local_index < count + l.count) {
-                            local_type = l.value_type;
+                            local_type = l.valtype;
                             break;
                         }
                         count += l.count;
@@ -421,11 +421,11 @@ pub const Parser = struct {
                     try self.validator.validateLocalSet(params[index]);
                 } else {
                     const local_index = index - params.len;
-                    var local_type: ?ValueType = null;
+                    var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
                         if (local_index < count + l.count) {
-                            local_type = l.value_type;
+                            local_type = l.valtype;
                             break;
                         }
                         count += l.count;
@@ -450,11 +450,11 @@ pub const Parser = struct {
                     try self.validator.validateLocalTee(params[index]);
                 } else {
                     const local_index = index - params.len;
-                    var local_type: ?ValueType = null;
+                    var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
                         if (local_index < count + l.count) {
-                            local_type = l.value_type;
+                            local_type = l.valtype;
                             break;
                         }
                         count += l.count;
@@ -1076,15 +1076,15 @@ pub const Parser = struct {
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         const table = self.module.tables.list.items[tableidx];
-                        const reftype: ValueType = switch (table.reftype) {
+                        const reftype: ValType = switch (table.reftype) {
                             .FuncRef => .FuncRef,
                             .ExternRef => .ExternRef,
                         };
 
-                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
 
-                        try self.validator.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+                        try self.validator.pushOperand(ValTypeUnknown{ .Known = .I32 });
 
                         rt_instr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
                             .tableidx = tableidx,
@@ -1103,14 +1103,14 @@ pub const Parser = struct {
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         const table = self.module.tables.list.items[tableidx];
-                        const reftype: ValueType = switch (table.reftype) {
+                        const reftype: ValType = switch (table.reftype) {
                             .FuncRef => .FuncRef,
                             .ExternRef => .ExternRef,
                         };
 
-                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
-                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
-                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
 
                         rt_instr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
                             .tableidx = tableidx,

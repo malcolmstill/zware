@@ -12,9 +12,9 @@ const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const Parser = @import("parser.zig").Parser;
 const FuncType = common.FuncType;
-const NumType = @import("value_type.zig").NumType;
-const ValueType = @import("value_type.zig").ValueType;
-const RefType = @import("value_type.zig").RefType;
+const NumType = @import("valtype.zig").NumType;
+const ValType = @import("valtype.zig").ValType;
+const RefType = @import("valtype.zig").RefType;
 const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
@@ -197,7 +197,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -214,7 +214,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    _ = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
@@ -225,17 +225,17 @@ pub const Module = struct {
             var params = self.module[params_start..params_end];
             var results = self.module[results_start..results_end];
 
-            var params_value_type: []const ValueType = undefined;
-            params_value_type.ptr = @ptrCast([*]const ValueType, params.ptr);
-            params_value_type.len = params.len;
+            var params_valtype: []const ValType = undefined;
+            params_valtype.ptr = @ptrCast([*]const ValType, params.ptr);
+            params_valtype.len = params.len;
 
-            var results_value_type: []const ValueType = undefined;
-            results_value_type.ptr = @ptrCast([*]const ValueType, results.ptr);
-            results_value_type.len = results.len;
+            var results_valtype: []const ValType = undefined;
+            results_valtype.ptr = @ptrCast([*]const ValType, results.ptr);
+            results_valtype.len = results.len;
 
             try self.types.list.append(FuncType{
-                .params = params_value_type,
-                .results = results_value_type,
+                .params = params_valtype,
+                .results = results_valtype,
             });
         }
     }
@@ -491,7 +491,7 @@ pub const Module = struct {
     fn decodeGlobal(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
 
-        const global_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+        const global_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
@@ -527,7 +527,7 @@ pub const Module = struct {
         if (code != null and import != null) return error.ExpectedOneOrTheOther;
 
         try self.globals.list.append(GlobalType{
-            .value_type = global_type,
+            .valtype = global_type,
             .mutability = mutability,
             .start = if (parsed_code) |pc| pc.start else null,
             .import = import,
@@ -932,7 +932,7 @@ pub const Module = struct {
         }
     }
 
-    fn readConstantExpression(self: *Module, value_type: ValueType) !StartWithDepth {
+    fn readConstantExpression(self: *Module, valtype: ValType) !StartWithDepth {
         const rd = self.buf.reader();
 
         const expr_start = rd.context.pos;
@@ -944,7 +944,7 @@ pub const Module = struct {
             else => return err,
         };
 
-        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], value_type);
+        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], valtype);
     }
 
     fn decodeDataCountSection(self: *Module, size: u32) !void {
@@ -998,14 +998,14 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                const local_type = rd.readEnum(ValueType, .Little) catch |err| switch (err) {
+                const local_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
                     error.EndOfStream => return error.UnexpectedEndOfInput,
                     else => return err,
                 };
 
                 locals_count += type_count;
 
-                try self.local_types.append(.{ .count = type_count, .value_type = local_type });
+                try self.local_types.append(.{ .count = type_count, .valtype = local_type });
             }
             if (locals_count >= 0x100000000) return error.TooManyLocals;
 
@@ -1194,15 +1194,15 @@ pub const Module = struct {
         max_depth: usize,
     };
 
-    pub fn parseConstantCode(self: *Module, code: []const u8, value_type: ValueType) !StartWithDepth {
+    pub fn parseConstantCode(self: *Module, code: []const u8, valtype: ValType) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], true);
 
-        const in: [0]ValueType = [_]ValueType{} ** 0;
-        const out: [1]ValueType = [_]ValueType{value_type} ** 1;
+        const in: [0]ValType = [_]ValType{} ** 0;
+        const out: [1]ValType = [_]ValType{valtype} ** 1;
 
         try it.validator.pushControlFrame(
             .block,
@@ -1259,7 +1259,7 @@ pub const Module = struct {
         return error.ExportNotFound;
     }
 
-    pub fn signaturesEqual(params: []const ValueType, results: []const ValueType, b: FuncType) bool {
+    pub fn signaturesEqual(params: []const ValType, results: []const ValType, b: FuncType) bool {
         if (params.len != b.params.len) return false;
         if (results.len != b.results.len) return false;
 
@@ -1329,7 +1329,7 @@ const SectionType = enum(u8) {
 };
 
 pub const GlobalType = struct {
-    value_type: ValueType,
+    valtype: ValType,
     mutability: Mutability,
     start: ?usize,
     import: ?u32,
