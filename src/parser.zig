@@ -101,10 +101,11 @@ pub const Parser = struct {
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
 
                 if (block_type >= 0) {
-                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
-                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
-                    try self.validator.validateBlock(func_type.params, func_type.results);
+                    const funcidx = @intCast(u32, block_type);
+                    const functype = try self.module.types.lookup(funcidx);
+                    block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
+                    try self.validator.validateBlock(functype.params, functype.results);
                 } else {
                     if (block_type == -0x40) {
                         try self.validator.validateBlock(EMPTY[0..], EMPTY[0..]);
@@ -137,10 +138,11 @@ pub const Parser = struct {
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
-                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
-                    try self.validator.validateLoop(func_type.params, func_type.results);
+                    const funcidx = @intCast(u32, block_type);
+                    const functype = try self.module.types.lookup(funcidx);
+                    block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
+                    try self.validator.validateLoop(functype.params, functype.results);
                 } else {
                     if (block_type == -0x40) {
                         try self.validator.validateLoop(EMPTY[0..], EMPTY[0..]);
@@ -178,10 +180,11 @@ pub const Parser = struct {
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const func_type = self.module.types.list.items[@intCast(usize, block_type)];
-                    block_params = math.cast(u16, func_type.params.len) orelse return error.FailedCast;
-                    block_returns = math.cast(u16, func_type.results.len) orelse return error.FailedCast;
-                    try self.validator.validateIf(func_type.params, func_type.results);
+                    const funcidx = @intCast(u32, block_type);
+                    const functype = try self.module.types.lookup(funcidx);
+                    block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
+                    block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
+                    try self.validator.validateIf(functype.params, functype.results);
                 } else {
                     if (block_type == -0x40) {
                         try self.validator.validateIf(EMPTY[0..], EMPTY[0..]);
@@ -284,9 +287,8 @@ pub const Parser = struct {
             .@"return" => rr = Rr.@"return",
             .call => {
                 const funcidx = try opcode.readULEB128Mem(u32, &self.code);
-                if (funcidx >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
-                const func = self.module.functions.list.items[@intCast(usize, funcidx)];
-                const functype = self.module.types.list.items[@intCast(usize, func.typeidx)];
+                const func = try self.module.functions.lookup(funcidx);
+                const functype = try self.module.types.lookup(func.typeidx);
 
                 try self.validator.validateCall(functype);
 
@@ -296,12 +298,11 @@ pub const Parser = struct {
             },
             .call_indirect => {
                 const typeidx = try opcode.readULEB128Mem(u32, &self.code);
-                if (typeidx >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
+                const functype = try self.module.types.lookup(typeidx);
 
                 const tableidx = try opcode.readByte(&self.code);
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
-                const functype = self.module.types.list.items[@intCast(usize, typeidx)];
                 try self.validator.validateCallIndirect(functype);
 
                 rr = Rr{
@@ -324,30 +325,24 @@ pub const Parser = struct {
             },
             .@"global.get" => {
                 const globalidx = try opcode.readULEB128Mem(u32, &self.code);
+                const global = try self.module.globals.lookup(globalidx);
 
-                // TODO: add a getGlobal to module?
-                if (globalidx >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
-                const global = self.module.globals.list.items[@intCast(usize, globalidx)];
                 try self.validator.validateGlobalGet(global);
 
                 rr = Rr{ .@"global.get" = globalidx };
             },
             .@"global.set" => {
                 const globalidx = try opcode.readULEB128Mem(u32, &self.code);
+                const global = try self.module.globals.lookup(globalidx);
 
-                if (globalidx >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
-
-                const global = self.module.globals.list.items[@intCast(usize, globalidx)];
                 try self.validator.validateGlobalSet(global);
 
                 rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
                 const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                const table = try self.module.tables.lookup(tableidx);
 
-                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
-
-                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
                 const reftype: ValType = switch (table.reftype) {
                     .FuncRef => .FuncRef,
                     .ExternRef => .ExternRef,
@@ -360,10 +355,8 @@ pub const Parser = struct {
             },
             .@"table.set" => {
                 const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                const table = try self.module.tables.lookup(tableidx);
 
-                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
-
-                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
                 const reftype: ValType = switch (table.reftype) {
                     .FuncRef => .FuncRef,
                     .ExternRef => .ExternRef,
@@ -1027,12 +1020,11 @@ pub const Parser = struct {
                     },
                     .@"table.init" => {
                         const elemidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
-                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const elemtype = try self.module.elements.lookup(elemidx);
 
-                        const elemtype = self.module.elements.list.items[elemidx];
-                        const tabletype = self.module.tables.list.items[tableidx];
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const tabletype = try self.module.tables.lookup(tableidx);
+
                         if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
 
                         rr = Rr{ .misc = MiscRr{ .@"table.init" = .{
@@ -1049,12 +1041,11 @@ pub const Parser = struct {
                     },
                     .@"table.copy" => {
                         const dest_tableidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (dest_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
-                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (src_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const dest_tabletype = try self.module.tables.lookup(dest_tableidx);
 
-                        const dest_tabletype = self.module.tables.list.items[dest_tableidx];
-                        const src_tabletype = self.module.tables.list.items[src_tableidx];
+                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const src_tabletype = try self.module.tables.lookup(src_tableidx);
+
                         if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
 
                         rr = Rr{ .misc = MiscRr{ .@"table.copy" = .{
@@ -1064,9 +1055,8 @@ pub const Parser = struct {
                     },
                     .@"table.grow" => {
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const table = try self.module.tables.lookup(tableidx);
 
-                        const table = self.module.tables.list.items[tableidx];
                         const reftype: ValType = switch (table.reftype) {
                             .FuncRef => .FuncRef,
                             .ExternRef => .ExternRef,
@@ -1091,9 +1081,8 @@ pub const Parser = struct {
                     },
                     .@"table.fill" => {
                         const tableidx = try opcode.readULEB128Mem(u32, &self.code);
-                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const table = try self.module.tables.lookup(tableidx);
 
-                        const table = self.module.tables.list.items[tableidx];
                         const reftype: ValType = switch (table.reftype) {
                             .FuncRef => .FuncRef,
                             .ExternRef => .ExternRef,

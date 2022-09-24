@@ -137,10 +137,10 @@ pub const Instance = struct {
             if (function_def.import) |_| {
                 // Check that the function defintion (which this module expects)
                 // is the same as the function in the store
-                const func_type = self.module.types.list.items[function_def.typeidx];
+                const functype = try self.module.types.lookup(function_def.typeidx);
                 const external_function = try self.getFunc(i);
 
-                try external_function.checkSignatures(func_type);
+                try external_function.checkSignatures(functype);
             } else {
                 // TODO: clean this up
                 const code = self.module.codes.list.items[i - imported_function_count];
