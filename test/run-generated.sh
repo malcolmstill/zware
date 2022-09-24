@@ -90,6 +90,7 @@ $BIN_DIR/testrunner traps.json
 $BIN_DIR/testrunner type.json
 $BIN_DIR/testrunner unreachable.json
 $BIN_DIR/testrunner unreached-invalid.json
+$BIN_DIR/testrunner unreached-valid.json
 $BIN_DIR/testrunner unwind.json
 $BIN_DIR/testrunner utf8-custom-section-id.json
 $BIN_DIR/testrunner utf8-import-field.json

@@ -577,18 +577,11 @@ pub const Validator = struct {
     pub fn popOperandExpecting(v: *Validator, expected: ValueTypeUnknown) !ValueTypeUnknown {
         const actual = try v.popOperand();
 
-        const actual_type: ValueType = switch (actual) {
-            .Unknown => return expected,
-            .Known => |k| k,
-        };
-
-        const expected_type: ValueType = switch (expected) {
-            .Unknown => return actual,
-            .Known => |k| k,
-        };
-
-        if (actual_type != expected_type) return error.MismatchedTypes;
-        return actual;
+        if (!valueTypeEqual(actual, expected) and !valueTypeEqual(actual, ValueTypeUnknown.Unknown) and !valueTypeEqual(expected, ValueTypeUnknown.Unknown)) {
+            return error.MismatchedTypes;
+        } else {
+            return actual;
+        }
     }
 
     fn pushOperands(v: *Validator, operands: []const ValueType) !void {
