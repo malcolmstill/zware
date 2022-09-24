@@ -267,11 +267,10 @@ pub const Instance = struct {
     //
     // Similar to invoke, but without some type checking
     pub fn invoke(self: *Instance, name: []const u8, in: []u64, out: []u64, comptime options: VirtualMachineOptions) !void {
-        // 1.
-        const index = try self.module.getExport(.Func, name);
-        if (index >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
+        const funcidx = try self.module.getExport(.Func, name);
+        if (funcidx >= self.module.functions.list.items.len) return error.FuncIndexExceedsTypesLength;
 
-        const function = try self.getFunc(index);
+        const function = try self.getFunc(funcidx);
 
         var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
