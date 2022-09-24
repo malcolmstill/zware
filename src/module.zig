@@ -1274,6 +1274,12 @@ fn Section(comptime T: type) type {
         pub fn itemsSlice(self: *Self) []T {
             return self.list.items;
         }
+
+        pub fn lookup(self: *Self, idx: u32) !T {
+            if (idx >= self.list.items.len) return error.ValidatorInvalidIdx;
+
+            return self.list.items[idx];
+        }
     };
 }
 
