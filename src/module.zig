@@ -1274,10 +1274,16 @@ fn Section(comptime T: type) type {
             return self.list.items;
         }
 
-        pub fn lookup(self: *Self, idx: u32) !T {
-            if (idx >= self.list.items.len) return error.ValidatorInvalidIndex;
+        pub fn lookup(self: *Self, idx: anytype) !T {
+            const index = switch (@TypeOf(idx)) {
+                u32 => idx,
+                usize => math.cast(u32, idx) orelse return error.IndexTooLarge,
+                else => @compileError("only u32 / usize supported"),
+            };
 
-            return self.list.items[idx];
+            if (index >= self.list.items.len) return error.ValidatorInvalidIndex;
+
+            return self.list.items[index];
         }
     };
 }

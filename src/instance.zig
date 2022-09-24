@@ -142,13 +142,13 @@ pub const Instance = struct {
 
                 try external_function.checkSignatures(functype);
             } else {
-                // TODO: clean this up
-                const code = self.module.codes.list.items[i - imported_function_count];
-                const func = self.module.functions.list.items[i];
-                const func_type = self.module.types.list.items[func.typeidx];
+                const code = try self.module.codes.lookup(i - imported_function_count);
+                const func = try self.module.functions.lookup(i);
+                const functype = try self.module.types.lookup(func.typeidx);
+
                 const handle = try self.store.addFunction(Function{
-                    .params = func_type.params,
-                    .results = func_type.results,
+                    .params = functype.params,
+                    .results = functype.results,
                     .subtype = .{
                         .function = .{
                             .start = code.start,
