@@ -91,33 +91,6 @@ pub const VirtualMachine = struct {
         return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
-    const misc_lookup = [18]InstructionFunction{
-        @"i32.trunc_sat_f32_s",
-        @"i32.trunc_sat_f32_u",
-        @"i32.trunc_sat_f64_s",
-        @"i32.trunc_sat_f64_u",
-        @"i64.trunc_sat_f32_s",
-        @"i64.trunc_sat_f32_u",
-        @"i64.trunc_sat_f64_s",
-        @"i64.trunc_sat_f64_u",
-        @"memory.init",
-        @"data.drop",
-        @"memory.copy",
-        @"memory.fill",
-        @"table.init",
-        @"elem.drop",
-        @"table.copy",
-        @"table.grow",
-        @"table.size",
-        @"table.fill",
-    };
-
-    inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
-        const next_instr = code[next_ip].misc;
-
-        return try @call(.{ .modifier = .always_tail }, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
-    }
-
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
     fn impl_ni(_: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
@@ -2092,6 +2065,17 @@ pub const VirtualMachine = struct {
 
     fn misc(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         return miscDispatch(self, ip, code);
+    }
+
+    const misc_lookup = [18]InstructionFunction{
+        @"i32.trunc_sat_f32_s", @"i32.trunc_sat_f32_u", @"i32.trunc_sat_f64_s", @"i32.trunc_sat_f64_u", @"i64.trunc_sat_f32_s", @"i64.trunc_sat_f32_u", @"i64.trunc_sat_f64_s", @"i64.trunc_sat_f64_u", @"memory.init", @"data.drop", @"memory.copy", @"memory.fill", @"table.init", @"elem.drop", @"table.copy", @"table.grow",
+        @"table.size",          @"table.fill",
+    };
+
+    inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
+        const next_instr = code[next_ip].misc;
+
+        return try @call(.{ .modifier = .always_tail }, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
