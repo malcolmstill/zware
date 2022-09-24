@@ -91,6 +91,33 @@ pub const VirtualMachine = struct {
         return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
+    const misc_lookup = [18]InstructionFunction{
+        @"i32.trunc_sat_f32_s",
+        @"i32.trunc_sat_f32_u",
+        @"i32.trunc_sat_f64_s",
+        @"i32.trunc_sat_f64_u",
+        @"i64.trunc_sat_f32_s",
+        @"i64.trunc_sat_f32_u",
+        @"i64.trunc_sat_f64_s",
+        @"i64.trunc_sat_f64_u",
+        @"memory.init",
+        @"data.drop",
+        @"memory.copy",
+        @"memory.fill",
+        @"table.init",
+        @"elem.drop",
+        @"table.copy",
+        @"table.grow",
+        @"table.size",
+        @"table.fill",
+    };
+
+    inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
+        const next_instr = code[next_ip].misc;
+
+        return try @call(.{ .modifier = .always_tail }, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
+    }
+
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
     fn impl_ni(_: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
@@ -2063,379 +2090,403 @@ pub const VirtualMachine = struct {
         return dispatch(self, ip + 1, code);
     }
 
-    fn misc(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const meta = code[ip].misc;
-
-        switch (meta) {
-            .@"i32.trunc_sat_f32_s" => {
-                const c1 = self.popOperand(f32);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(i32, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f32, math.maxInt(i32))) {
-                    self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f32, math.minInt(i32))) {
-                    self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i32.trunc_sat_f32_u" => {
-                const c1 = self.popOperand(f32);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(u32, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f32, math.maxInt(u32))) {
-                    self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f32, math.minInt(u32))) {
-                    self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i32.trunc_sat_f64_s" => {
-                const c1 = self.popOperand(f64);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(i32, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f64, math.maxInt(i32))) {
-                    self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f64, math.minInt(i32))) {
-                    self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i32.trunc_sat_f64_u" => {
-                const c1 = self.popOperand(f64);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(u32, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f64, math.maxInt(u32))) {
-                    self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f64, math.minInt(u32))) {
-                    self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i64.trunc_sat_f32_s" => {
-                const c1 = self.popOperand(f32);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(i64, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f32, math.maxInt(i64))) {
-                    self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f32, math.minInt(i64))) {
-                    self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i64.trunc_sat_f32_u" => {
-                const c1 = self.popOperand(f32);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(u64, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f32, math.maxInt(u64))) {
-                    self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f32, math.minInt(u64))) {
-                    self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i64.trunc_sat_f64_s" => {
-                const c1 = self.popOperand(f64);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(i64, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f64, math.maxInt(i64))) {
-                    self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f64, math.minInt(i64))) {
-                    self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"i64.trunc_sat_f64_u" => {
-                const c1 = self.popOperand(f64);
-                const trunc = @trunc(c1);
-
-                if (math.isNan(c1)) {
-                    self.pushOperandNoCheck(u64, 0);
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (trunc >= @intToFloat(f64, math.maxInt(u64))) {
-                    self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
-                    return dispatch(self, ip + 1, code);
-                }
-                if (trunc < @intToFloat(f64, math.minInt(u64))) {
-                    self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
-                    return dispatch(self, ip + 1, code);
-                }
-
-                self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
-                return dispatch(self, ip + 1, code);
-            },
-            .@"memory.init" => |meta| {
-                const n = self.popOperand(u32);
-                const src = self.popOperand(u32);
-                const dest = self.popOperand(u32);
-
-                const memory = try self.inst.getMemory(meta.memidx);
-                const mem_size = memory.sizeBytes();
-                const data = try self.inst.getData(meta.dataidx);
-
-                if (@as(u33, src) + @as(u33, n) > data.data.len) return error.OutOfBoundsMemoryAccess;
-                if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (n == 0) {
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (data.dropped) return error.OutOfBoundsMemoryAccess;
-
-                var i: u32 = 0;
-                while (i < n) : (i += 1) {
-                    try memory.write(u8, 0, dest + i, data.data[src + i]);
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"data.drop" => |dataidx| {
-                const data = try self.inst.getData(dataidx);
-                data.dropped = true;
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"memory.copy" => {
-                const n = self.popOperand(u32);
-                const src = self.popOperand(u32);
-                const dest = self.popOperand(u32);
-
-                const memory = try self.inst.getMemory(0);
-                const mem_size = memory.sizeBytes();
-
-                if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (n == 0) {
-                    return dispatch(self, ip + 1, code);
-                }
-
-                if (dest <= src) {
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        // FIXME: no check
-                        // FIXME: take single address which is u33 (for write / read)
-                        try memory.write(u8, 0, dest + i, try memory.read(u8, 0, src + i));
-                    }
-                } else {
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        // FIXME: no check
-                        // FIXME: take single address which is u33?
-                        try memory.write(u8, 0, dest + n - 1 - i, try memory.read(u8, 0, src + n - 1 - i));
-                    }
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"memory.fill" => {
-                const n = self.popOperand(u32);
-                const value = self.popOperand(u32);
-                const dest = self.popOperand(u32);
-
-                const memory = try self.inst.getMemory(0);
-                const mem_size = memory.sizeBytes();
-
-                if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
-                if (n == 0) {
-                    return dispatch(self, ip + 1, code);
-                }
-
-                var i: u32 = 0;
-                while (i < n) : (i += 1) {
-                    // FIXME: no check
-                    // FIXME: take single address which is u33 (for write / read)
-                    try memory.write(u8, 0, dest + i, @truncate(u8, value));
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"table.init" => |table_init_meta| {
-                const tableidx = table_init_meta.tableidx;
-                const elemidx = table_init_meta.elemidx;
-
-                const table = try self.inst.getTable(tableidx);
-                const elem = try self.inst.getElem(elemidx);
-
-                const n = self.popOperand(u32);
-                const s = self.popOperand(u32);
-                const d = self.popOperand(u32);
-
-                _ = math.add(u32, s, n) catch return error.Trap;
-                _ = math.add(u32, d, n) catch return error.Trap;
-
-                if (s + n > elem.elem.len) return error.Trap;
-                if (d + n > table.size()) return error.Trap;
-                if (n == 0) return;
-
-                if (elem.dropped) return error.Trap;
-
-                var i: u32 = 0;
-                while (i < n) : (i += 1) {
-                    try table.set(d + i, elem.elem[s + i]);
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"elem.drop" => |misc_meta| {
-                const elemidx = misc_meta.elemidx;
-                const elem = try self.inst.getElem(elemidx);
-                elem.dropped = true;
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"table.copy" => |misc_meta| {
-                const dest_tableidx = misc_meta.dest_tableidx;
-                const src_tableidx = misc_meta.src_tableidx;
-
-                const dest_table = try self.inst.getTable(dest_tableidx);
-                const src_table = try self.inst.getTable(src_tableidx);
-
-                const n = self.popOperand(u32);
-                const s = self.popOperand(u32);
-                const d = self.popOperand(u32);
-
-                _ = math.add(u32, s, n) catch return error.Trap;
-                _ = math.add(u32, d, n) catch return error.Trap;
-
-                if (s + n > src_table.size()) return error.Trap;
-                if (d + n > dest_table.size()) return error.Trap;
-                if (n == 0) return;
-
-                if (d <= s) {
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        try dest_table.set(d + i, try src_table.get(s + i));
-                    }
-                } else {
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        try dest_table.set(d + n - 1 - i, try src_table.get(s + n - 1 - i));
-                    }
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"table.grow" => |misc_meta| {
-                const tableidx = misc_meta.tableidx;
-
-                const table = try self.inst.getTable(tableidx);
-
-                const n = self.popOperand(u32);
-                const ref = self.popOperand(u64);
-
-                if (table.grow(n)) |old_size| {
-                    self.pushOperandNoCheck(u32, old_size);
-                    var i: u32 = 0;
-                    while (i < n) : (i += 1) {
-                        try table.set(old_size + i, ref);
-                    }
-                } else |_| {
-                    self.pushOperandNoCheck(i32, @as(i32, -1));
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"table.size" => |misc_meta| {
-                const tableidx = misc_meta.tableidx;
-
-                const table = try self.inst.getTable(tableidx);
-
-                self.pushOperandNoCheck(u32, @intCast(u32, table.size()));
-
-                return dispatch(self, ip + 1, code);
-            },
-            .@"table.fill" => |misc_meta| {
-                const tableidx = misc_meta.tableidx;
-
-                const table = try self.inst.getTable(tableidx);
-
-                const n = self.popOperand(u32);
-                const ref = self.popOperand(u64);
-                const d = self.popOperand(u32);
-
-                _ = math.add(u32, d, n) catch return error.Trap;
-
-                if (d + n > table.size()) return error.Trap;
-                if (n == 0) return;
-
-                var i: u32 = 0;
-                while (i < n) : (i += 1) {
-                    try table.set(d + i, ref);
-                }
-
-                return dispatch(self, ip + 1, code);
-            },
+    fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f32);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(i32, 0);
+            return dispatch(self, ip + 1, code);
         }
+
+        if (trunc >= @intToFloat(f32, math.maxInt(i32))) {
+            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f32, math.minInt(i32))) {
+            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i32.trunc_sat_f32_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f32);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(u32, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f32, math.maxInt(u32))) {
+            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f32, math.minInt(u32))) {
+            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn misc(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        return miscDispatch(self, ip, code);
+    }
+
+    fn @"i32.trunc_sat_f64_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f64);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(i32, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f64, math.maxInt(i32))) {
+            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f64, math.minInt(i32))) {
+            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i32.trunc_sat_f64_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f64);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(u32, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f64, math.maxInt(u32))) {
+            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f64, math.minInt(u32))) {
+            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i64.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f32);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(i64, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f32, math.maxInt(i64))) {
+            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f32, math.minInt(i64))) {
+            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i64.trunc_sat_f32_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f32);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(u64, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f32, math.maxInt(u64))) {
+            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f32, math.minInt(u64))) {
+            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i64.trunc_sat_f64_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f64);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(i64, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f64, math.maxInt(i64))) {
+            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f64, math.minInt(i64))) {
+            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"i64.trunc_sat_f64_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const c1 = self.popOperand(f64);
+        const trunc = @trunc(c1);
+
+        if (math.isNan(c1)) {
+            self.pushOperandNoCheck(u64, 0);
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (trunc >= @intToFloat(f64, math.maxInt(u64))) {
+            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+            return dispatch(self, ip + 1, code);
+        }
+        if (trunc < @intToFloat(f64, math.minInt(u64))) {
+            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+            return dispatch(self, ip + 1, code);
+        }
+
+        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"memory.init"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"memory.init";
+
+        const n = self.popOperand(u32);
+        const src = self.popOperand(u32);
+        const dest = self.popOperand(u32);
+
+        const memory = try self.inst.getMemory(meta.memidx);
+        const mem_size = memory.sizeBytes();
+        const data = try self.inst.getData(meta.dataidx);
+
+        if (@as(u33, src) + @as(u33, n) > data.data.len) return error.OutOfBoundsMemoryAccess;
+        if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+        if (n == 0) {
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (data.dropped) return error.OutOfBoundsMemoryAccess;
+
+        var i: u32 = 0;
+        while (i < n) : (i += 1) {
+            try memory.write(u8, 0, dest + i, data.data[src + i]);
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"data.drop"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const dataidx = code[ip].misc.@"data.drop";
+        const data = try self.inst.getData(dataidx);
+        data.dropped = true;
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"memory.copy"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const n = self.popOperand(u32);
+        const src = self.popOperand(u32);
+        const dest = self.popOperand(u32);
+
+        const memory = try self.inst.getMemory(0);
+        const mem_size = memory.sizeBytes();
+
+        if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+        if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+        if (n == 0) {
+            return dispatch(self, ip + 1, code);
+        }
+
+        if (dest <= src) {
+            var i: u32 = 0;
+            while (i < n) : (i += 1) {
+                // FIXME: no check
+                // FIXME: take single address which is u33 (for write / read)
+                try memory.write(u8, 0, dest + i, try memory.read(u8, 0, src + i));
+            }
+        } else {
+            var i: u32 = 0;
+            while (i < n) : (i += 1) {
+                // FIXME: no check
+                // FIXME: take single address which is u33?
+                try memory.write(u8, 0, dest + n - 1 - i, try memory.read(u8, 0, src + n - 1 - i));
+            }
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"memory.fill"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const n = self.popOperand(u32);
+        const value = self.popOperand(u32);
+        const dest = self.popOperand(u32);
+
+        const memory = try self.inst.getMemory(0);
+        const mem_size = memory.sizeBytes();
+
+        if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+        if (n == 0) {
+            return dispatch(self, ip + 1, code);
+        }
+
+        var i: u32 = 0;
+        while (i < n) : (i += 1) {
+            // FIXME: no check
+            // FIXME: take single address which is u33 (for write / read)
+            try memory.write(u8, 0, dest + i, @truncate(u8, value));
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.init"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"table.init";
+        const tableidx = meta.tableidx;
+        const elemidx = meta.elemidx;
+
+        const table = try self.inst.getTable(tableidx);
+        const elem = try self.inst.getElem(elemidx);
+
+        const n = self.popOperand(u32);
+        const s = self.popOperand(u32);
+        const d = self.popOperand(u32);
+
+        _ = math.add(u32, s, n) catch return error.Trap;
+        _ = math.add(u32, d, n) catch return error.Trap;
+
+        if (s + n > elem.elem.len) return error.Trap;
+        if (d + n > table.size()) return error.Trap;
+        if (n == 0) return;
+
+        if (elem.dropped) return error.Trap;
+
+        var i: u32 = 0;
+        while (i < n) : (i += 1) {
+            try table.set(d + i, elem.elem[s + i]);
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"elem.drop"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"elem.drop";
+        const elemidx = meta.elemidx;
+        const elem = try self.inst.getElem(elemidx);
+        elem.dropped = true;
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.copy"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"table.copy";
+        const dest_tableidx = meta.dest_tableidx;
+        const src_tableidx = meta.src_tableidx;
+
+        const dest_table = try self.inst.getTable(dest_tableidx);
+        const src_table = try self.inst.getTable(src_tableidx);
+
+        const n = self.popOperand(u32);
+        const s = self.popOperand(u32);
+        const d = self.popOperand(u32);
+
+        _ = math.add(u32, s, n) catch return error.Trap;
+        _ = math.add(u32, d, n) catch return error.Trap;
+
+        if (s + n > src_table.size()) return error.Trap;
+        if (d + n > dest_table.size()) return error.Trap;
+        if (n == 0) return;
+
+        if (d <= s) {
+            var i: u32 = 0;
+            while (i < n) : (i += 1) {
+                try dest_table.set(d + i, try src_table.get(s + i));
+            }
+        } else {
+            var i: u32 = 0;
+            while (i < n) : (i += 1) {
+                try dest_table.set(d + n - 1 - i, try src_table.get(s + n - 1 - i));
+            }
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.grow"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"table.grow";
+        const tableidx = meta.tableidx;
+
+        const table = try self.inst.getTable(tableidx);
+
+        const n = self.popOperand(u32);
+        const ref = self.popOperand(u64);
+
+        if (table.grow(n)) |old_size| {
+            self.pushOperandNoCheck(u32, old_size);
+            var i: u32 = 0;
+            while (i < n) : (i += 1) {
+                try table.set(old_size + i, ref);
+            }
+        } else |_| {
+            self.pushOperandNoCheck(i32, @as(i32, -1));
+        }
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.size"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"table.size";
+        const tableidx = meta.tableidx;
+
+        const table = try self.inst.getTable(tableidx);
+
+        self.pushOperandNoCheck(u32, @intCast(u32, table.size()));
+
+        return dispatch(self, ip + 1, code);
+    }
+
+    fn @"table.fill"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        const meta = code[ip].misc.@"table.fill";
+        const tableidx = meta.tableidx;
+
+        const table = try self.inst.getTable(tableidx);
+
+        const n = self.popOperand(u32);
+        const ref = self.popOperand(u64);
+        const d = self.popOperand(u32);
+
+        _ = math.add(u32, d, n) catch return error.Trap;
+
+        if (d + n > table.size()) return error.Trap;
+        if (n == 0) return;
+
+        var i: u32 = 0;
+        while (i < n) : (i += 1) {
+            try table.set(d + i, ref);
+        }
+
+        return dispatch(self, ip + 1, code);
     }
 
     // https://webassembly.github.io/spec/core/exec/instructions.html#xref-syntax-instructions-syntax-instr-control-mathsf-br-l
