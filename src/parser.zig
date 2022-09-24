@@ -15,15 +15,6 @@ const ValType = @import("valtype.zig").ValType;
 const Rr = @import("rr.zig").Rr;
 const MiscRr = @import("rr.zig").MiscRr;
 
-const EMPTY = [0]ValType{} ** 0;
-const I32_OUT = [1]ValType{.I32} ** 1;
-const I64_OUT = [1]ValType{.I64} ** 1;
-const F32_OUT = [1]ValType{.F32} ** 1;
-const F64_OUT = [1]ValType{.F64} ** 1;
-const V128_OUT = [1]ValType{.V128} ** 1;
-const FUNCREF_OUT = [1]ValType{.FuncRef} ** 1;
-const EXTERNREF_OUT = [1]ValType{.ExternRef} ** 1;
-
 pub const Parser = struct {
     function: []const u8,
     code: []const u8,
@@ -1148,3 +1139,12 @@ pub const Parser = struct {
         return rt_instr;
     }
 };
+
+const EMPTY = [0]ValType{} ** 0;
+const I32_OUT = [1]ValType{.I32} ** 1;
+const I64_OUT = [1]ValType{.I64} ** 1;
+const F32_OUT = [1]ValType{.F32} ** 1;
+const F64_OUT = [1]ValType{.F64} ** 1;
+const V128_OUT = [1]ValType{.V128} ** 1;
+const FUNCREF_OUT = [1]ValType{.FuncRef} ** 1;
+const EXTERNREF_OUT = [1]ValType{.ExternRef} ** 1;
