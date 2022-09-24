@@ -583,13 +583,13 @@ pub const Module = struct {
         if (self.start != null) return error.MultipleStartSections;
         const rd = self.buf.reader();
 
-        const index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
 
-        if (index >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
-        const func = self.functions.list.items[index];
+        if (funcidx >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
+        const func = self.functions.list.items[funcidx];
         const functype = self.types.list.items[func.typeidx];
         if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
