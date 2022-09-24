@@ -1336,6 +1336,17 @@ const SectionType = enum(u8) {
     DataCount = 0x0c,
 };
 
+const MemType = struct {
+    import: ?u32,
+    limits: Limit,
+};
+
+const TableType = struct {
+    import: ?u32,
+    reftype: RefType,
+    limits: Limit,
+};
+
 const LimitType = enum(u8) {
     Min,
     MinMax,

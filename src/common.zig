@@ -8,17 +8,6 @@ pub const Limit = struct {
     max: ?u32,
 };
 
-pub const MemType = struct {
-    import: ?u32,
-    limits: Limit,
-};
-
-pub const TableType = struct {
-    import: ?u32,
-    reftype: RefType,
-    limits: Limit,
-};
-
 pub const Mutability = enum(u8) {
     Immutable,
     Mutable,
