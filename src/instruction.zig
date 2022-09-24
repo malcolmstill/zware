@@ -8,6 +8,9 @@ const LocalType = @import("common.zig").LocalType;
 const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
+const MiscOpcode = @import("opcode.zig").MiscOpcode;
+const RefType = @import("common.zig").RefType;
+const ValueTypeUnknown = @import("validator.zig").ValueTypeUnknown;
 const valueTypeFromBlockType = @import("common.zig").valueTypeFromBlockType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
@@ -34,6 +37,8 @@ pub const RuntimeOpcode = enum(u8) {
     @"local.tee" = 0x22,
     @"global.get" = 0x23,
     @"global.set" = 0x24,
+    @"table.get" = 0x25,
+    @"table.set" = 0x26,
     @"i32.load" = 0x28,
     @"i64.load" = 0x29,
     @"f32.load" = 0x2a,
@@ -191,7 +196,10 @@ pub const RuntimeOpcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
-    trunc_sat = 0xfc,
+    @"ref.null" = 0xd0,
+    @"ref.is_null" = 0xd1,
+    @"ref.func" = 0xd2,
+    misc = 0xfc,
 };
 
 pub const Instruction = union(RuntimeOpcode) {
@@ -246,6 +254,8 @@ pub const Instruction = union(RuntimeOpcode) {
     @"local.tee": u32,
     @"global.get": u32,
     @"global.set": u32,
+    @"table.get": u32, // tableidx
+    @"table.set": u32, // tableidx
     @"i32.load": struct {
         alignment: u32,
         offset: u32,
@@ -472,7 +482,51 @@ pub const Instruction = union(RuntimeOpcode) {
     @"i64.extend8_s": void,
     @"i64.extend16_s": void,
     @"i64.extend32_s": void,
-    trunc_sat: u32,
+    @"ref.null": RefType,
+    @"ref.is_null": void,
+    @"ref.func": u32,
+    misc: MiscInstruction,
+};
+
+pub const MiscInstruction = union(MiscOpcode) {
+    @"i32.trunc_sat_f32_s": void,
+    @"i32.trunc_sat_f32_u": void,
+    @"i32.trunc_sat_f64_s": void,
+    @"i32.trunc_sat_f64_u": void,
+    @"i64.trunc_sat_f32_s": void,
+    @"i64.trunc_sat_f32_u": void,
+    @"i64.trunc_sat_f64_s": void,
+    @"i64.trunc_sat_f64_u": void,
+    @"memory.init": struct {
+        dataidx: u32,
+        memidx: u32,
+    },
+    @"data.drop": u32,
+    @"memory.copy": struct {
+        src_memidx: u8,
+        dest_memidx: u8,
+    },
+    @"memory.fill": u8,
+    @"table.init": struct {
+        tableidx: u32,
+        elemidx: u32,
+    },
+    @"elem.drop": struct {
+        elemidx: u32,
+    },
+    @"table.copy": struct {
+        dest_tableidx: u32,
+        src_tableidx: u32,
+    },
+    @"table.grow": struct {
+        tableidx: u32,
+    },
+    @"table.size": struct {
+        tableidx: u32,
+    },
+    @"table.fill": struct {
+        tableidx: u32,
+    },
 };
 
 const EMPTY = [0]ValueType{} ** 0;
@@ -480,6 +534,9 @@ const I32_OUT = [1]ValueType{.I32} ** 1;
 const I64_OUT = [1]ValueType{.I64} ** 1;
 const F32_OUT = [1]ValueType{.F32} ** 1;
 const F64_OUT = [1]ValueType{.F64} ** 1;
+const V128_OUT = [1]ValueType{.V128} ** 1;
+const FUNCREF_OUT = [1]ValueType{.FuncRef} ** 1;
+const EXTERNREF_OUT = [1]ValueType{.ExternRef} ** 1;
 
 pub const ParseIterator = struct {
     function: []const u8,
@@ -492,8 +549,9 @@ pub const ParseIterator = struct {
     locals: ?[]LocalType,
     continuation_stack: []usize,
     continuation_stack_ptr: usize,
+    is_constant: bool,
 
-    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize) ParseIterator {
+    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Instruction), continuation_stack: []usize, is_constant: bool) ParseIterator {
         return ParseIterator{
             .code = function,
             .code_ptr = parsed_code.items.len,
@@ -505,9 +563,10 @@ pub const ParseIterator = struct {
             // TODO: what type of allocator is this?
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
-            .validator = Validator.init(module.alloc),
+            .validator = Validator.init(module.alloc, module.dataCount != null, is_constant),
             .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
+            .is_constant = is_constant,
         };
     }
 
@@ -578,6 +637,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateBlock(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateBlock(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateBlock(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
@@ -611,6 +673,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateLoop(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateLoop(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateLoop(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
@@ -649,6 +714,9 @@ pub const ParseIterator = struct {
                             .I64 => try self.validator.validateIf(EMPTY[0..], I64_OUT[0..]),
                             .F32 => try self.validator.validateIf(EMPTY[0..], F32_OUT[0..]),
                             .F64 => try self.validator.validateIf(EMPTY[0..], F64_OUT[0..]),
+                            .V128 => try self.validator.validateBlock(EMPTY[0..], V128_OUT[0..]),
+                            .FuncRef => try self.validator.validateBlock(EMPTY[0..], FUNCREF_OUT[0..]),
+                            .ExternRef => try self.validator.validateBlock(EMPTY[0..], EXTERNREF_OUT[0..]),
                         }
                     }
                 }
@@ -751,25 +819,32 @@ pub const ParseIterator = struct {
             },
             .call_indirect => {
                 const type_index = try opcode.readULEB128Mem(u32, &self.code);
-                const table_reserved = try opcode.readByte(&self.code);
-
                 if (type_index >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
-                if (self.module.tables.list.items.len != 1) return error.ValidatorCallIndirectNoTable;
+
+                const tableidx = try opcode.readByte(&self.code);
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
                 const function_type = self.module.types.list.items[@intCast(usize, type_index)];
                 try self.validator.validateCallIndirect(function_type);
 
-                if (table_reserved != 0) return error.MalformedCallIndirectReserved;
-
                 rt_instr = Instruction{
                     .call_indirect = .{
                         .@"type" = type_index,
-                        .table = table_reserved,
+                        .table = tableidx,
                     },
                 };
             },
             .drop => rt_instr = Instruction.drop,
             .select => rt_instr = Instruction.select,
+            .select_t => {
+                const type_count = try opcode.readULEB128Mem(u32, &self.code);
+                if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
+                const valuetype_raw = try opcode.readULEB128Mem(i32, &self.code);
+                const valuetype = try std.meta.intToEnum(ValueType, valuetype_raw);
+
+                try self.validator.validateSelectT(valuetype);
+                rt_instr = Instruction.select;
+            },
             .@"global.get" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
 
@@ -783,10 +858,44 @@ pub const ParseIterator = struct {
             .@"global.set" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
 
+                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
+
                 const global = self.module.globals.list.items[@intCast(usize, index)];
                 try self.validator.validateGlobalSet(global);
 
                 rt_instr = Instruction{ .@"global.set" = index };
+            },
+            .@"table.get" => {
+                const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
+
+                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
+                const reftype: ValueType = switch (table.reftype) {
+                    .FuncRef => .FuncRef,
+                    .ExternRef => .ExternRef,
+                };
+
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                _ = try self.validator.pushOperand(ValueTypeUnknown{ .Known = reftype });
+
+                rt_instr = Instruction{ .@"table.get" = tableidx };
+            },
+            .@"table.set" => {
+                const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                if (tableidx >= self.module.tables.list.items.len) return error.ValidatorUnknownTable;
+
+                const table = self.module.tables.list.items[@intCast(usize, tableidx)];
+                const reftype: ValueType = switch (table.reftype) {
+                    .FuncRef => .FuncRef,
+                    .ExternRef => .ExternRef,
+                };
+
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+
+                rt_instr = Instruction{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
                 const index = try opcode.readULEB128Mem(u32, &self.code);
@@ -1354,11 +1463,174 @@ pub const ParseIterator = struct {
             .@"i64.extend8_s" => rt_instr = Instruction.@"i64.extend8_s",
             .@"i64.extend16_s" => rt_instr = Instruction.@"i64.extend16_s",
             .@"i64.extend32_s" => rt_instr = Instruction.@"i64.extend32_s",
-            .trunc_sat => {
-                const version = try opcode.readULEB128Mem(u32, &self.code);
-                try self.validator.validateTrunc(version);
+            .@"ref.null" => {
+                const rtype = try opcode.readULEB128Mem(i32, &self.code);
+                const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
 
-                rt_instr = Instruction{ .trunc_sat = version };
+                try self.validator.validateRefNull(reftype);
+                rt_instr = Instruction{ .@"ref.null" = reftype };
+            },
+            .@"ref.is_null" => rt_instr = Instruction.@"ref.is_null",
+            .@"ref.func" => {
+                const funcidx = try opcode.readULEB128Mem(u32, &self.code);
+                if (funcidx >= self.module.functions.list.items.len) return error.ValidatorInvalidFunction;
+
+                // Gather funcidx* from constant expressions
+                if (self.is_constant) {
+                    try self.module.references.append(funcidx);
+                } else {
+                    // For functions, check that the funcidx has already been referenced
+                    var in_references = false;
+                    for (self.module.references.items) |ref_funcidx| {
+                        if (funcidx == ref_funcidx) {
+                            in_references = true;
+                        }
+                    }
+
+                    if (!in_references) return error.ValidatorUnreferencedFunction;
+                }
+
+                rt_instr = Instruction{ .@"ref.func" = funcidx };
+            },
+            .misc => {
+                const version = try opcode.readULEB128Mem(u32, &self.code);
+                const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
+                try self.validator.validateMisc(misc_opcode);
+
+                switch (misc_opcode) {
+                    .@"i32.trunc_sat_f32_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f32_s" },
+                    .@"i32.trunc_sat_f32_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f32_u" },
+                    .@"i32.trunc_sat_f64_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f64_s" },
+                    .@"i32.trunc_sat_f64_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i32.trunc_sat_f64_u" },
+                    .@"i64.trunc_sat_f32_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f32_s" },
+                    .@"i64.trunc_sat_f32_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f32_u" },
+                    .@"i64.trunc_sat_f64_s" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f64_s" },
+                    .@"i64.trunc_sat_f64_u" => rt_instr = Instruction{ .misc = MiscInstruction.@"i64.trunc_sat_f64_u" },
+                    .@"memory.init" => {
+                        const dataidx = try opcode.readULEB128Mem(u32, &self.code);
+                        const memidx = try opcode.readByte(&self.code);
+
+                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        if (!(dataidx < data_count)) return error.InvalidDataIndex;
+
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+                        rt_instr = Instruction{
+                            .misc = MiscInstruction{
+                                .@"memory.init" = .{
+                                    .dataidx = dataidx,
+                                    .memidx = memidx,
+                                },
+                            },
+                        };
+                    },
+                    .@"data.drop" => {
+                        const dataidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        if (!(dataidx < data_count)) return error.InvalidDataIndex;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"data.drop" = dataidx } };
+                    },
+                    .@"memory.copy" => {
+                        const src_memidx = try opcode.readByte(&self.code);
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+                        const dest_memidx = try opcode.readByte(&self.code);
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.copy" = .{
+                            .src_memidx = src_memidx,
+                            .dest_memidx = dest_memidx,
+                        } } };
+                    },
+                    .@"memory.fill" => {
+                        const memidx = try opcode.readByte(&self.code);
+                        if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"memory.fill" = memidx } };
+                    },
+                    .@"table.init" => {
+                        const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const elemtype = self.module.elements.list.items[elemidx];
+                        const tabletype = self.module.tables.list.items[tableidx];
+                        if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.init" = .{
+                            .elemidx = elemidx,
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"elem.drop" => {
+                        const elemidx = try opcode.readULEB128Mem(u32, &self.code);
+
+                        if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"elem.drop" = .{ .elemidx = elemidx } } };
+                    },
+                    .@"table.copy" => {
+                        const dest_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (dest_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+                        const src_tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (src_tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const dest_tabletype = self.module.tables.list.items[dest_tableidx];
+                        const src_tabletype = self.module.tables.list.items[src_tableidx];
+                        if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.copy" = .{
+                            .dest_tableidx = dest_tableidx,
+                            .src_tableidx = src_tableidx,
+                        } } };
+                    },
+                    .@"table.grow" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const table = self.module.tables.list.items[tableidx];
+                        const reftype: ValueType = switch (table.reftype) {
+                            .FuncRef => .FuncRef,
+                            .ExternRef => .ExternRef,
+                        };
+
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+
+                        try self.validator.pushOperand(ValueTypeUnknown{ .Known = .I32 });
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.grow" = .{
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"table.size" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.size" = .{
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                    .@"table.fill" => {
+                        const tableidx = try opcode.readULEB128Mem(u32, &self.code);
+                        if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
+
+                        const table = self.module.tables.list.items[tableidx];
+                        const reftype: ValueType = switch (table.reftype) {
+                            .FuncRef => .FuncRef,
+                            .ExternRef => .ExternRef,
+                        };
+
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(ValueTypeUnknown{ .Known = .I32 });
+
+                        rt_instr = Instruction{ .misc = MiscInstruction{ .@"table.fill" = .{
+                            .tableidx = tableidx,
+                        } } };
+                    },
+                }
             },
         }
 
@@ -1378,7 +1650,11 @@ pub const ParseIterator = struct {
             .@"local.get",
             .@"local.set",
             .@"local.tee",
-            .trunc_sat,
+            .misc,
+            .@"ref.null",
+            .select_t,
+            .@"table.get",
+            .@"table.set",
             => {},
             else => try self.validator.validate(instr),
         }

@@ -17,11 +17,14 @@ pub const Opcode = enum(u8) {
     call_indirect = 0x11,
     drop = 0x1a,
     select = 0x1b,
+    select_t = 0x1c,
     @"local.get" = 0x20,
     @"local.set" = 0x21,
     @"local.tee" = 0x22,
     @"global.get" = 0x23,
     @"global.set" = 0x24,
+    @"table.get" = 0x25,
+    @"table.set" = 0x26,
     @"i32.load" = 0x28,
     @"i64.load" = 0x29,
     @"f32.load" = 0x2a,
@@ -179,7 +182,31 @@ pub const Opcode = enum(u8) {
     @"i64.extend8_s" = 0xc2,
     @"i64.extend16_s" = 0xc3,
     @"i64.extend32_s" = 0xc4,
-    trunc_sat = 0xfc,
+    @"ref.null" = 0xd0,
+    @"ref.is_null" = 0xd1,
+    @"ref.func" = 0xd2,
+    misc = 0xfc,
+};
+
+pub const MiscOpcode = enum(u8) {
+    @"i32.trunc_sat_f32_s" = 0x00,
+    @"i32.trunc_sat_f32_u" = 0x01,
+    @"i32.trunc_sat_f64_s" = 0x02,
+    @"i32.trunc_sat_f64_u" = 0x03,
+    @"i64.trunc_sat_f32_s" = 0x04,
+    @"i64.trunc_sat_f32_u" = 0x05,
+    @"i64.trunc_sat_f64_s" = 0x06,
+    @"i64.trunc_sat_f64_u" = 0x07,
+    @"memory.init" = 0x08,
+    @"data.drop" = 0x09,
+    @"memory.copy" = 0x0a,
+    @"memory.fill" = 0x0b,
+    @"table.init" = 0x0c,
+    @"elem.drop" = 0x0d,
+    @"table.copy" = 0x0e,
+    @"table.grow" = 0x0f,
+    @"table.size" = 0x10,
+    @"table.fill" = 0x11,
 };
 
 const OpcodeMeta = struct {
@@ -187,6 +214,7 @@ const OpcodeMeta = struct {
     offset: usize, // offset from start of function
 };
 
+// Only used by findFunctionEnd / findExprEnd...can we get rid of this (and only use ParseIterator)?
 pub const OpcodeIterator = struct {
     function: []const u8,
     code: []const u8,
@@ -202,7 +230,7 @@ pub const OpcodeIterator = struct {
         if (self.code.len == 0) return null;
 
         // 1. Get the instruction we're going to return and increment code
-        const instr = @intToEnum(Opcode, self.code[0]);
+        const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         const offset = @ptrToInt(self.code.ptr) - @ptrToInt(self.function.ptr);
         self.code = self.code[1..];
 
@@ -222,6 +250,11 @@ pub const OpcodeIterator = struct {
             .block,
             .loop,
             => _ = try readULEB128Mem(u32, &self.code),
+            .select_t => {
+                const type_count = try readULEB128Mem(u32, &self.code);
+                if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
+                _ = try readULEB128Mem(i32, &self.code);
+            },
             .@"memory.size", .@"memory.grow" => {
                 const reserved = try readByte(&self.code);
                 if (reserved != 0) return error.MalformedMemoryReserved;
@@ -235,8 +268,7 @@ pub const OpcodeIterator = struct {
             },
             .call_indirect => {
                 _ = try readULEB128Mem(u32, &self.code);
-                const reserved = try readByte(&self.code);
-                if (reserved != 0) return error.MalformedCallIndirectReserved;
+                _ = try readByte(&self.code); // is byte correct?
             },
             .@"i32.load",
             .@"i64.load",
@@ -267,7 +299,62 @@ pub const OpcodeIterator = struct {
             },
             .@"f32.const" => self.code = self.code[4..],
             .@"f64.const" => self.code = self.code[8..],
-            .trunc_sat => self.code = self.code[1..],
+            .@"ref.null" => {
+                _ = try readULEB128Mem(i32, &self.code);
+            },
+            .@"ref.func" => {
+                _ = try readULEB128Mem(u32, &self.code);
+            },
+            .misc => {
+                const misc_instruction_code = try readULEB128Mem(u32, &self.code);
+                const misc_instruction = std.meta.intToEnum(MiscOpcode, misc_instruction_code) catch return error.IllegalMiscOpcode;
+
+                switch (misc_instruction) {
+                    .@"i32.trunc_sat_f32_s",
+                    .@"i32.trunc_sat_f32_u",
+                    .@"i32.trunc_sat_f64_s",
+                    .@"i32.trunc_sat_f64_u",
+                    .@"i64.trunc_sat_f32_s",
+                    .@"i64.trunc_sat_f32_u",
+                    .@"i64.trunc_sat_f64_s",
+                    .@"i64.trunc_sat_f64_u",
+                    => {},
+                    .@"memory.init" => {
+                        _ = try readULEB128Mem(u32, &self.code); // dataidx
+                        _ = try readByte(&self.code); // memidx
+                    },
+                    .@"memory.copy" => {
+                        _ = try readByte(&self.code); // src memidx
+                        _ = try readByte(&self.code); // dest memidx
+                    },
+                    .@"memory.fill" => {
+                        _ = try readByte(&self.code); // memidx
+                    },
+                    .@"data.drop" => {
+                        _ = try readULEB128Mem(u32, &self.code); // dataidx
+                    },
+                    .@"table.init" => {
+                        _ = try readULEB128Mem(u32, &self.code); // elemidx
+                        _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                    .@"elem.drop" => {
+                        _ = try readULEB128Mem(u32, &self.code); // elemidx
+                    },
+                    .@"table.copy" => {
+                        _ = try readULEB128Mem(u32, &self.code); // dest_tableidx
+                        _ = try readULEB128Mem(u32, &self.code); // src_tableidx
+                    },
+                    .@"table.grow" => {
+                        _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                    .@"table.size" => {
+                        _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                    .@"table.fill" => {
+                        _ = try readULEB128Mem(u32, &self.code); // tableidx
+                    },
+                }
+            },
             else => {},
         }
 

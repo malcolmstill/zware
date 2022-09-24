@@ -9,12 +9,13 @@ pushd $GENERATED_DIR
 
 $BIN_DIR/testrunner address.json
 $BIN_DIR/testrunner align.json
-# $BIN_DIR/testrunner binary-leb128.json
+$BIN_DIR/testrunner binary-leb128.json
 $BIN_DIR/testrunner binary.json
 $BIN_DIR/testrunner block.json
 $BIN_DIR/testrunner br_if.json
-$BIN_DIR/testrunner br.json
 $BIN_DIR/testrunner br_table.json
+$BIN_DIR/testrunner br.json
+$BIN_DIR/testrunner bulk.json
 $BIN_DIR/testrunner call_indirect.json
 $BIN_DIR/testrunner call.json
 $BIN_DIR/testrunner comments.json
@@ -55,13 +56,19 @@ $BIN_DIR/testrunner local_get.json
 $BIN_DIR/testrunner local_set.json
 $BIN_DIR/testrunner local_tee.json
 $BIN_DIR/testrunner loop.json
+$BIN_DIR/testrunner memory_copy.json
+$BIN_DIR/testrunner memory_fill.json
 $BIN_DIR/testrunner memory_grow.json
+$BIN_DIR/testrunner memory_init.json
 $BIN_DIR/testrunner memory_redundancy.json
 $BIN_DIR/testrunner memory_size.json
 $BIN_DIR/testrunner memory_trap.json
 $BIN_DIR/testrunner memory.json
 $BIN_DIR/testrunner names.json
 $BIN_DIR/testrunner nop.json
+$BIN_DIR/testrunner ref_func.json
+$BIN_DIR/testrunner ref_is_null.json
+$BIN_DIR/testrunner ref_null.json
 $BIN_DIR/testrunner return.json
 $BIN_DIR/testrunner select.json
 $BIN_DIR/testrunner skip-stack-guard-page.json
@@ -69,12 +76,21 @@ $BIN_DIR/testrunner stack.json
 $BIN_DIR/testrunner start.json
 $BIN_DIR/testrunner store.json
 $BIN_DIR/testrunner switch.json
+$BIN_DIR/testrunner table_copy.json
+$BIN_DIR/testrunner table_fill.json
+$BIN_DIR/testrunner table_get.json
+$BIN_DIR/testrunner table_grow.json
+$BIN_DIR/testrunner table_init.json
+$BIN_DIR/testrunner table_set.json
+$BIN_DIR/testrunner table_size.json
+$BIN_DIR/testrunner table-sub.json
 $BIN_DIR/testrunner table.json
 $BIN_DIR/testrunner token.json
 $BIN_DIR/testrunner traps.json
 $BIN_DIR/testrunner type.json
 $BIN_DIR/testrunner unreachable.json
 $BIN_DIR/testrunner unreached-invalid.json
+$BIN_DIR/testrunner unreached-valid.json
 $BIN_DIR/testrunner unwind.json
 $BIN_DIR/testrunner utf8-custom-section-id.json
 $BIN_DIR/testrunner utf8-import-field.json

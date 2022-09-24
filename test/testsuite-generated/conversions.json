@@ -1,4 +1,4 @@
-{"source_filename": "conversions.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/conversions.wast",
  "commands": [
   {"type": "module", "line": 1, "filename": "conversions.0.wasm"}, 
   {"type": "assert_return", "line": 37, "action": {"type": "invoke", "field": "i64.extend_i32_s", "args": [{"type": "i32", "value": "0"}]}, "expected": [{"type": "i64", "value": "0"}]}, 

@@ -1,4 +1,4 @@
-{"source_filename": "float_literals.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/float_literals.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "float_literals.0.wasm"}, 
   {"type": "assert_return", "line": 105, "action": {"type": "invoke", "field": "f32.nan", "args": []}, "expected": [{"type": "i32", "value": "2143289344"}]}, 

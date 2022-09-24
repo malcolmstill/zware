@@ -1,4 +1,4 @@
-{"source_filename": "align.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/align.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "align.0.wasm"}, 
   {"type": "module", "line": 4, "filename": "align.1.wasm"}, 

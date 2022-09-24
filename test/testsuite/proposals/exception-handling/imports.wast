@@ -10,11 +10,16 @@
   (func (export "func-i64->i64") (param i64) (result i64) (local.get 0))
   (global (export "global-i32") i32 (i32.const 55))
   (global (export "global-f32") f32 (f32.const 44))
+  (global (export "global-mut-i64") (mut i64) (i64.const 66))
   (table (export "table-10-inf") 10 funcref)
   (table (export "table-10-20") 10 20 funcref)
   (memory (export "memory-2-inf") 2)
   ;; Multiple memories are not yet supported
   ;; (memory (export "memory-2-4") 2 4)
+  (tag (export "tag"))
+  (tag $tag-i32 (param i32))
+  (export "tag-i32" (tag $tag-i32))
+  (tag (export "tag-f32") (param f32))
 )
 
 (register "test")
@@ -41,6 +46,9 @@
   (func $print_i32-2 (import "spectest" "print_i32") (param i32))
   (func $print_f64-2 (import "spectest" "print_f64") (param f64))
   (import "test" "func-i64->i64" (func $i64->i64 (param i64) (result i64)))
+
+  (tag (import "test" "tag-i32") (param i32))
+  (import "test" "tag-f32" (tag (param f32)))
 
   (func (export "p1") (import "spectest" "print_i32") (param i32))
   (func $p (export "p2") (import "spectest" "print_i32") (param i32))
@@ -95,6 +103,26 @@
   )
   "unknown type"
 )
+
+;; Export sharing name with import
+(module
+  (import "spectest" "print_i32" (func $imported_print (param i32)))
+  (func (export "print_i32") (param $i i32)
+    (call $imported_print (local.get $i))
+  )
+)
+
+(assert_return (invoke "print_i32" (i32.const 13)))
+
+;; Export sharing name with import
+(module
+  (import "spectest" "print_i32" (func $imported_print (param i32)))
+  (func (export "print_i32") (param $i i32) (param $j i32) (result i32)
+    (i32.add (local.get $i) (local.get $j))
+  )
+)
+
+(assert_return (invoke "print_i32" (i32.const 5) (i32.const 11)) (i32.const 16))
 
 (module (import "test" "func" (func)))
 (module (import "test" "func-i32" (func (param i32))))
@@ -191,6 +219,10 @@
   "incompatible import type"
 )
 (assert_unlinkable
+  (module (import "test" "tag" (func)))
+  "incompatible import type"
+)
+(assert_unlinkable
   (module (import "spectest" "global_i32" (func)))
   "incompatible import type"
 )
@@ -200,6 +232,27 @@
 )
 (assert_unlinkable
   (module (import "spectest" "memory" (func)))
+  "incompatible import type"
+)
+
+(assert_unlinkable
+  (module (tag (import "test" "unknown")))
+  "unknown import"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag") (param f32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag-i32")))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "tag-i32") (param f32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (tag (import "test" "func-i32") (param f32)))
   "incompatible import type"
 )
 
@@ -231,6 +284,7 @@
 
 (module (import "test" "global-i32" (global i32)))
 (module (import "test" "global-f32" (global f32)))
+(module (import "test" "global-mut-i64" (global (mut i64))))
 
 (assert_unlinkable
   (module (import "test" "unknown" (global i32)))
@@ -239,6 +293,55 @@
 (assert_unlinkable
   (module (import "spectest" "unknown" (global i32)))
   "unknown import"
+)
+
+(assert_unlinkable
+  (module (import "test" "global-i32" (global i64)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-i32" (global f32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-i32" (global f64)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-i32" (global (mut i32))))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-f32" (global i32)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-f32" (global i64)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-f32" (global f64)))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-f32" (global (mut f32))))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-mut-i64" (global (mut i32))))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-mut-i64" (global (mut f32))))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-mut-i64" (global (mut f64))))
+  "incompatible import type"
+)
+(assert_unlinkable
+  (module (import "test" "global-mut-i64" (global i64)))
+  "incompatible import type"
 )
 
 (assert_unlinkable
@@ -505,6 +608,26 @@
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
 (assert_return (invoke "grow" (i32.const 1)) (i32.const -1))
 (assert_return (invoke "grow" (i32.const 0)) (i32.const 2))
+
+(module $Mgm
+  (memory (export "memory") 1) ;; initial size is 1
+  (func (export "grow") (result i32) (memory.grow (i32.const 1)))
+)
+(register "grown-memory" $Mgm)
+(assert_return (invoke $Mgm "grow") (i32.const 1)) ;; now size is 2
+(module $Mgim1
+  ;; imported memory limits should match, because external memory size is 2 now
+  (memory (export "memory") (import "grown-memory" "memory") 2) 
+  (func (export "grow") (result i32) (memory.grow (i32.const 1)))
+)
+(register "grown-imported-memory" $Mgim1)
+(assert_return (invoke $Mgim1 "grow") (i32.const 2)) ;; now size is 3
+(module $Mgim2
+  ;; imported memory limits should match, because external memory size is 3 now
+  (import "grown-imported-memory" "memory" (memory 3))
+  (func (export "size") (result i32) (memory.size))
+)
+(assert_return (invoke $Mgim2 "size") (i32.const 3))
 
 
 ;; Syntax errors

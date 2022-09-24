@@ -2,7 +2,7 @@
 
 (module
   (memory i64 1)
-  (data (i32.const 0) "abcdefghijklmnopqrstuvwxyz")
+  (data (i64.const 0) "abcdefghijklmnopqrstuvwxyz")
 
   (func (export "8u_good1") (param $i i64) (result i32)
     (i32.load8_u offset=0 (local.get $i))                   ;; 97 'a'
@@ -203,19 +203,12 @@
 (assert_trap (invoke "16s_bad" (i64.const 1)) "out of bounds memory access")
 (assert_trap (invoke "32_bad" (i64.const 1)) "out of bounds memory access")
 
-(assert_malformed
-  (module quote
-    "(memory i64 1)"
-    "(func (drop (i32.load offset=4294967296 (i64.const 0))))"
-  )
-  "i32 constant"
-)
 
 ;; Load i64 data with different offset/align arguments
 
 (module
   (memory i64 1)
-  (data (i32.const 0) "abcdefghijklmnopqrstuvwxyz")
+  (data (i64.const 0) "abcdefghijklmnopqrstuvwxyz")
 
   (func (export "8u_good1") (param $i i64) (result i64)
     (i64.load8_u offset=0 (local.get $i))                   ;; 97 'a'
@@ -498,7 +491,7 @@
 
 (module
   (memory i64 1)
-  (data (i32.const 0) "\00\00\00\00\00\00\a0\7f\01\00\d0\7f")
+  (data (i64.const 0) "\00\00\00\00\00\00\a0\7f\01\00\d0\7f")
 
   (func (export "32_good1") (param $i i64) (result f32)
     (f32.load offset=0 (local.get $i))                   ;; 0.0 '\00\00\00\00'
@@ -545,7 +538,7 @@
 
 (module
   (memory i64 1)
-  (data (i32.const 0) "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\f4\7f\01\00\00\00\00\00\fc\7f")
+  (data (i64.const 0) "\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\00\f4\7f\01\00\00\00\00\00\fc\7f")
 
   (func (export "64_good1") (param $i i64) (result f64)
     (f64.load offset=0 (local.get $i))                     ;; 0.0 '\00\00\00\00\00\00\00\00'

@@ -10,6 +10,8 @@ const Store = @import("store.zig").ArrayListStore;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
+const Elem = @import("elem.zig").Elem;
+const Data = @import("data.zig").Data;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const ArrayList = std.ArrayList;
 const Instruction = @import("function.zig").Instruction;
@@ -38,6 +40,9 @@ pub const Instance = struct {
     memaddrs: ArrayList(usize),
     tableaddrs: ArrayList(usize),
     globaladdrs: ArrayList(usize),
+    // TODO: exports (this was in 1.0...why didn't we need it)
+    elemaddrs: ArrayList(usize),
+    dataaddrs: ArrayList(usize),
 
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{
@@ -47,6 +52,8 @@ pub const Instance = struct {
             .memaddrs = ArrayList(usize).init(alloc),
             .tableaddrs = ArrayList(usize).init(alloc),
             .globaladdrs = ArrayList(usize).init(alloc),
+            .elemaddrs = ArrayList(usize).init(alloc),
+            .dataaddrs = ArrayList(usize).init(alloc),
         };
     }
 
@@ -58,8 +65,8 @@ pub const Instance = struct {
         try self.instantiateGlobals();
         try self.instantiateMemories();
         try self.instantiateTables();
-        try self.checkData();
-        try self.checkElements();
+        // try self.checkData();
+        // try self.checkElements(); // FIXME: remove once all tests passing
         try self.instantiateData();
         try self.instantiateElements();
 
@@ -138,6 +145,7 @@ pub const Instance = struct {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
+                if (imported_global.value_type != global_def.value_type) return error.MismatchedGlobalType;
             } else {
                 const value = if (global_def.start) |start| try self.invokeExpression(start, u64, .{}) else 0;
                 const handle = try self.store.addGlobal(Global{
@@ -152,12 +160,13 @@ pub const Instance = struct {
 
     fn instantiateMemories(self: *Instance) !void {
         // 3a. Initialise memories
-        for (self.module.memories.list.items) |mem_size, i| {
-            if (mem_size.import != null) {
+        for (self.module.memories.list.items) |memtype, i| {
+            if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
-                if (!common.limitMatch(imported_mem.min, imported_mem.max, mem_size.min, mem_size.max)) return error.ImportedMemoryNotBigEnough;
+                // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
+                if (!common.limitMatch(imported_mem.size(), imported_mem.max, memtype.limits.min, memtype.limits.max)) return error.ImportedMemoryNotBigEnough;
             } else {
-                const handle = try self.store.addMemory(mem_size.min, mem_size.max);
+                const handle = try self.store.addMemory(memtype.limits.min, memtype.limits.max);
                 try self.memaddrs.append(handle);
             }
         }
@@ -165,93 +174,109 @@ pub const Instance = struct {
 
     fn instantiateTables(self: *Instance) !void {
         // 3b. Initialise tables
-        for (self.module.tables.list.items) |table_size, i| {
-            if (table_size.import != null) {
+        for (self.module.tables.list.items) |tabletype, i| {
+            if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
-                if (!common.limitMatch(imported_table.min, imported_table.max, table_size.min, table_size.max)) return error.ImportedTableNotBigEnough;
+                if (imported_table.reftype != tabletype.reftype) return error.ImportedTableRefTypeMismatch;
+                if (!common.limitMatch(imported_table.min, imported_table.max, tabletype.limits.min, tabletype.limits.max)) return error.ImportedTableNotBigEnough;
             } else {
-                const handle = try self.store.addTable(table_size.min, table_size.max);
+                const handle = try self.store.addTable(tabletype.reftype, tabletype.limits.min, tabletype.limits.max);
                 try self.tableaddrs.append(handle);
             }
         }
     }
 
-    fn checkData(self: *Instance) !void {
-        // 4a. Check all data
-        for (self.module.datas.list.items) |data| {
-            const handle = self.memaddrs.items[data.index];
-            const memory = try self.store.memory(handle);
-
-            const offset = try self.invokeExpression(data.start, u32, .{});
-            try memory.check(offset, data.data);
-        }
-    }
-
-    fn checkElements(self: *Instance) !void {
-        // 4b. Check all elements
-        for (self.module.elements.list.items) |segment| {
-            const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.start, u32, .{});
-            if ((try math.add(u32, offset, segment.count)) > table.size()) return error.OutOfBoundsMemoryAccess;
-        }
-    }
-
     fn instantiateData(self: *Instance) !void {
-        // 5a. Mutate all data
-        for (self.module.datas.list.items) |data| {
-            const handle = self.memaddrs.items[data.index];
-            const memory = try self.store.memory(handle);
+        for (self.module.datas.list.items) |datatype| {
+            const dataddr = try self.store.addData(datatype.count);
+            try self.dataaddrs.append(dataddr);
+            var data = try self.store.data(dataddr);
 
-            const offset = try self.invokeExpression(data.start, u32, .{});
-            try memory.copy(offset, data.data);
-        }
-    }
+            // TODO: Do we actually need to copy the data or just close over module bytes?
+            for (datatype.data) |byte, j| {
+                try data.set(j, byte);
+            }
 
-    fn instantiateElements(self: *Instance) !void {
-        // 5b. If all our elements were good, initialise them
-        for (self.module.elements.list.items) |segment| {
-            const table = try self.getTable(segment.index);
-            const offset = try self.invokeExpression(segment.start, u32, .{});
+            switch (datatype.mode) {
+                .Passive => continue,
+                .Active => |active| {
+                    const memaddr = self.memaddrs.items[active.memidx];
+                    const memory = try self.store.memory(memaddr);
 
-            var data = segment.data;
-            var j: usize = 0;
-            while (j < segment.count) : (j += 1) {
-                const value = try opcode.readULEB128Mem(u32, &data);
-                try table.set(@intCast(u32, offset + j), try self.funcHandle(value));
+                    const offset = try self.invokeExpression(active.offset, u32, .{});
+                    try memory.copy(offset, data.data);
+                    data.dropped = true;
+                },
             }
         }
     }
 
-    pub fn getFunc(self: *Instance, index: usize) !Function {
-        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        const handle = self.funcaddrs.items[index];
-        return try self.store.function(handle);
+    fn instantiateElements(self: *Instance) !void {
+        for (self.module.elements.list.items) |elemtype| {
+            const elemaddr = try self.store.addElem(elemtype.reftype, elemtype.count);
+            try self.elemaddrs.append(elemaddr);
+            var elem = try self.store.elem(elemaddr);
+
+            for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
+                const funcaddr = try self.invokeExpression(expr, u32, .{});
+                try elem.set(@intCast(u32, j), funcaddr);
+            }
+
+            if (elemtype.mode != .Passive) {
+                elem.dropped = true;
+            }
+
+            if (elemtype.mode == .Active) {
+                const table = try self.getTable(elemtype.mode.Active.tableidx);
+                const offset = try self.invokeExpression(elemtype.mode.Active.offset, u32, .{});
+
+                const index = math.add(u32, offset, elemtype.count) catch return error.OutOfBoundsMemoryAccess;
+                if (index > table.size()) return error.OutOfBoundsMemoryAccess;
+
+                for (elem.elem) |funcaddr, i| {
+                    try table.set(@intCast(u32, offset + i), funcaddr);
+                }
+            }
+        }
     }
 
-    pub fn funcHandle(self: *Instance, index: usize) !usize {
-        if (index >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        return self.funcaddrs.items[index];
+    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
+        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        const funcaddr = self.funcaddrs.items[funcidx];
+        return try self.store.function(funcaddr);
     }
 
     // Lookup a memory in store via the modules index
     pub fn getMemory(self: *Instance, index: usize) !*Memory {
         // TODO: with a verified program we shouldn't need to check this
         if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
-        const handle = self.memaddrs.items[index];
-        return try self.store.memory(handle);
+        const memaddr = self.memaddrs.items[index];
+        return try self.store.memory(memaddr);
     }
 
     pub fn getTable(self: *Instance, index: usize) !*Table {
         // TODO: with a verified program we shouldn't need to check this
         if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
-        const handle = self.tableaddrs.items[index];
-        return try self.store.table(handle);
+        const tableaddr = self.tableaddrs.items[index];
+        return try self.store.table(tableaddr);
     }
 
     pub fn getGlobal(self: *Instance, index: usize) !*Global {
         if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
-        const handle = self.globaladdrs.items[index];
-        return try self.store.global(handle);
+        const globaladdr = self.globaladdrs.items[index];
+        return try self.store.global(globaladdr);
+    }
+
+    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
+        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
+        const elemaddr = self.elemaddrs.items[elemidx];
+        return try self.store.elem(elemaddr);
+    }
+
+    pub fn getData(self: *Instance, dataidx: usize) !*Data {
+        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
+        const dataaddr = self.dataaddrs.items[dataidx];
+        return try self.store.data(dataaddr);
     }
 
     // invoke

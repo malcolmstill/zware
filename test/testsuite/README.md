@@ -2,7 +2,7 @@ Amalgamated WebAssembly Test Suite
 ==================================
 
 This repository holds a mirror of the WebAssembly core testsuite which is
-maintained [here](https://github.com/WebAssembly/spec/tree/master/test/core),
+maintained [here](https://github.com/WebAssembly/spec/tree/main/test/core),
 as well as the tests from the various [proposals
 repositories](https://github.com/WebAssembly/proposals/blob/master/README.md).
 

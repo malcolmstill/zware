@@ -25,7 +25,17 @@ pub fn limitMatch(min_imported: u32, max_imported: ?u32, min_stated: u32, max_st
 pub const Limit = struct {
     min: u32,
     max: ?u32,
+};
+
+pub const MemType = struct {
     import: ?u32,
+    limits: Limit,
+};
+
+pub const TableType = struct {
+    import: ?u32,
+    reftype: RefType,
+    limits: Limit,
 };
 
 pub const Mutability = enum(u8) {
@@ -33,11 +43,27 @@ pub const Mutability = enum(u8) {
     Mutable,
 };
 
+pub const NumType = enum(u8) {
+    I32 = 0x7F,
+    I64 = 0x7E,
+    F32 = 0x7D,
+    F64 = 0x7C,
+    V128 = 0x7B,
+};
+
+pub const RefType = enum(u8) {
+    FuncRef = 0x70,
+    ExternRef = 0x6F,
+};
+
 pub const ValueType = enum(u8) {
     I32 = 0x7F,
     I64 = 0x7E,
     F32 = 0x7D,
     F64 = 0x7C,
+    V128 = 0x7B,
+    FuncRef = 0x70,
+    ExternRef = 0x6F,
 };
 
 pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
@@ -46,6 +72,8 @@ pub fn valueTypeFromBlockType(block_type: i32) !ValueType {
         -0x02 => .I64,
         -0x03 => .F32,
         -0x04 => .F64,
+        -0x10 => .FuncRef,
+        -0x11 => .ExternRef,
         else => error.UnexpectedBlockType,
     };
 }
@@ -93,11 +121,45 @@ pub const Export = struct {
 
 pub const Element = struct {};
 
-pub const Segment = struct {
-    index: u32,
-    start: usize, // Initialisation code start
-    count: u32, // Number of elements in data (useful when data is not []u8)
+pub const DataSegment = struct {
+    count: u32,
     data: []const u8,
+    mode: DataSegmentMode,
+};
+
+pub const DataSegmentType = enum {
+    Passive,
+    Active,
+};
+
+pub const DataSegmentMode = union(DataSegmentType) {
+    Passive: void,
+    Active: struct {
+        memidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+};
+
+pub const ElementSegment = struct {
+    reftype: RefType,
+    init: usize, // Offset into element_init_offset of first init expression code offset
+    count: u32, // Number of element_init_offset values for this segment (we have an array of initialisation functions)
+    mode: ElementSegmentMode,
+};
+
+pub const ElementSegmentType = enum {
+    Passive,
+    Active,
+    Declarative,
+};
+
+pub const ElementSegmentMode = union(ElementSegmentType) {
+    Passive: void,
+    Active: struct {
+        tableidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+    Declarative: void,
 };
 
 pub const Tag = enum(u8) {

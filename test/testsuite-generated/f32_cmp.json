@@ -1,4 +1,4 @@
-{"source_filename": "f32_cmp.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/f32_cmp.wast",
  "commands": [
   {"type": "module", "line": 4, "filename": "f32_cmp.0.wasm"}, 
   {"type": "assert_return", "line": 13, "action": {"type": "invoke", "field": "eq", "args": [{"type": "f32", "value": "2147483648"}, {"type": "f32", "value": "2147483648"}]}, "expected": [{"type": "i32", "value": "1"}]}, 

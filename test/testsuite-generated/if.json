@@ -1,4 +1,4 @@
-{"source_filename": "if.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/if.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "if.0.wasm"}, 
   {"type": "assert_return", "line": 529, "action": {"type": "invoke", "field": "empty", "args": [{"type": "i32", "value": "0"}]}, "expected": []}, 

@@ -114,7 +114,7 @@ pub fn main() anyerror!void {
     try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
 
     // Init spec test table
-    const table_handle = try store.addTable(10, 20);
+    const table_handle = try store.addTable(.FuncRef, 10, 20);
     const spectest_table_name = "table";
 
     try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
@@ -291,8 +291,12 @@ pub fn main() anyerror!void {
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
-                            const arg = try fmt.parseInt(u64, value.value, 10);
-                            in[i] = arg;
+                            if (mem.eql(u8, value.value, "null")) {
+                                in[i] = VirtualMachine.REF_NULL;
+                            } else {
+                                const arg = try fmt.parseInt(u64, value.value, 10);
+                                in[i] = arg;
+                            }
                         }
 
                         // Invoke the function
@@ -304,29 +308,52 @@ pub fn main() anyerror!void {
 
                         for (expected) |result, i| {
                             const value_type = try valueTypeFromString(result.@"type");
-                            if (mem.startsWith(u8, result.value, "nan:")) {
-                                if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
-                                    continue;
-                                }
-                                if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
-                                    continue;
-                                }
+                            switch (value_type) {
+                                .I32, .I64, .F32, .F64 => {
+                                    if (mem.startsWith(u8, result.value, "nan:")) {
+                                        if (value_type == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                            continue;
+                                        }
+                                        if (value_type == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                            continue;
+                                        }
 
-                                std.debug.print("(result) invoke = {s}\n", .{field});
-                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.print("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
-                                return error.TestsuiteTestFailureTrapResult;
-                            }
+                                        std.debug.print("(result) invoke = {s}\n", .{field});
+                                        std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                        std.debug.print("result[{}], expected: {s}, result: {} ({x})\n", .{ i, "nan", out[i], out[i] });
+                                        return error.TestsuiteTestFailureTrapResult;
+                                    }
 
-                            const result_value = try fmt.parseInt(u64, result.value, 10);
-                            // Otherwise
-                            errdefer {
-                                std.debug.print("(result) invoke = {s}\n", .{field});
-                                std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
-                                std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
-                            }
-                            if (result_value != out[expected.len - i - 1]) {
-                                return error.TestsuiteTestFailureTrapResult;
+                                    const result_value = try fmt.parseInt(u64, result.value, 10);
+                                    // Otherwise
+                                    errdefer {
+                                        std.debug.print("(result) invoke = {s}\n", .{field});
+                                        std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                        std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
+                                    }
+                                    if (result_value != out[expected.len - i - 1]) {
+                                        return error.TestsuiteTestFailureTrapResult;
+                                    }
+                                },
+                                .FuncRef, .ExternRef => {
+                                    if (mem.eql(u8, result.value, "null")) {
+                                        if (out[expected.len - i - 1] != VirtualMachine.REF_NULL) {
+                                            return error.TestsuiteTestFailureTrapResult;
+                                        }
+                                    } else {
+                                        const result_value = try fmt.parseInt(u64, result.value, 10);
+                                        // Otherwise
+                                        errdefer {
+                                            std.debug.print("(result) invoke = {s}\n", .{field});
+                                            std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_return.line });
+                                            std.debug.print("result[{}], expected: {s} ({x}), result: {} ({x})\n", .{ i, result.value, result_value, out[i], out[i] });
+                                        }
+                                        if (result_value != out[expected.len - i - 1]) {
+                                            return error.TestsuiteTestFailureTrapResult;
+                                        }
+                                    }
+                                },
+                                .V128 => return error.SIMDNotImplemented,
                             }
                         }
                     },
@@ -397,92 +424,95 @@ pub fn main() anyerror!void {
 
                         // Initialise input parameters
                         for (action.invoke.args) |value, i| {
-                            const arg = try fmt.parseInt(u64, value.value, 10);
-                            in[i] = arg;
-                        }
-
-                        // Test the result
-                        if (mem.eql(u8, trap, "integer divide by zero")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.DivisionByZero => continue,
-                                else => return error.TestsuiteExpectedDivideByZero,
+                            if (mem.eql(u8, value.value, "null")) {
+                                in[i] = VirtualMachine.REF_NULL;
+                            } else {
+                                const arg = try fmt.parseInt(u64, value.value, 10);
+                                in[i] = arg;
                             }
                         }
 
-                        if (mem.eql(u8, trap, "integer overflow")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.Overflow => continue,
-                                else => return error.TestsuiteExpectedOverflow,
+                        if (instance.invoke(field, in, out, .{})) |_| {
+                            return error.TestsuiteExpectedTrap;
+                        } else |err| {
+                            // Test the result
+                            if (mem.eql(u8, trap, "integer divide by zero")) {
+                                switch (err) {
+                                    error.DivisionByZero => continue,
+                                    else => return error.TestsuiteExpectedDivideByZero,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "invalid conversion to integer")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.InvalidConversion => continue,
-                                else => return error.TestsuiteExpectedInvalidConversion,
+                            if (mem.eql(u8, trap, "integer overflow")) {
+                                switch (err) {
+                                    error.Overflow => continue,
+                                    else => return error.TestsuiteExpectedOverflow,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "out of bounds memory access")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.OutOfBoundsMemoryAccess => continue,
-                                else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                            if (mem.eql(u8, trap, "invalid conversion to integer")) {
+                                switch (err) {
+                                    error.InvalidConversion => continue,
+                                    else => return error.TestsuiteExpectedInvalidConversion,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "indirect call type mismatch")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.IndirectCallTypeMismatch => continue,
-                                else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                            if (mem.eql(u8, trap, "out of bounds memory access")) {
+                                switch (err) {
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    else => return error.TestsuiteExpectedOutOfBoundsMemoryAccess,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.UndefinedElement => continue,
-                                error.OutOfBoundsMemoryAccess => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUndefinedElement;
-                                },
+                            if (mem.eql(u8, trap, "indirect call type mismatch")) {
+                                switch (err) {
+                                    error.IndirectCallTypeMismatch => continue,
+                                    else => return error.TestsuiteExpectedIndirectCallTypeMismatch,
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedTrap;
-                            } else |err| switch (err) {
-                                error.UndefinedElement => continue,
-                                error.OutOfBoundsMemoryAccess => continue,
-                                error.IndirectCallTypeMismatch => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUnitialized;
-                                },
+                            if (mem.eql(u8, trap, "undefined element") or mem.eql(u8, trap, "uninitialized element") or mem.eql(u8, trap, "uninitialized element 2")) {
+                                switch (err) {
+                                    error.UndefinedElement => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUndefinedElement;
+                                    },
+                                }
                             }
-                        }
 
-                        if (mem.eql(u8, trap, "unreachable")) {
-                            if (instance.invoke(field, in, out, .{})) |_| {
-                                return error.TestsuiteExpectedUnreachable;
-                            } else |err| switch (err) {
-                                error.TrapUnreachable => continue,
-                                else => {
-                                    std.debug.print("Unexpected error: {}\n", .{err});
-                                    return error.TestsuiteExpectedUnreachable;
-                                },
+                            if (mem.eql(u8, trap, "uninitialized") or mem.eql(u8, trap, "undefined") or mem.eql(u8, trap, "indirect call")) {
+                                switch (err) {
+                                    error.UndefinedElement => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    error.IndirectCallTypeMismatch => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnitialized;
+                                    },
+                                }
+                            }
+
+                            if (mem.eql(u8, trap, "out of bounds table access")) {
+                                switch (err) {
+                                    error.Trap => continue,
+                                    error.OutOfBoundsMemoryAccess => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnreachable;
+                                    },
+                                }
+                            }
+
+                            if (mem.eql(u8, trap, "unreachable")) {
+                                switch (err) {
+                                    error.TrapUnreachable => continue,
+                                    else => {
+                                        std.debug.print("Unexpected error: {}\n", .{err});
+                                        return error.TestsuiteExpectedUnreachable;
+                                    },
+                                }
                             }
                         }
                     },
@@ -518,10 +548,10 @@ pub fn main() anyerror!void {
                     error.ValidatorConstantExpressionRequired => continue,
                     error.ValidatorUnknownGlobal => continue,
                     error.ValidatorInvalidTypeIndex => continue,
-                    error.ValidatorMultipleTables => continue,
                     error.ValidatorMultipleMemories => continue,
                     error.LocalGetIndexOutOfBounds => continue,
                     error.LocalSetIndexOutOfBounds => continue,
+                    error.LocalTeeIndexOutOfBounds => continue,
                     error.ValidatorDataMemoryReferenceInvalid => continue,
                     error.ValidatorUnknownMemory => continue,
                     error.ValidatorMemoryMinGreaterThanMax => continue,
@@ -547,6 +577,14 @@ pub fn main() anyerror!void {
                     error.ValidatorNotStartFunctionType => continue,
                     error.ValidatorElemUnknownFunctionIndex => continue,
                     error.ValidatorElseBranchExpected => continue,
+                    error.ValidatorMutableGlobalInConstantExpr => continue,
+                    error.OnlyOneSelectTTypeSupported => continue,
+                    error.ExpectingBothNum => continue,
+                    error.InstructionRequiresDataCountSection => continue,
+                    error.InvalidDataIndex => continue,
+                    error.ValidatorInvalidFunction => continue,
+                    error.ValidatorUnreferencedFunction => continue,
+                    error.ValidatorInvalidElementIndex => continue,
                     else => {
                         std.debug.print("Unexpected error: {}\n", .{err});
                         return error.TestsuiteExpectedInvalidUnexpectedError;
@@ -582,6 +620,20 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "illegal opcode")) {
+                        switch (err) {
+                            error.IllegalOpcode => continue,
+                            else => {},
+                        }
+                    }
+
+                    if (mem.eql(u8, trap, "malformed reference type")) {
+                        switch (err) {
+                            error.MalformedRefType => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "magic header not detected")) {
                         switch (err) {
                             error.MagicNumberNotFound => continue,
@@ -603,6 +655,20 @@ pub fn main() anyerror!void {
                         }
                     }
 
+                    if (mem.eql(u8, trap, "data count and data section have inconsistent lengths")) {
+                        switch (err) {
+                            error.DataCountSectionDataSectionCountMismatch => continue,
+                            else => {},
+                        }
+                    }
+
+                    if (mem.eql(u8, trap, "data count section required")) {
+                        switch (err) {
+                            error.InstructionRequiresDataCountSection => continue,
+                            else => {},
+                        }
+                    }
+
                     if (mem.eql(u8, trap, "integer representation too long")) {
                         switch (err) {
                             error.InvalidValue => continue,
@@ -613,9 +679,8 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "zero flag expected")) {
+                    if (mem.eql(u8, trap, "zero byte expected")) {
                         switch (err) {
-                            error.MalformedCallIndirectReserved => continue,
                             error.MalformedMemoryReserved => continue,
                             else => {},
                         }
@@ -635,7 +700,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch")) {
+                    if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch") or mem.eql(u8, trap, "END opcode expected")) {
                         switch (err) {
                             error.UnexpectedEndOfInput => continue,
                             error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
@@ -650,6 +715,7 @@ pub fn main() anyerror!void {
                             error.DatasCountMismatch => continue,
                             error.InvalidValue => continue,
                             error.MalformedSectionMismatchedSize => continue,
+                            error.ExpectedFunctionEnd => continue,
                             else => {},
                         }
                     }
@@ -670,7 +736,7 @@ pub fn main() anyerror!void {
                         }
                     }
 
-                    if (mem.eql(u8, trap, "junk after last section")) {
+                    if (mem.eql(u8, trap, "unexpected content after last section")) {
                         switch (err) {
                             error.MultipleStartSections => continue,
                             else => {},
@@ -743,11 +809,13 @@ pub fn main() anyerror!void {
                 } else |err| switch (err) {
                     error.ImportedMemoryNotBigEnough => continue,
                     error.ImportedTableNotBigEnough => continue,
+                    error.ImportedTableRefTypeMismatch => continue,
                     error.ImportNotFound => continue,
                     error.ImportedFunctionTypeSignatureDoesNotMatch => continue,
                     error.Overflow => continue,
                     error.OutOfBoundsMemoryAccess => continue,
                     error.MismatchedMutability => continue,
+                    error.MismatchedGlobalType => continue,
                     else => {
                         std.debug.print("(unlinkable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
@@ -770,6 +838,7 @@ pub fn main() anyerror!void {
                     return error.ExpectedUninstantiable;
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
+                    error.OutOfBoundsMemoryAccess => continue, // Why did this work before? data.wast 174
                     else => {
                         std.debug.print("(uninstantiable) Unexpected error: {}\n", .{err});
                         return error.UnexpectedError;
@@ -835,6 +904,8 @@ fn valueTypeFromString(s: []const u8) !ValueType {
     if (mem.eql(u8, s, "i64")) return ValueType.I64;
     if (mem.eql(u8, s, "f32")) return ValueType.F32;
     if (mem.eql(u8, s, "f64")) return ValueType.F64;
+    if (mem.eql(u8, s, "funcref")) return ValueType.FuncRef;
+    if (mem.eql(u8, s, "externref")) return ValueType.ExternRef;
     return error.UnknownType;
 }
 

@@ -1,4 +1,4 @@
-{"source_filename": "float_misc.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/float_misc.wast",
  "commands": [
   {"type": "module", "line": 17, "filename": "float_misc.0.wasm"}, 
   {"type": "assert_return", "line": 50, "action": {"type": "invoke", "field": "f32.add", "args": [{"type": "f32", "value": "1066388847"}, {"type": "f32", "value": "789036054"}]}, "expected": [{"type": "f32", "value": "1066388847"}]}, 

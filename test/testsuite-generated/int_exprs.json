@@ -1,4 +1,4 @@
-{"source_filename": "int_exprs.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/int_exprs.wast",
  "commands": [
   {"type": "module", "line": 6, "filename": "int_exprs.0.wasm"}, 
   {"type": "assert_return", "line": 18, "action": {"type": "invoke", "field": "i32.no_fold_cmp_s_offset", "args": [{"type": "i32", "value": "2147483647"}, {"type": "i32", "value": "0"}]}, "expected": [{"type": "i32", "value": "1"}]}, 

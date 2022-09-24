@@ -1,4 +1,4 @@
-{"source_filename": "unreachable.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/unreachable.wast",
  "commands": [
   {"type": "module", "line": 3, "filename": "unreachable.0.wasm"}, 
   {"type": "assert_trap", "line": 221, "action": {"type": "invoke", "field": "type-i32", "args": []}, "text": "unreachable", "expected": [{"type": "i32"}]}, 

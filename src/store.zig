@@ -6,8 +6,11 @@ const Function = @import("function.zig").Function;
 const Memory = @import("memory.zig").Memory;
 const Table = @import("table.zig").Table;
 const Global = @import("global.zig").Global;
+const Elem = @import("elem.zig").Elem;
+const Data = @import("data.zig").Data;
 const Import = @import("common.zig").Import;
 const Tag = @import("common.zig").Tag;
+const RefType = @import("common.zig").RefType;
 const ValueType = @import("common.zig").ValueType;
 const Instance = @import("instance.zig").Instance;
 
@@ -31,6 +34,8 @@ pub const ArrayListStore = struct {
     memories: ArrayList(Memory),
     tables: ArrayList(Table),
     globals: ArrayList(Global),
+    elems: ArrayList(Elem),
+    datas: ArrayList(Data),
     imports: ArrayList(ImportExport),
     instances: ArrayList(Instance),
 
@@ -41,6 +46,8 @@ pub const ArrayListStore = struct {
             .memories = ArrayList(Memory).init(alloc),
             .tables = ArrayList(Table).init(alloc),
             .globals = ArrayList(Global).init(alloc),
+            .elems = ArrayList(Elem).init(alloc),
+            .datas = ArrayList(Data).init(alloc),
             .imports = ArrayList(ImportExport).init(alloc),
             .instances = ArrayList(Instance).init(alloc),
         };
@@ -103,9 +110,9 @@ pub const ArrayListStore = struct {
         return &self.tables.items[handle];
     }
 
-    pub fn addTable(self: *ArrayListStore, entries: u32, max: ?u32) !usize {
+    pub fn addTable(self: *ArrayListStore, reftype: RefType, entries: u32, max: ?u32) !usize {
         const tbl_ptr = try self.tables.addOne();
-        tbl_ptr.* = try Table.init(self.alloc, entries, max);
+        tbl_ptr.* = try Table.init(self.alloc, reftype, entries, max);
         return self.tables.items.len - 1;
     }
 
@@ -119,6 +126,28 @@ pub const ArrayListStore = struct {
         glbl_ptr.* = value;
 
         return self.globals.items.len - 1;
+    }
+
+    pub fn elem(self: *ArrayListStore, elemaddr: usize) !*Elem {
+        if (elemaddr >= self.elems.items.len) return error.BadElemAddr;
+        return &self.elems.items[elemaddr];
+    }
+
+    pub fn addElem(self: *ArrayListStore, reftype: RefType, count: u32) !usize {
+        const elem_ptr = try self.elems.addOne();
+        elem_ptr.* = try Elem.init(self.alloc, reftype, count);
+        return self.elems.items.len - 1;
+    }
+
+    pub fn data(self: *ArrayListStore, dataaddr: usize) !*Data {
+        if (dataaddr >= self.datas.items.len) return error.BadDataAddr;
+        return &self.datas.items[dataaddr];
+    }
+
+    pub fn addData(self: *ArrayListStore, count: u32) !usize {
+        const data_ptr = try self.datas.addOne();
+        data_ptr.* = try Data.init(self.alloc, count);
+        return self.datas.items.len - 1;
     }
 
     pub fn instance(self: *ArrayListStore, handle: usize) !*Instance {

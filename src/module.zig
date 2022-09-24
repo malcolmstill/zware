@@ -13,16 +13,23 @@ const Opcode = @import("opcode.zig").Opcode;
 const ParseIterator = instruction.ParseIterator;
 const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
+const NumType = common.NumType;
+const RefType = common.RefType;
 const ValueType = common.ValueType;
 const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
 const LimitType = common.LimitType;
+const MemType = common.MemType;
+const TableType = common.TableType;
 const Mutability = common.Mutability;
 const Global = common.Global;
 const Element = common.Element;
 const Code = function.Code;
-const Segment = common.Segment;
+const DataSegment = common.DataSegment;
+const DataSegmentMode = common.DataSegmentMode;
+const ElementSegment = common.ElementSegment;
+const ElementSegmentMode = common.ElementSegmentMode;
 const Tag = common.Tag;
 const LocalType = common.LocalType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
@@ -41,18 +48,21 @@ pub const Module = struct {
     types: Section(FuncType),
     imports: Section(Import),
     functions: Section(common.Function),
-    tables: Section(Limit),
-    memories: Section(Limit),
+    tables: Section(TableType),
+    memories: Section(MemType),
     globals: Section(Global),
     exports: Section(Export),
     start: ?u32,
-    elements: Section(Segment),
+    elements: Section(ElementSegment),
+    element_init_offsets: ArrayList(usize),
     codes: Section(Code),
-    datas: Section(Segment),
+    datas: Section(DataSegment),
     parsed_code: ArrayList(Instruction),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
+    dataCount: ?u32 = null,
+    references: ArrayList(u32),
 
     pub fn init(alloc: mem.Allocator, module: []const u8) Module {
         return Module{
@@ -63,20 +73,24 @@ pub const Module = struct {
             .types = Section(FuncType).init(alloc),
             .imports = Section(Import).init(alloc),
             .functions = Section(common.Function).init(alloc),
-            .tables = Section(Limit).init(alloc),
-            .memories = Section(Limit).init(alloc),
+            .tables = Section(TableType).init(alloc),
+            .memories = Section(MemType).init(alloc),
             .globals = Section(Global).init(alloc),
             .exports = Section(Export).init(alloc),
             .start = null,
-            .elements = Section(Segment).init(alloc),
+            .elements = Section(ElementSegment).init(alloc),
+            .element_init_offsets = ArrayList(usize).init(alloc),
             .codes = Section(Code).init(alloc),
-            .datas = Section(Segment).init(alloc),
+            .datas = Section(DataSegment).init(alloc),
             .parsed_code = ArrayList(Instruction).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .function_index_start = null,
+            .references = ArrayList(u32).init(alloc),
         };
     }
+
+    // fn deinit?
 
     pub fn decode(self: *Module) !void {
         const rd = self.buf.reader();
@@ -160,6 +174,7 @@ pub const Module = struct {
             .Element => try self.decodeElementSection(),
             .Code => try self.decodeCodeSection(),
             .Data => try self.decodeDataSection(),
+            .DataCount => try self.decodeDataCountSection(size),
         }
 
         const section_end = rd.context.pos;
@@ -349,15 +364,12 @@ pub const Module = struct {
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
-        if (self.tables.list.items.len > 0) return error.ValidatorMultipleTables;
-
         const rd = self.buf.reader();
 
-        const tag = rd.readByte() catch |err| switch (err) {
+        const reftype = rd.readEnum(RefType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
-        if (tag != 0x70) return error.ExpectedTable;
 
         const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -371,10 +383,13 @@ pub const Module = struct {
                     else => return err,
                 };
 
-                try self.tables.list.append(Limit{
-                    .min = min,
-                    .max = null,
+                try self.tables.list.append(TableType{
                     .import = import,
+                    .reftype = reftype,
+                    .limits = Limit{
+                        .min = min,
+                        .max = null,
+                    },
                 });
             },
             .MinMax => {
@@ -390,10 +405,13 @@ pub const Module = struct {
 
                 if (min > max) return error.ValidatorTableMinGreaterThanMax;
 
-                try self.tables.list.append(Limit{
-                    .min = min,
-                    .max = max,
+                try self.tables.list.append(TableType{
                     .import = import,
+                    .reftype = reftype,
+                    .limits = Limit{
+                        .min = min,
+                        .max = max,
+                    },
                 });
             },
         }
@@ -432,10 +450,12 @@ pub const Module = struct {
 
                 if (min > 65536) return error.ValidatorMemoryMinTooLarge;
 
-                try self.memories.list.append(Limit{
-                    .min = min,
-                    .max = null,
+                try self.memories.list.append(MemType{
                     .import = import,
+                    .limits = Limit{
+                        .min = min,
+                        .max = null,
+                    },
                 });
             },
             .MinMax => {
@@ -453,10 +473,12 @@ pub const Module = struct {
                 if (min > 65536) return error.ValidatorMemoryMinTooLarge;
                 if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
 
-                try self.memories.list.append(Limit{
-                    .min = min,
-                    .max = max,
+                try self.memories.list.append(MemType{
                     .import = import,
+                    .limits = Limit{
+                        .min = min,
+                        .max = max,
+                    },
                 });
             },
         }
@@ -564,7 +586,10 @@ pub const Module = struct {
             };
 
             switch (tag) {
-                .Func => if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction,
+                .Func => {
+                    if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction;
+                    try self.references.append(index);
+                },
                 .Table => if (index >= self.tables.list.items.len) return error.ValidatorExportUnknownTable,
                 .Mem => if (index >= self.memories.list.items.len) return error.ValidatorExportUnknownMemory,
                 .Global => if (index >= self.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
@@ -606,69 +631,365 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const table_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            const elem_type = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
-            if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+            switch (elem_type) {
+                0 => {
+                    const table_index = 0;
 
-            const expr_start = rd.context.pos;
-            const expr = self.module[expr_start..];
-            const meta = try opcode.findExprEnd(expr);
+                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
 
-            // Number of u32's in our data (not the length in bytes!)
-            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-            const data_start = rd.context.pos;
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            var j: usize = 0;
-            while (j < data_length) : (j += 1) {
-                // When we pre-process all this data we can just store this
-                // but for the moment we're just using it to skip over
-                const func_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                    error.EndOfStream => return error.UnexpectedEndOfInput,
-                    else => return err,
-                };
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-                if (func_index >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    // offset code
+                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    // The parsed code defines the offset of the data
+                    //
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = data_length,
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = 0,
+                            .offset = parsed_offset_code.start,
+                        } },
+                    });
+                },
+                1 => {
+                    // read elemkind (only 0x00 == .FuncRef supported)
+                    _ = rd.readByte() catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = data_length,
+                        .mode = ElementSegmentMode.Passive,
+                    });
+                },
+                2 => {
+                    const tableidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
+
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // read elemkind (only 0x00 == .FuncRef supported)
+                    _ = rd.readByte() catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = data_length,
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = tableidx,
+                            .offset = parsed_offset_code.start,
+                        } },
+                    });
+                },
+                3 => {
+                    // read elemkind (only 0x00 == .FuncRef supported)
+                    _ = rd.readByte() catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < data_length) : (j += 1) {
+                        // When we pre-process all this data we can just store this
+                        // but for the moment we're just using it to skip over
+                        const funcidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+
+                        try self.references.append(funcidx);
+
+                        const init_offset = self.parsed_code.items.len;
+                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Instruction.@"return");
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = data_length,
+                        .mode = ElementSegmentMode.Declarative,
+                    });
+                },
+                4 => {
+                    const table_index = 0;
+
+                    if (table_index >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+
+                    const parsed_offset_code = try self.readConstantExpression(.I32);
+
+                    // Number of u32's in our data (not the length in bytes!)
+                    const init_expression_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < init_expression_count) : (j += 1) {
+                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
+                        try self.element_init_offsets.append(parsed_init_code.start);
+                    }
+
+                    // The parsed code defines the offset of the data
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = .FuncRef,
+                        .init = first_init_offset,
+                        .count = init_expression_count,
+                        .mode = ElementSegmentMode{ .Active = .{
+                            .tableidx = 0,
+                            .offset = parsed_offset_code.start,
+                        } },
+                    });
+                },
+                5 => { // Passive
+                    const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
+
+                    const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < expr_count) : (j += 1) {
+                        const expr_start = rd.context.pos;
+                        const expr = self.module[expr_start..];
+                        const meta = try opcode.findExprEnd(expr);
+
+                        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                            error.EndOfStream => return error.UnexpectedEndOfInput,
+                            else => return err,
+                        };
+
+                        const init_offset = self.parsed_code.items.len;
+                        _ = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .FuncRef);
+                        try self.element_init_offsets.append(init_offset);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = reftype,
+                        .init = first_init_offset,
+                        .count = expr_count,
+                        .mode = ElementSegmentMode.Passive,
+                    });
+                },
+                7 => { // Declarative
+                    const rtype = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
+
+                    const expr_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const first_init_offset = self.element_init_offsets.items.len;
+
+                    var j: usize = 0;
+                    while (j < expr_count) : (j += 1) {
+                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
+                        try self.element_init_offsets.append(parsed_init_code.start);
+                    }
+
+                    try self.elements.list.append(ElementSegment{
+                        .reftype = reftype,
+                        .init = first_init_offset,
+                        .count = expr_count,
+                        .mode = ElementSegmentMode.Declarative,
+                    });
+                },
+                else => {
+                    std.log.err("elem type = {} not implemented", .{elem_type});
+                    return error.ValidatorElemTypeNotImplemented;
+                },
             }
-
-            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
-
-            try self.elements.list.append(Segment{
-                .index = table_index,
-                .start = parsed_code.start,
-                .count = data_length,
-                .data = self.module[data_start..rd.context.pos],
-            });
         }
+    }
+
+    fn readConstantExpression(self: *Module, value_type: ValueType) !StartWithDepth {
+        const rd = self.buf.reader();
+
+        const expr_start = rd.context.pos;
+        const expr = self.module[expr_start..];
+        const meta = try opcode.findExprEnd(expr);
+
+        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], value_type);
+    }
+
+    fn decodeDataCountSection(self: *Module, size: u32) !void {
+        const rd = self.buf.reader();
+
+        if (size == 0) return;
+
+        self.dataCount = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
     }
 
     fn decodeCodeSection(self: *Module) !void {
         const rd = self.buf.reader();
 
+        // count: the number of functions in the code section
         const count = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
         self.codes.count = count;
 
+        if (count == 0) return;
+
         const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
+            // size: the number of bytes defining the function, includes bytes defining locals
             const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
-            }; // includes bytes defining locals
+            };
 
             const offset = rd.context.pos;
 
@@ -697,7 +1018,7 @@ pub const Module = struct {
 
                 try self.local_types.append(.{ .count = type_count, .value_type = local_type });
             }
-            if (locals_count > 0x100000000) return error.TooManyLocals;
+            if (locals_count >= 0x100000000) return error.TooManyLocals;
 
             const code_start = rd.context.pos;
             const code_length = try math.sub(usize, size, code_start - offset);
@@ -709,6 +1030,7 @@ pub const Module = struct {
 
             const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
             const code = self.module[code_start..rd.context.pos];
+            if (code[code.len - 1] != @enumToInt(RuntimeOpcode.end)) return error.ExpectedFunctionEnd;
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
             const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
@@ -728,45 +1050,119 @@ pub const Module = struct {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
+
+        if (self.dataCount) |dataCount| {
+            if (count != dataCount) return error.DataCountSectionDataSectionCountMismatch;
+        }
+
         self.datas.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const mem_idx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            const data_section_type = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
 
-            if (mem_idx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+            switch (data_section_type) {
+                0 => {
+                    const memidx = 0;
 
-            const expr_start = rd.context.pos;
-            const expr = self.module[expr_start..];
-            const meta = try opcode.findExprEnd(expr);
+                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-            rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
 
-            const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            const data_start = rd.context.pos;
-            rd.skipBytes(data_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
 
-            try self.datas.list.append(Segment{
-                .index = mem_idx,
-                .start = parsed_code.start,
-                .count = data_length,
-                .data = self.module[data_start..rd.context.pos],
-            });
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.datas.list.append(DataSegment{
+                        .count = data_length,
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = DataSegmentMode{ .Active = .{
+                            .memidx = 0,
+                            .offset = parsed_code.start,
+                        } },
+                    });
+                },
+                1 => {
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    try self.datas.list.append(DataSegment{
+                        .count = data_length,
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = .Passive,
+                    });
+                },
+                2 => {
+                    const memidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+
+                    const expr_start = rd.context.pos;
+                    const expr = self.module[expr_start..];
+                    const meta = try opcode.findExprEnd(expr);
+
+                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const data_start = rd.context.pos;
+                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
+                        error.EndOfStream => return error.UnexpectedEndOfInput,
+                        else => return err,
+                    };
+
+                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
+
+                    try self.datas.list.append(DataSegment{
+                        .count = data_length,
+                        .data = self.module[data_start..rd.context.pos],
+                        .mode = DataSegmentMode{ .Active = .{
+                            .memidx = 0,
+                            .offset = parsed_code.start,
+                        } },
+                    });
+                },
+                else => {
+                    std.log.err("unknown data section type {}", .{data_section_type});
+                    return error.UnknownDataSectionType;
+                },
+            }
         }
     }
 
@@ -814,11 +1210,11 @@ pub const Module = struct {
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
-        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..]);
+        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..], true);
 
         const in: [0]ValueType = [_]ValueType{} ** 0;
-        var out: [1]ValueType = [_]ValueType{.I32} ** 1;
-        out[0] = value_type;
+        const out: [1]ValueType = [_]ValueType{value_type} ** 1;
+
         try it.validator.pushControlFrame(
             .block,
             in[0..0],
@@ -827,12 +1223,15 @@ pub const Module = struct {
 
         while (try it.next()) |instr| {
             switch (instr) {
-                .@"i32.const" => |_| {},
-                .@"i64.const" => |_| {},
-                .@"f32.const" => |_| {},
-                .@"f64.const" => |_| {},
-                .@"global.get" => |_| {},
-                .end => |_| {},
+                .@"i32.const",
+                .@"i64.const",
+                .@"f32.const",
+                .@"f64.const",
+                .@"global.get",
+                .@"ref.null",
+                .@"ref.func",
+                .end,
+                => |_| {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.parsed_code.append(instr);
@@ -849,7 +1248,7 @@ pub const Module = struct {
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
-        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..]);
+        var it = ParseIterator.init(self, code, &self.parsed_code, continuation_stack[0..], false);
 
         try it.pushFunction(locals, func_index);
 
@@ -937,6 +1336,7 @@ const SectionType = enum(u8) {
     Element = 0x09,
     Code = 0x0a,
     Data = 0x0b,
+    DataCount = 0x0c,
 };
 
 const testing = std.testing;

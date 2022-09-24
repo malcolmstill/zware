@@ -1,4 +1,4 @@
-{"source_filename": "float_exprs.wast",
+{"source_filename": "/Users/klltkr/zware/test/testsuite/float_exprs.wast",
  "commands": [
   {"type": "module", "line": 6, "filename": "float_exprs.0.wasm"}, 
   {"type": "assert_return", "line": 11, "action": {"type": "invoke", "field": "f64.no_contraction", "args": [{"type": "f64", "value": "13369472591878845359"}, {"type": "f64", "value": "7598224971858294334"}, {"type": "f64", "value": "7009968021366006149"}]}, "expected": [{"type": "f64", "value": "16360919150252594323"}]}, 

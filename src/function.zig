@@ -31,10 +31,14 @@ pub const WasmError = error{
     BadTableIndex,
     TableIndexOutOfBounds,
     BadGlobalIndex,
+    ElemIndexOutOfBounds,
+    BadElemAddr,
     GlobalIndexOutOfBounds,
     NegativeDenominator,
     Trap,
     CheckStackSpace,
+    DataIndexOutOfBounds,
+    BadDataAddr,
 };
 
 pub const Function = union(enum) {
