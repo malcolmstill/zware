@@ -271,8 +271,8 @@ pub const VirtualMachine = struct {
         const call_indirect_instruction = code[ip].call_indirect;
         var module = self.inst.module;
 
-        const op_func_type_index = call_indirect_instruction.@"type";
-        const tableidx = call_indirect_instruction.table;
+        const typeidx = call_indirect_instruction.typeidx;
+        const tableidx = call_indirect_instruction.tableidx;
 
         // Read lookup index from stack
         const lookup_index = self.popOperand(u32);
@@ -285,7 +285,7 @@ pub const VirtualMachine = struct {
         switch (function) {
             .function => |func| {
                 // Check that signatures match
-                const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                const call_indirect_func_type = module.types.list.items[typeidx];
                 if (!Module.signaturesEqual(func.params, func.results, call_indirect_func_type)) {
                     return error.IndirectCallTypeMismatch;
                 }
@@ -316,7 +316,7 @@ pub const VirtualMachine = struct {
                 next_ip = func.start;
             },
             .host_function => |host_func| {
-                const call_indirect_func_type = module.types.list.items[op_func_type_index];
+                const call_indirect_func_type = module.types.list.items[typeidx];
                 if (!Module.signaturesEqual(host_func.params, host_func.results, call_indirect_func_type)) {
                     return error.IndirectCallTypeMismatch;
                 }

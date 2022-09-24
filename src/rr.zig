@@ -225,8 +225,8 @@ pub const Rr = union(RrOpcode) {
     @"return": void,
     call: usize, // u32?
     call_indirect: struct {
-        @"type": u32,
-        table: u32,
+        typeidx: u32,
+        tableidx: u32,
     },
     fast_call: struct {
         start: u32,

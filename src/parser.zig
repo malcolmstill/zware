@@ -295,19 +295,19 @@ pub const Parser = struct {
                 // rr = Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
             .call_indirect => {
-                const type_index = try opcode.readULEB128Mem(u32, &self.code);
-                if (type_index >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
+                const typeidx = try opcode.readULEB128Mem(u32, &self.code);
+                if (typeidx >= self.module.types.list.items.len) return error.ValidatorCallIndirectInvalidTypeIndex;
 
                 const tableidx = try opcode.readByte(&self.code);
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
-                const function_type = self.module.types.list.items[@intCast(usize, type_index)];
+                const function_type = self.module.types.list.items[@intCast(usize, typeidx)];
                 try self.validator.validateCallIndirect(function_type);
 
                 rr = Rr{
                     .call_indirect = .{
-                        .@"type" = type_index,
-                        .table = tableidx,
+                        .typeidx = typeidx,
+                        .tableidx = tableidx,
                     },
                 };
             },
