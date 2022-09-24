@@ -1,7 +1,6 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
-const common = @import("common.zig");
 const opcode = @import("opcode.zig");
 const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
@@ -163,7 +162,7 @@ pub const Instance = struct {
             if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
                 // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
-                if (!common.limitMatch(imported_mem.size(), imported_mem.max, memtype.limits.min, memtype.limits.max)) return error.ImportedMemoryNotBigEnough;
+                if (!limitMatch(imported_mem.size(), imported_mem.max, memtype.limits.min, memtype.limits.max)) return error.ImportedMemoryNotBigEnough;
             } else {
                 const handle = try self.store.addMemory(memtype.limits.min, memtype.limits.max);
                 try self.memaddrs.append(handle);
@@ -177,7 +176,7 @@ pub const Instance = struct {
             if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
                 if (imported_table.reftype != tabletype.reftype) return error.ImportedTableRefTypeMismatch;
-                if (!common.limitMatch(imported_table.min, imported_table.max, tabletype.limits.min, tabletype.limits.max)) return error.ImportedTableNotBigEnough;
+                if (!limitMatch(imported_table.min, imported_table.max, tabletype.limits.min, tabletype.limits.max)) return error.ImportedTableNotBigEnough;
             } else {
                 const handle = try self.store.addTable(tabletype.reftype, tabletype.limits.min, tabletype.limits.max);
                 try self.tableaddrs.append(handle);
@@ -423,3 +422,18 @@ pub const Instance = struct {
         }
     }
 };
+
+fn limitMatch(min_imported: u32, max_imported: ?u32, min_stated: u32, max_stated: ?u32) bool {
+    // TODO: this is a bit confusing, clean it up
+    if (min_imported < min_stated) return false;
+    if (max_stated) |defined_max| {
+        if (max_imported) |imported_max| {
+            if (!(imported_max <= defined_max)) {
+                return false;
+            }
+        } else {
+            return false;
+        }
+    }
+    return true;
+}
