@@ -593,7 +593,7 @@ pub const Module = struct {
         const functype = self.types.list.items[func.typeidx];
         if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
-        self.start = index;
+        self.start = funcidx;
     }
 
     fn decodeElementSection(self: *Module) !void {

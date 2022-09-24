@@ -283,14 +283,14 @@ pub const Parser = struct {
             },
             .@"return" => rr = Rr.@"return",
             .call => {
-                const function_index = try opcode.readULEB128Mem(u32, &self.code);
-                if (function_index >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
-                const function = self.module.functions.list.items[@intCast(usize, function_index)];
-                const functype = self.module.types.list.items[@intCast(usize, function.typeidx)];
+                const funcidx = try opcode.readULEB128Mem(u32, &self.code);
+                if (funcidx >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
+                const func = self.module.functions.list.items[@intCast(usize, funcidx)];
+                const functype = self.module.types.list.items[@intCast(usize, func.typeidx)];
 
                 try self.validator.validateCall(functype);
 
-                rr = Rr{ .call = function_index };
+                rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
                 // rr = Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
