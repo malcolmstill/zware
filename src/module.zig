@@ -310,19 +310,19 @@ pub const Module = struct {
 
     fn decodeFunction(self: *Module, import: ?u32) !void {
         const rd = self.buf.reader();
-        const type_index = leb.readULEB128(u32, rd) catch |err| switch (err) {
+        const typeidx = leb.readULEB128(u32, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
 
-        if (type_index >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
+        if (typeidx >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
 
         if (import == null and self.function_index_start == null) {
             self.function_index_start = self.functions.list.items.len;
         }
 
         try self.functions.list.append(Function{
-            .typeidx = type_index,
+            .typeidx = typeidx,
             .import = import,
         });
     }
