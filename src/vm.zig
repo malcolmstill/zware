@@ -398,9 +398,9 @@ pub const VirtualMachine = struct {
     }
 
     fn @"global.get"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const global_index = code[ip].@"global.get";
+        const globalidx = code[ip].@"global.get";
 
-        const global = try self.inst.getGlobal(global_index);
+        const global = try self.inst.getGlobal(globalidx);
 
         self.pushOperandNoCheck(u64, global.value);
 
@@ -408,10 +408,10 @@ pub const VirtualMachine = struct {
     }
 
     fn @"global.set"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const global_index = code[ip].@"global.set";
+        const globalidx = code[ip].@"global.set";
         const value = self.popAnyOperand();
 
-        const global = try self.inst.getGlobal(global_index);
+        const global = try self.inst.getGlobal(globalidx);
 
         global.value = value;
 

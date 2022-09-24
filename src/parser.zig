@@ -462,17 +462,17 @@ pub const Parser = struct {
             },
             .@"memory.size" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const memory_index = try opcode.readByte(&self.code);
-                if (memory_index != 0) return error.MalformedMemoryReserved;
+                const memidx = try opcode.readByte(&self.code);
+                if (memidx != 0) return error.MalformedMemoryReserved;
 
-                rr = Rr{ .@"memory.size" = memory_index };
+                rr = Rr{ .@"memory.size" = memidx };
             },
             .@"memory.grow" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const memory_index = try opcode.readByte(&self.code);
-                if (memory_index != 0) return error.MalformedMemoryReserved;
+                const memidx = try opcode.readByte(&self.code);
+                if (memidx != 0) return error.MalformedMemoryReserved;
 
-                rr = Rr{ .@"memory.grow" = memory_index };
+                rr = Rr{ .@"memory.grow" = memidx };
             },
             .@"i32.const" => {
                 const i32_const = try opcode.readILEB128Mem(i32, &self.code);
