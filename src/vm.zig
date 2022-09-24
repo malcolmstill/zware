@@ -2090,6 +2090,10 @@ pub const VirtualMachine = struct {
         return dispatch(self, ip + 1, code);
     }
 
+    fn misc(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
+        return miscDispatch(self, ip, code);
+    }
+
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f32);
         const trunc = @trunc(c1);
@@ -2132,10 +2136,6 @@ pub const VirtualMachine = struct {
 
         self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
         return dispatch(self, ip + 1, code);
-    }
-
-    fn misc(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        return miscDispatch(self, ip, code);
     }
 
     fn @"i32.trunc_sat_f64_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
