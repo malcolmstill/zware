@@ -54,6 +54,45 @@ pub const Instance = struct {
         };
     }
 
+    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
+        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
+        const funcaddr = self.funcaddrs.items[funcidx];
+        return try self.store.function(funcaddr);
+    }
+
+    // Lookup a memory in store via the modules index
+    pub fn getMemory(self: *Instance, index: usize) !*Memory {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
+        const memaddr = self.memaddrs.items[index];
+        return try self.store.memory(memaddr);
+    }
+
+    pub fn getTable(self: *Instance, index: usize) !*Table {
+        // TODO: with a verified program we shouldn't need to check this
+        if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
+        const tableaddr = self.tableaddrs.items[index];
+        return try self.store.table(tableaddr);
+    }
+
+    pub fn getGlobal(self: *Instance, index: usize) !*Global {
+        if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
+        const globaladdr = self.globaladdrs.items[index];
+        return try self.store.global(globaladdr);
+    }
+
+    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
+        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
+        const elemaddr = self.elemaddrs.items[elemidx];
+        return try self.store.elem(elemaddr);
+    }
+
+    pub fn getData(self: *Instance, dataidx: usize) !*Data {
+        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
+        const dataaddr = self.dataaddrs.items[dataidx];
+        return try self.store.data(dataaddr);
+    }
+
     pub fn instantiate(self: *Instance, index: usize) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
@@ -222,45 +261,6 @@ pub const Instance = struct {
                 }
             }
         }
-    }
-
-    pub fn getFunc(self: *Instance, funcidx: usize) !Function {
-        if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
-        const funcaddr = self.funcaddrs.items[funcidx];
-        return try self.store.function(funcaddr);
-    }
-
-    // Lookup a memory in store via the modules index
-    pub fn getMemory(self: *Instance, index: usize) !*Memory {
-        // TODO: with a verified program we shouldn't need to check this
-        if (index >= self.memaddrs.items.len) return error.MemoryIndexOutOfBounds;
-        const memaddr = self.memaddrs.items[index];
-        return try self.store.memory(memaddr);
-    }
-
-    pub fn getTable(self: *Instance, index: usize) !*Table {
-        // TODO: with a verified program we shouldn't need to check this
-        if (index >= self.tableaddrs.items.len) return error.TableIndexOutOfBounds;
-        const tableaddr = self.tableaddrs.items[index];
-        return try self.store.table(tableaddr);
-    }
-
-    pub fn getGlobal(self: *Instance, index: usize) !*Global {
-        if (index >= self.globaladdrs.items.len) return error.GlobalIndexOutOfBounds;
-        const globaladdr = self.globaladdrs.items[index];
-        return try self.store.global(globaladdr);
-    }
-
-    pub fn getElem(self: *Instance, elemidx: usize) !*Elem {
-        if (elemidx >= self.elemaddrs.items.len) return error.ElemIndexOutOfBounds;
-        const elemaddr = self.elemaddrs.items[elemidx];
-        return try self.store.elem(elemaddr);
-    }
-
-    pub fn getData(self: *Instance, dataidx: usize) !*Data {
-        if (dataidx >= self.dataaddrs.items.len) return error.DataIndexOutOfBounds;
-        const dataaddr = self.dataaddrs.items[dataidx];
-        return try self.store.data(dataaddr);
     }
 
     // invoke
