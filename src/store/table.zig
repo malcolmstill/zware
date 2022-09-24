@@ -1,7 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
-const RefType = @import("valtype.zig").RefType;
+const RefType = @import("../valtype.zig").RefType;
 const ArrayList = std.ArrayList;
 
 pub const Table = struct {

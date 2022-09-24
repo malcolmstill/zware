@@ -1,18 +1,17 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
+const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
-const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
-const Memory = @import("memory.zig").Memory;
-const Table = @import("table.zig").Table;
-const Global = @import("global.zig").Global;
-const Elem = @import("elem.zig").Elem;
-const Data = @import("data.zig").Data;
+const Function = @import("store/function.zig").Function;
+const Memory = @import("store/memory.zig").Memory;
+const Table = @import("store/table.zig").Table;
+const Global = @import("store/global.zig").Global;
+const Elem = @import("store/elem.zig").Elem;
+const Data = @import("store/data.zig").Data;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
-const ArrayList = std.ArrayList;
-const Instruction = @import("function.zig").Instruction;
 
 const VirtualMachineOptions = struct {
     frame_stack_size: comptime_int = 1024,

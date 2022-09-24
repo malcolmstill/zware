@@ -1,7 +1,7 @@
 const std = @import("std");
-const ValType = @import("valtype.zig").ValType;
-const VirtualMachine = @import("vm.zig").VirtualMachine;
-const Instance = @import("instance.zig").Instance;
+const ValType = @import("../valtype.zig").ValType;
+const VirtualMachine = @import("../vm.zig").VirtualMachine;
+const Instance = @import("../instance.zig").Instance;
 
 pub const WasmError = error{
     NotImplemented,

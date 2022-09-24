@@ -5,7 +5,7 @@ const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
 const ValType = @import("module.zig").ValType;
 const Instance = @import("instance.zig").Instance;
-const WasmError = @import("function.zig").WasmError;
+const WasmError = @import("store/function.zig").WasmError;
 const Rr = @import("rr.zig").Rr;
 
 // VirtualMachine:

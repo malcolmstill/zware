@@ -13,7 +13,7 @@ const Parser = @import("parser.zig").Parser;
 const NumType = @import("valtype.zig").NumType;
 const ValType = @import("valtype.zig").ValType;
 const RefType = @import("valtype.zig").RefType;
-const Code = @import("function.zig").Code;
+const Code = @import("store/function.zig").Code;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Store = @import("store.zig").ArrayListStore;
 
@@ -1420,11 +1420,6 @@ pub const Tag = enum(u8) {
     Table,
     Mem,
     Global,
-};
-
-pub const Range = struct {
-    offset: usize = 0,
-    count: usize = 0,
 };
 
 pub const LocalType = struct {
