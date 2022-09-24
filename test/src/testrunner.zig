@@ -818,8 +818,7 @@ pub fn main() anyerror!void {
                 if (inst.instantiate(inst_index)) |_| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
-                    error.ImportedMemoryNotBigEnough => continue,
-                    error.ImportedTableNotBigEnough => continue,
+                    error.LimitMismatch => continue,
                     error.ImportedTableRefTypeMismatch => continue,
                     error.ImportNotFound => continue,
                     error.MismatchedSignatures => continue,

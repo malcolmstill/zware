@@ -1387,6 +1387,19 @@ const LimitType = enum(u8) {
 pub const Limit = struct {
     min: u32,
     max: ?u32,
+
+    pub fn checkMatch(self: Limit, min_imported: u32, max_imported: ?u32) !void {
+        if (min_imported < self.min) return error.LimitMismatch;
+        if (self.max) |defined_max| {
+            if (max_imported) |imported_max| {
+                if (!(imported_max <= defined_max)) {
+                    return error.LimitMismatch;
+                }
+            } else {
+                return error.LimitMismatch;
+            }
+        }
+    }
 };
 
 pub const Mutability = enum(u8) {
