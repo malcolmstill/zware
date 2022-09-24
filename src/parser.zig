@@ -375,14 +375,14 @@ pub const Parser = struct {
                 rr = Rr{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
-                const index = try opcode.readULEB128Mem(u32, &self.code);
+                const localidx = try opcode.readULEB128Mem(u32, &self.code);
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
-                if (index < params.len) {
-                    try self.validator.validateLocalGet(params[index]);
+                if (localidx < params.len) {
+                    try self.validator.validateLocalGet(params[localidx]);
                 } else {
-                    const local_index = index - params.len;
+                    const local_index = localidx - params.len;
                     var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
@@ -400,18 +400,18 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.get" = index };
+                rr = Rr{ .@"local.get" = localidx };
             },
             .@"local.set" => {
-                const index = try opcode.readULEB128Mem(u32, &self.code);
+                const localidx = try opcode.readULEB128Mem(u32, &self.code);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
-                if (index < params.len) {
-                    try self.validator.validateLocalSet(params[index]);
+                if (localidx < params.len) {
+                    try self.validator.validateLocalSet(params[localidx]);
                 } else {
-                    const local_index = index - params.len;
+                    const local_index = localidx - params.len;
                     var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
@@ -429,18 +429,18 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.set" = index };
+                rr = Rr{ .@"local.set" = localidx };
             },
             .@"local.tee" => {
-                const index = try opcode.readULEB128Mem(u32, &self.code);
+                const localidx = try opcode.readULEB128Mem(u32, &self.code);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
-                if (index < params.len) {
-                    try self.validator.validateLocalTee(params[index]);
+                if (localidx < params.len) {
+                    try self.validator.validateLocalTee(params[localidx]);
                 } else {
-                    const local_index = index - params.len;
+                    const local_index = localidx - params.len;
                     var local_type: ?ValType = null;
                     var count: usize = 0;
                     for (locals) |l| {
@@ -458,7 +458,7 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.tee" = index };
+                rr = Rr{ .@"local.tee" = localidx };
             },
             .@"memory.size" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
