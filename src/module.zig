@@ -588,9 +588,8 @@ pub const Module = struct {
             else => return err,
         };
 
-        if (funcidx >= self.functions.list.items.len) return error.ValidatorStartFunctionUnknown;
-        const func = self.functions.list.items[funcidx];
-        const functype = self.types.list.items[func.typeidx];
+        const func = try self.functions.lookup(funcidx);
+        const functype = try self.types.lookup(func.typeidx);
         if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
         self.start = funcidx;
@@ -1276,7 +1275,7 @@ fn Section(comptime T: type) type {
         }
 
         pub fn lookup(self: *Self, idx: u32) !T {
-            if (idx >= self.list.items.len) return error.ValidatorInvalidIdx;
+            if (idx >= self.list.items.len) return error.ValidatorInvalidIndex;
 
             return self.list.items[idx];
         }

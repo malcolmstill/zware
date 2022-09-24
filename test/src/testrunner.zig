@@ -587,7 +587,7 @@ pub fn main() anyerror!void {
                     error.ValidatorExportUnknownMemory => continue,
                     error.ValidatorExportUnknownGlobal => continue,
                     error.ValidatorDuplicateExportName => continue,
-                    error.ValidatorStartFunctionUnknown => continue,
+                    error.ValidatorInvalidIndex => continue,
                     error.ValidatorNotStartFunctionType => continue,
                     error.ValidatorElemUnknownFunctionIndex => continue,
                     error.ValidatorElseBranchExpected => continue,
