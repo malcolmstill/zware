@@ -323,24 +323,24 @@ pub const Parser = struct {
                 rr = Rr.select;
             },
             .@"global.get" => {
-                const index = try opcode.readULEB128Mem(u32, &self.code);
+                const globalidx = try opcode.readULEB128Mem(u32, &self.code);
 
                 // TODO: add a getGlobal to module?
-                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
-                const global = self.module.globals.list.items[@intCast(usize, index)];
+                if (globalidx >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
+                const global = self.module.globals.list.items[@intCast(usize, globalidx)];
                 try self.validator.validateGlobalGet(global);
 
-                rr = Rr{ .@"global.get" = index };
+                rr = Rr{ .@"global.get" = globalidx };
             },
             .@"global.set" => {
-                const index = try opcode.readULEB128Mem(u32, &self.code);
+                const globalidx = try opcode.readULEB128Mem(u32, &self.code);
 
-                if (index >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
+                if (globalidx >= self.module.globals.list.items.len) return error.ValidatorUnknownGlobal;
 
-                const global = self.module.globals.list.items[@intCast(usize, index)];
+                const global = self.module.globals.list.items[@intCast(usize, globalidx)];
                 try self.validator.validateGlobalSet(global);
 
-                rr = Rr{ .@"global.set" = index };
+                rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
                 const tableidx = try opcode.readULEB128Mem(u32, &self.code);
