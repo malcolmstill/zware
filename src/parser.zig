@@ -50,15 +50,15 @@ pub const Parser = struct {
     // pushFunction initiliase the validator for the current function
     pub fn pushFunction(self: *Parser, locals: []LocalType, func_index: usize) !void {
         const function = self.module.functions.list.items[@intCast(usize, func_index)];
-        const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+        const functype = self.module.types.list.items[@intCast(usize, function.typeidx)];
 
-        self.params = function_type.params;
+        self.params = functype.params;
         self.locals = locals;
 
         try self.validator.pushControlFrame(
             .nop, // block?
-            function_type.params[0..0],
-            function_type.results,
+            functype.params[0..0],
+            functype.results,
         );
     }
 
@@ -286,9 +286,9 @@ pub const Parser = struct {
                 const function_index = try opcode.readULEB128Mem(u32, &self.code);
                 if (function_index >= self.module.functions.list.items.len) return error.ValidatorCallInvalidFunctionIndex;
                 const function = self.module.functions.list.items[@intCast(usize, function_index)];
-                const function_type = self.module.types.list.items[@intCast(usize, function.typeidx)];
+                const functype = self.module.types.list.items[@intCast(usize, function.typeidx)];
 
-                try self.validator.validateCall(function_type);
+                try self.validator.validateCall(functype);
 
                 rr = Rr{ .call = function_index };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
@@ -301,8 +301,8 @@ pub const Parser = struct {
                 const tableidx = try opcode.readByte(&self.code);
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
-                const function_type = self.module.types.list.items[@intCast(usize, typeidx)];
-                try self.validator.validateCallIndirect(function_type);
+                const functype = self.module.types.list.items[@intCast(usize, typeidx)];
+                try self.validator.validateCallIndirect(functype);
 
                 rr = Rr{
                     .call_indirect = .{
