@@ -5,7 +5,6 @@ const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
 const ValType = @import("module.zig").ValType;
 const Instance = @import("instance.zig").Instance;
-const WasmError = @import("store/function.zig").WasmError;
 const Rr = @import("rr.zig").Rr;
 
 // VirtualMachine:
@@ -2612,6 +2611,42 @@ pub const VirtualMachine = struct {
     }
 };
 
+pub const WasmError = error{
+    NotImplemented,
+    StackUnderflow,
+    StackOverflow,
+    TrapUnreachable,
+    LabelStackUnderflow,
+    LabelStackOverflow,
+    OperandStackUnderflow,
+    ControlStackUnderflow,
+    OperandStackOverflow,
+    FunctionIndexOutOfBounds,
+    BadFunctionIndex,
+    ControlStackOverflow,
+    BadInstanceIndex,
+    DivisionByZero,
+    Overflow,
+    InvalidConversion,
+    OutOfBoundsMemoryAccess,
+    IndirectCallTypeMismatch,
+    UndefinedElement,
+    //
+    BadMemoryIndex, // TODO: I think we won't see this with validation
+    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
+    BadTableIndex,
+    TableIndexOutOfBounds,
+    BadGlobalIndex,
+    ElemIndexOutOfBounds,
+    BadElemAddr,
+    GlobalIndexOutOfBounds,
+    NegativeDenominator,
+    Trap,
+    CheckStackSpace,
+    DataIndexOutOfBounds,
+    BadDataAddr,
+};
+
 const testing = std.testing;
 
 test "operand push / pop test" {
@@ -2663,3 +2698,4 @@ test "operand push / pop test" {
 
 //     try testing.expectEqual(@as(i32, -1), i.popOperand(i32));
 // }
+

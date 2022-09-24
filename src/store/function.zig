@@ -1,43 +1,8 @@
 const std = @import("std");
 const ValType = @import("../valtype.zig").ValType;
 const VirtualMachine = @import("../vm.zig").VirtualMachine;
+const WasmError = @import("../vm.zig").WasmError;
 const Instance = @import("../instance.zig").Instance;
-
-pub const WasmError = error{
-    NotImplemented,
-    StackUnderflow,
-    StackOverflow,
-    TrapUnreachable,
-    LabelStackUnderflow,
-    LabelStackOverflow,
-    OperandStackUnderflow,
-    ControlStackUnderflow,
-    OperandStackOverflow,
-    FunctionIndexOutOfBounds,
-    BadFunctionIndex,
-    ControlStackOverflow,
-    BadInstanceIndex,
-    DivisionByZero,
-    Overflow,
-    InvalidConversion,
-    OutOfBoundsMemoryAccess,
-    IndirectCallTypeMismatch,
-    UndefinedElement,
-    //
-    BadMemoryIndex, // TODO: I think we won't see this with validation
-    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
-    BadTableIndex,
-    TableIndexOutOfBounds,
-    BadGlobalIndex,
-    ElemIndexOutOfBounds,
-    BadElemAddr,
-    GlobalIndexOutOfBounds,
-    NegativeDenominator,
-    Trap,
-    CheckStackSpace,
-    DataIndexOutOfBounds,
-    BadDataAddr,
-};
 
 pub const Function = union(enum) {
     function: struct {
