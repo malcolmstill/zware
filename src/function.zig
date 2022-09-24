@@ -2,7 +2,6 @@ const std = @import("std");
 const ValueType = @import("value_type.zig").ValueType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Instance = @import("instance.zig").Instance;
-const Opcode = @import("instruction.zig").Opcode;
 const Range = @import("common.zig").Range;
 
 pub const WasmError = error{

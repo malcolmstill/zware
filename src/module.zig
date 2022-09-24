@@ -4,14 +4,13 @@ const leb = std.leb;
 const math = std.math;
 const unicode = std.unicode;
 const common = @import("common.zig");
-const instruction = @import("instruction.zig");
-const Instruction = @import("instruction.zig").Instruction;
+const Rr = @import("rr.zig").Rr;
+const RrOpcode = @import("rr.zig").RrOpcode;
 const Instance = @import("instance.zig").Instance;
 const ArrayList = std.ArrayList;
 const opcode = @import("opcode.zig");
 const Opcode = @import("opcode.zig").Opcode;
 const Parser = @import("parser.zig").Parser;
-const OpcodeIterator = instruction.OpcodeIterator;
 const FuncType = common.FuncType;
 const NumType = @import("value_type.zig").NumType;
 const ValueType = @import("value_type.zig").ValueType;
@@ -35,7 +34,6 @@ const LocalType = common.LocalType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("function.zig").Function;
-const RuntimeOpcode = @import("instruction.zig").RuntimeOpcode;
 const function = @import("function.zig");
 
 pub const Module = struct {
@@ -57,7 +55,7 @@ pub const Module = struct {
     element_init_offsets: ArrayList(usize),
     codes: Section(Code),
     datas: Section(DataSegment),
-    parsed_code: ArrayList(Instruction),
+    parsed_code: ArrayList(Rr),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
@@ -82,7 +80,7 @@ pub const Module = struct {
             .element_init_offsets = ArrayList(usize).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(DataSegment).init(alloc),
-            .parsed_code = ArrayList(Instruction).init(alloc),
+            .parsed_code = ArrayList(Rr).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .function_index_start = null,
@@ -673,8 +671,8 @@ pub const Module = struct {
                         try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Instruction.@"return");
+                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -722,8 +720,8 @@ pub const Module = struct {
                         try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Instruction.@"return");
+                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -779,8 +777,8 @@ pub const Module = struct {
                         try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Instruction.@"return");
+                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -825,8 +823,8 @@ pub const Module = struct {
                         try self.references.append(funcidx);
 
                         const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Instruction{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Instruction.@"return");
+                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -1030,7 +1028,7 @@ pub const Module = struct {
 
             const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
             const code = self.module[code_start..rd.context.pos];
-            if (code[code.len - 1] != @enumToInt(RuntimeOpcode.end)) return error.ExpectedFunctionEnd;
+            if (code[code.len - 1] != @enumToInt(RrOpcode.end)) return error.ExpectedFunctionEnd;
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
             const parsed_code = try self.parseFunction(locals, code, function_index_start + i);

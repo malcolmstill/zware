@@ -2,7 +2,6 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const common = @import("common.zig");
-const instruction = @import("instruction.zig");
 const opcode = @import("opcode.zig");
 const Function = @import("function.zig").Function;
 const Module = @import("module.zig").Module;
