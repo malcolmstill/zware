@@ -370,29 +370,29 @@ pub const VirtualMachine = struct {
     }
 
     fn @"local.get"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.get";
+        const localidx = code[ip].@"local.get";
 
         const frame = self.peekFrame();
 
-        self.pushOperandNoCheck(u64, frame.locals[local_index]);
+        self.pushOperandNoCheck(u64, frame.locals[localidx]);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"local.set"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.set";
+        const localidx = code[ip].@"local.set";
 
         const frame = self.peekFrame();
-        frame.locals[local_index] = self.popOperand(u64);
+        frame.locals[localidx] = self.popOperand(u64);
 
         return dispatch(self, ip + 1, code);
     }
 
     fn @"local.tee"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        const local_index = code[ip].@"local.tee";
+        const localidx = code[ip].@"local.tee";
 
         const frame = self.peekFrame();
-        frame.locals[local_index] = self.peekOperand();
+        frame.locals[localidx] = self.peekOperand();
 
         return dispatch(self, ip + 1, code);
     }
