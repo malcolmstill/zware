@@ -62,8 +62,6 @@ pub const Instance = struct {
         try self.instantiateGlobals();
         try self.instantiateMemories();
         try self.instantiateTables();
-        // try self.checkData();
-        // try self.checkElements(); // FIXME: remove once all tests passing
         try self.instantiateData();
         try self.instantiateElements();
 
@@ -129,7 +127,6 @@ pub const Instance = struct {
     }
 
     fn instantiateGlobals(self: *Instance) !void {
-        // 2. Initialise globals
         for (self.module.globals.list.items) |global_def, i| {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
@@ -148,7 +145,6 @@ pub const Instance = struct {
     }
 
     fn instantiateMemories(self: *Instance) !void {
-        // 3a. Initialise memories
         for (self.module.memories.list.items) |memtype, i| {
             if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
@@ -162,7 +158,6 @@ pub const Instance = struct {
     }
 
     fn instantiateTables(self: *Instance) !void {
-        // 3b. Initialise tables
         for (self.module.tables.list.items) |tabletype, i| {
             if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
