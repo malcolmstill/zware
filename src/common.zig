@@ -1,8 +1,5 @@
 const ValueType = @import("value_type.zig").ValueType;
-const RefType = @import("value_type.zig").RefType;
-const Instruction = @import("function.zig").Instruction;
 
-// Table / Memory
 pub const Limit = struct {
     min: u32,
     max: ?u32,
@@ -41,49 +38,6 @@ pub const Export = struct {
     name: []const u8,
     tag: Tag,
     index: u32,
-};
-
-pub const Element = struct {};
-
-pub const DataSegment = struct {
-    count: u32,
-    data: []const u8,
-    mode: DataSegmentMode,
-};
-
-pub const DataSegmentType = enum {
-    Passive,
-    Active,
-};
-
-pub const DataSegmentMode = union(DataSegmentType) {
-    Passive: void,
-    Active: struct {
-        memidx: u32,
-        offset: usize, // index of parsed code representing offset
-    },
-};
-
-pub const ElementSegment = struct {
-    reftype: RefType,
-    init: usize, // Offset into element_init_offset of first init expression code offset
-    count: u32, // Number of element_init_offset values for this segment (we have an array of initialisation functions)
-    mode: ElementSegmentMode,
-};
-
-pub const ElementSegmentType = enum {
-    Passive,
-    Active,
-    Declarative,
-};
-
-pub const ElementSegmentMode = union(ElementSegmentType) {
-    Passive: void,
-    Active: struct {
-        tableidx: u32,
-        offset: usize, // index of parsed code representing offset
-    },
-    Declarative: void,
 };
 
 pub const Tag = enum(u8) {

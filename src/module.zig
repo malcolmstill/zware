@@ -18,16 +18,9 @@ const RefType = @import("value_type.zig").RefType;
 const Import = common.Import;
 const Export = common.Export;
 const Limit = common.Limit;
-const MemType = common.MemType;
-const TableType = common.TableType;
 const Mutability = common.Mutability;
 const Global = common.Global;
-const Element = common.Element;
 const Code = function.Code;
-const DataSegment = common.DataSegment;
-const DataSegmentMode = common.DataSegmentMode;
-const ElementSegment = common.ElementSegment;
-const ElementSegmentMode = common.ElementSegmentMode;
 const Tag = common.Tag;
 const LocalType = common.LocalType;
 const VirtualMachine = @import("vm.zig").VirtualMachine;
@@ -1345,6 +1338,47 @@ const TableType = struct {
     import: ?u32,
     reftype: RefType,
     limits: Limit,
+};
+
+const DataSegment = struct {
+    count: u32,
+    data: []const u8,
+    mode: DataSegmentMode,
+};
+
+const DataSegmentType = enum {
+    Passive,
+    Active,
+};
+
+const DataSegmentMode = union(DataSegmentType) {
+    Passive: void,
+    Active: struct {
+        memidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+};
+
+pub const ElementSegment = struct {
+    reftype: RefType,
+    init: usize, // Offset into element_init_offset of first init expression code offset
+    count: u32, // Number of element_init_offset values for this segment (we have an array of initialisation functions)
+    mode: ElementSegmentMode,
+};
+
+pub const ElementSegmentType = enum {
+    Passive,
+    Active,
+    Declarative,
+};
+
+pub const ElementSegmentMode = union(ElementSegmentType) {
+    Passive: void,
+    Active: struct {
+        tableidx: u32,
+        offset: usize, // index of parsed code representing offset
+    },
+    Declarative: void,
 };
 
 const LimitType = enum(u8) {
