@@ -1217,14 +1217,14 @@ pub const Module = struct {
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
-    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, func_index: usize) !StartWithDepth {
+    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, funcidx: usize) !StartWithDepth {
         _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], false);
 
-        try it.pushFunction(locals, func_index);
+        try it.pushFunction(locals, funcidx);
 
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);

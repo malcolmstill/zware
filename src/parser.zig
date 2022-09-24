@@ -48,9 +48,9 @@ pub const Parser = struct {
     }
 
     // pushFunction initiliase the validator for the current function
-    pub fn pushFunction(self: *Parser, locals: []LocalType, func_index: usize) !void {
-        const function = self.module.functions.list.items[@intCast(usize, func_index)];
-        const functype = self.module.types.list.items[@intCast(usize, function.typeidx)];
+    pub fn pushFunction(self: *Parser, locals: []LocalType, funcidx: usize) !void {
+        const func = self.module.functions.list.items[@intCast(usize, funcidx)];
+        const functype = self.module.types.list.items[@intCast(usize, func.typeidx)];
 
         self.params = functype.params;
         self.locals = locals;
