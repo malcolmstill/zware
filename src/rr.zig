@@ -3,7 +3,7 @@ const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const RefType = @import("value_type.zig").RefType;
 
 // Runtime opcodes (wasm opcodes + optimisations)
-pub const RuntimeOpcode = enum(u8) {
+pub const RrOpcode = enum(u8) {
     @"unreachable" = 0x0,
     nop = 0x01,
     block = 0x02,
@@ -191,7 +191,7 @@ pub const RuntimeOpcode = enum(u8) {
     misc = 0xfc,
 };
 
-pub const Instruction = union(RuntimeOpcode) {
+pub const Rr = union(RrOpcode) {
     @"unreachable": void,
     nop: void,
     block: struct {
@@ -474,10 +474,10 @@ pub const Instruction = union(RuntimeOpcode) {
     @"ref.null": RefType,
     @"ref.is_null": void,
     @"ref.func": u32,
-    misc: MiscInstruction,
+    misc: MiscRr,
 };
 
-pub const MiscInstruction = union(MiscOpcode) {
+pub const MiscRr = union(MiscOpcode) {
     @"i32.trunc_sat_f32_s": void,
     @"i32.trunc_sat_f32_u": void,
     @"i32.trunc_sat_f64_s": void,

@@ -1,6 +1,5 @@
 const ValueType = @import("value_type.zig").ValueType;
 const RefType = @import("value_type.zig").RefType;
-const Opcode = @import("instruction.zig").Opcode;
 const Instruction = @import("function.zig").Instruction;
 
 pub const LimitType = enum(u8) {
