@@ -624,8 +624,8 @@ pub fn main() anyerror!void {
                             error.UnexpectedEndOfInput => continue,
                             error.FunctionCodeSectionsInconsistent => continue,
                             error.EndOfStream => continue,
-                            error.CouldntFindExprEnd => continue,
                             error.ElementsCountMismatch => continue,
+                            error.ValidatorInvalidIndex => continue,
                             error.CouldntFindEnd => continue, // test/testsuite/binary.wast:910 bad br_table means we don't find end
                             else => {},
                         }
