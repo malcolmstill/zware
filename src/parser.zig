@@ -306,7 +306,7 @@ pub const Parser = struct {
 
                 rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
-                // rr = Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
+                // rr =  Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
             .call_indirect => {
                 const typeidx = try self.readULEB128Mem(u32);
@@ -333,6 +333,7 @@ pub const Parser = struct {
                 const valuetype = try std.meta.intToEnum(ValType, valuetype_raw);
 
                 try self.validator.validateSelectT(valuetype);
+
                 rr = Rr.select;
             },
             .@"global.get" => {
@@ -1112,31 +1113,7 @@ pub const Parser = struct {
             },
         }
 
-        // Validate the instruction. Some instructions, e.g. block, loop
-        // are validate separately above.
-        switch (instr) {
-            .block,
-            .loop,
-            .@"if",
-            .br,
-            .br_if,
-            .br_table,
-            .call,
-            .call_indirect,
-            .@"global.get",
-            .@"global.set",
-            .@"local.get",
-            .@"local.set",
-            .@"local.tee",
-            .misc,
-            .@"ref.null",
-            .select_t,
-            .@"table.get",
-            .@"table.set",
-            => {},
-            else => try self.validator.validate(instr),
-        }
-
+        try self.validator.validate(instr);
         return rr;
     }
 

@@ -231,10 +231,7 @@ pub const Validator = struct {
             .select_t,
             .@"table.get",
             .@"table.set",
-            => {
-                // These instructions are handled separately
-                unreachable;
-            },
+            => {},
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
             .end => {
