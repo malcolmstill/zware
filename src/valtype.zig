@@ -20,26 +20,3 @@ pub const ValType = enum(u8) {
     FuncRef = 0x70,
     ExternRef = 0x6F,
 };
-
-pub fn valueTypeFromBlockType(block_type: i32) !ValType {
-    return switch (block_type) {
-        -0x01 => .I32,
-        -0x02 => .I64,
-        -0x03 => .F32,
-        -0x04 => .F64,
-        -0x10 => .FuncRef,
-        -0x11 => .ExternRef,
-        else => error.UnexpectedBlockType,
-    };
-}
-
-pub fn toValType(comptime t: type) ValType {
-    return switch (t) {
-        i32 => .I32,
-        i64 => .I64,
-        f32 => .F32,
-        f64 => .F64,
-        u32 => .I32,
-        else => @compileError("toValType: unsupported type: " ++ @typeName(t)),
-    };
-}
