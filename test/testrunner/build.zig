@@ -14,7 +14,7 @@ pub fn build(b: *Builder) void {
     const exe = b.addExecutable("testrunner", "src/testrunner.zig");
     exe.setTarget(target);
     exe.setBuildMode(mode);
-    exe.addPackagePath("zware", "../src/main.zig");
+    exe.addPackagePath("zware", "../../src/main.zig");
     exe.install();
 
     const run_cmd = exe.run();
