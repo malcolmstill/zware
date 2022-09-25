@@ -69,24 +69,22 @@ pub fn main() !void {
 
 ## Goals
 
-- To allow the author, gentle reader, to understand WebAssembly
 - Embed WebAssembly programs in other zig programs
 - Be fast enough to be useful
-- Implement some of the proposed extensions
 - Implement WASI
 
 ## Status
 
 - The project is very much alpha quality
-- The full WebAssembly MVP spec testsuite passes
-- Currently, only the MVP spec is implemented without any extensions other than multiple-return values.
+- WebAssembly 2.0 supported (apart from the vector / SIMD support which is WIP)
+- The WebAssembly official testsuite passes and zware includes a fuzzer
 
 ## Running the testsuite
 
 1. Build the test runner
 
 ```
-zig build --build-file test/build.zig --prefix ./
+zig build --build-file test/testrunner/build.zig --prefix ./
 ```
 
 2. Run
