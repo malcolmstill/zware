@@ -726,7 +726,8 @@ pub fn main() anyerror!void {
                             error.DatasCountMismatch => continue,
                             error.InvalidValue => continue,
                             error.MalformedSectionMismatchedSize => continue,
-                            error.ExpectedFunctionEnd => continue,
+                            error.ContinuationStackUnderflow => continue,
+                            error.CouldntFindEnd => continue,
                             else => {},
                         }
                     }

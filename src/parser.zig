@@ -70,7 +70,8 @@ pub const Parser = struct {
         self.continuation_stack[self.continuation_stack_ptr] = offset;
     }
 
-    fn peekContinuationStack(self: *Parser) usize {
+    fn peekContinuationStack(self: *Parser) !usize {
+        if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow; // No test covering this
         return self.continuation_stack[self.continuation_stack_ptr - 1];
     }
 
@@ -223,7 +224,7 @@ pub const Parser = struct {
                 };
             },
             .@"else" => {
-                const parsed_code_offset = self.peekContinuationStack();
+                const parsed_code_offset = try self.peekContinuationStack();
 
                 switch (self.parsed.items[parsed_code_offset]) {
                     .if_no_else => |*b| {
