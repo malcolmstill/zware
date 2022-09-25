@@ -872,15 +872,6 @@ pub const Module = struct {
         }
     }
 
-    fn readConstantExpression(self: *Module, valtype: ValType) !StartWithDepth {
-        const rd = self.buf.reader();
-
-        const expr_start = rd.context.pos;
-        const expr = self.module[expr_start..];
-
-        return self.parseConstantCode(expr, valtype);
-    }
-
     fn decodeDataCountSection(self: *Module, size: u32) !void {
         const rd = self.buf.reader();
 
@@ -909,12 +900,10 @@ pub const Module = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             // size: the number of bytes defining the function, includes bytes defining locals
-            const size = leb.readULEB128(u32, rd) catch |err| switch (err) {
+            _ = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
                 else => return err,
             };
-
-            const offset = rd.context.pos;
 
             const locals_definitions_count = leb.readULEB128(u32, rd) catch |err| switch (err) {
                 error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -943,20 +932,10 @@ pub const Module = struct {
             }
             if (locals_count >= 0x100000000) return error.TooManyLocals;
 
-            const code_start = rd.context.pos;
-            const code_length = try math.sub(usize, size, code_start - offset);
-
-            rd.skipBytes(code_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
             const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
-            const code = self.module[code_start..rd.context.pos];
-            if (code[code.len - 1] != @enumToInt(RrOpcode.end)) return error.ExpectedFunctionEnd;
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
-            const parsed_code = try self.parseFunction(locals, code, function_index_start + i);
+            const parsed_code = try self.parseFunction(locals, function_index_start + i);
 
             try self.codes.list.append(Code{
                 .locals_count = locals_count,
@@ -1110,8 +1089,10 @@ pub const Module = struct {
         max_depth: usize,
     };
 
-    pub fn parseConstantCode(self: *Module, code: []const u8, valtype: ValType) !StartWithDepth {
+    pub fn readConstantExpression(self: *Module, valtype: ValType) !StartWithDepth {
         const rd = self.buf.reader();
+        const code = self.module[rd.context.pos..];
+
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
@@ -1154,7 +1135,10 @@ pub const Module = struct {
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
-    pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, funcidx: usize) !StartWithDepth {
+    pub fn parseFunction(self: *Module, locals: []LocalType, funcidx: usize) !StartWithDepth {
+        const rd = self.buf.reader();
+        const code = self.module[rd.context.pos..];
+
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
@@ -1165,6 +1149,12 @@ pub const Module = struct {
         while (try it.next()) |instr| {
             try self.parsed_code.append(instr);
         }
+
+        const bytes_read = it.bytesRead();
+        rd.skipBytes(bytes_read, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
 
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
