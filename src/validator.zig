@@ -613,7 +613,6 @@ pub const Validator = struct {
     }
 
     fn popControlFrame(v: *Validator) !ControlFrame {
-        // TODO: control stack size check should maybe only be in debug builds
         if (v.ctrl_stack.items.len == 0) return error.ValidatorPopControlFrameControlStackEmpty;
         const frame = v.ctrl_stack.items[v.ctrl_stack.items.len - 1];
         try v.popOperands(frame.end_types);
@@ -631,7 +630,6 @@ pub const Validator = struct {
     }
 
     fn setUnreachable(v: *Validator) !void {
-        // TODO: control stack size check should maybe only be in debug builds
         if (v.ctrl_stack.items.len == 0) return error.ValidatorPopControlFrameControlStackEmpty;
         const frame = &v.ctrl_stack.items[v.ctrl_stack.items.len - 1];
         v.op_stack.shrinkRetainingCapacity(frame.height);
