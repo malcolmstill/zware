@@ -43,6 +43,17 @@ pub fn main() !void {
     var prng = std.rand.DefaultPrng.init(0x12345678);
     const random = prng.random();
 
+    const flips = [8]u8{
+        0b00000001,
+        0b00000010,
+        0b00000100,
+        0b00001000,
+        0b00010000,
+        0b00100000,
+        0b01000000,
+        0b10000000,
+    };
+
     while (true) {
         var arena = ArenaAllocator.init(gpa.allocator());
         defer _ = arena.deinit();
@@ -55,9 +66,13 @@ pub fn main() !void {
         std.log.info("loading {s}", .{wasm_file});
 
         // 2. Load file
-        const program = try dir.dir.readFileAlloc(alloc, wasm_file, 0xFFFFFFF);
+        var program = try dir.dir.readFileAlloc(alloc, wasm_file, 0xFFFFFFF);
+        if (program.len == 0) continue;
 
-        // 3. TODO: flip some bits
+        // 3. Flip a bit (maybe we should flip bits somewhat proportional to the file size)
+        const byte_to_change = random.uintLessThan(usize, program.len);
+        const bit_to_change = random.uintLessThan(u6, 8);
+        program[byte_to_change] = program[byte_to_change] ^ flips[bit_to_change];
 
         var store: Store = Store.init(alloc);
 
