@@ -487,31 +487,17 @@ pub const Module = struct {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
-        const offset = rd.context.pos;
 
-        var code: ?[]const u8 = null;
         var parsed_code: ?StartWithDepth = null;
 
         // If we're not importing the global we will expect
         // an expression
         if (import == null) {
-            // TODO: this isn't right because I think we might have more than one end
-            var j: usize = 0;
-            while (true) : (j += 1) {
-                const byte = rd.readByte() catch |err| switch (err) {
-                    error.EndOfStream => return error.UnexpectedEndOfInput,
-                    else => return err,
-                };
-
-                if (byte == @enumToInt(Opcode.end)) break;
-            }
-            code = self.module[offset .. offset + j + 1];
-
-            parsed_code = try self.parseConstantCode(code orelse return error.NoCode, global_type);
+            parsed_code = try self.readConstantExpression(global_type);
         }
 
-        if (code == null and import == null) return error.ExpectedOneOrTheOther;
-        if (code != null and import != null) return error.ExpectedOneOrTheOther;
+        if (parsed_code == null and import == null) return error.ExpectedOneOrTheOther;
+        if (parsed_code != null and import != null) return error.ExpectedOneOrTheOther;
 
         try self.globals.list.append(GlobalType{
             .valtype = global_type,
@@ -616,14 +602,7 @@ pub const Module = struct {
                     const tableidx = 0;
                     if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-                    const expr_start = rd.context.pos;
-                    const expr = self.module[expr_start..];
-                    const meta = try opcode.findExprEnd(expr);
-
-                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const parsed_offset_code = try self.readConstantExpression(.I32);
 
                     // Number of u32's in our data (not the length in bytes!)
                     const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
@@ -651,9 +630,6 @@ pub const Module = struct {
                         try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
-
-                    // offset code
-                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     // The parsed code defines the offset of the data
                     //
@@ -716,14 +692,7 @@ pub const Module = struct {
 
                     if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-                    const expr_start = rd.context.pos;
-                    const expr = self.module[expr_start..];
-                    const meta = try opcode.findExprEnd(expr);
-
-                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const parsed_offset_code = try self.readConstantExpression(.I32);
 
                     // read elemkind (only 0x00 == .FuncRef supported)
                     _ = rd.readByte() catch |err| switch (err) {
@@ -757,8 +726,6 @@ pub const Module = struct {
                         try self.parsed_code.append(Rr.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
-
-                    const parsed_offset_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     try self.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
@@ -859,17 +826,8 @@ pub const Module = struct {
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
-                        const expr_start = rd.context.pos;
-                        const expr = self.module[expr_start..];
-                        const meta = try opcode.findExprEnd(expr);
-
-                        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                            error.EndOfStream => return error.UnexpectedEndOfInput,
-                            else => return err,
-                        };
-
                         const init_offset = self.parsed_code.items.len;
-                        _ = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .FuncRef);
+                        _ = try self.readConstantExpression(.FuncRef);
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -921,14 +879,8 @@ pub const Module = struct {
 
         const expr_start = rd.context.pos;
         const expr = self.module[expr_start..];
-        const meta = try opcode.findExprEnd(expr);
 
-        rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        return self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], valtype);
+        return self.parseConstantCode(expr, valtype);
     }
 
     fn decodeDataCountSection(self: *Module, size: u32) !void {
@@ -1043,14 +995,7 @@ pub const Module = struct {
 
                     if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-                    const expr_start = rd.context.pos;
-                    const expr = self.module[expr_start..];
-                    const meta = try opcode.findExprEnd(expr);
-
-                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const parsed_code = try self.readConstantExpression(.I32);
 
                     const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -1062,8 +1007,6 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-
-                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     try self.datas.list.append(DataSegment{
                         .count = data_length,
@@ -1100,14 +1043,7 @@ pub const Module = struct {
 
                     if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-                    const expr_start = rd.context.pos;
-                    const expr = self.module[expr_start..];
-                    const meta = try opcode.findExprEnd(expr);
-
-                    rd.skipBytes(meta.offset + 1, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const parsed_code = try self.readConstantExpression(.I32);
 
                     const data_length = leb.readULEB128(u32, rd) catch |err| switch (err) {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
@@ -1119,8 +1055,6 @@ pub const Module = struct {
                         error.EndOfStream => return error.UnexpectedEndOfInput,
                         else => return err,
                     };
-
-                    const parsed_code = try self.parseConstantCode(self.module[expr_start .. expr_start + meta.offset + 1], .I32);
 
                     try self.datas.list.append(DataSegment{
                         .count = data_length,
@@ -1179,7 +1113,7 @@ pub const Module = struct {
     };
 
     pub fn parseConstantCode(self: *Module, code: []const u8, valtype: ValType) !StartWithDepth {
-        _ = try opcode.findFunctionEnd(code);
+        const rd = self.buf.reader();
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
@@ -1213,11 +1147,16 @@ pub const Module = struct {
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
+        const bytes_read = it.bytesRead();
+        rd.skipBytes(bytes_read, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
     pub fn parseFunction(self: *Module, locals: []LocalType, code: []const u8, funcidx: usize) !StartWithDepth {
-        _ = try opcode.findFunctionEnd(code);
         var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
         const code_start = self.parsed_code.items.len;
 
