@@ -2,7 +2,6 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
-const opcode = @import("opcode.zig");
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("store/function.zig").Function;

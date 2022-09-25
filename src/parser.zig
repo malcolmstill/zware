@@ -1,17 +1,16 @@
 const std = @import("std");
 const math = std.math;
 const leb = std.leb;
-const Module = @import("module.zig").Module;
-const Range = @import("rr.zig").Range;
-const Validator = @import("validator.zig").Validator;
-const LocalType = @import("module.zig").LocalType;
 const ArrayList = std.ArrayList;
+const Module = @import("module.zig").Module;
+const LocalType = @import("module.zig").LocalType;
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
-const RefType = @import("valtype.zig").RefType;
+const Validator = @import("validator.zig").Validator;
 const ValTypeUnknown = @import("validator.zig").ValTypeUnknown;
-const valueTypeFromBlockType = @import("valtype.zig").valueTypeFromBlockType;
 const ValType = @import("valtype.zig").ValType;
+const RefType = @import("valtype.zig").RefType;
+const Range = @import("rr.zig").Range;
 const Rr = @import("rr.zig").Rr;
 const MiscRr = @import("rr.zig").MiscRr;
 
@@ -1208,3 +1207,15 @@ const F64_OUT = [1]ValType{.F64} ** 1;
 const V128_OUT = [1]ValType{.V128} ** 1;
 const FUNCREF_OUT = [1]ValType{.FuncRef} ** 1;
 const EXTERNREF_OUT = [1]ValType{.ExternRef} ** 1;
+
+pub fn valueTypeFromBlockType(block_type: i32) !ValType {
+    return switch (block_type) {
+        -0x01 => .I32,
+        -0x02 => .I64,
+        -0x03 => .F32,
+        -0x04 => .F64,
+        -0x10 => .FuncRef,
+        -0x11 => .ExternRef,
+        else => error.UnexpectedBlockType,
+    };
+}
