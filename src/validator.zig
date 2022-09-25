@@ -136,37 +136,6 @@ pub const Validator = struct {
         }
     }
 
-    pub fn validateEnd(v: *Validator) !void {
-        const frame = try v.popControlFrame();
-        _ = try v.pushOperands(frame.end_types);
-    }
-
-    pub fn validateElse(v: *Validator) !void {
-        const frame = try v.popControlFrame();
-        if (frame.opcode != .@"if") return error.ElseMustOnlyOccurAfterIf;
-        try v.pushControlFrame(.@"else", frame.start_types, frame.end_types);
-    }
-
-    pub fn validateSelect(v: *Validator) !void {
-        _ = try v.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
-        const t1 = try v.popOperand();
-        const t2 = try v.popOperand();
-
-        if (!(isNum(t1) and isNum(t2))) return error.ExpectingBothNum;
-        if (!valueTypeEqual(t1, t2) and !valueTypeEqual(t1, ValTypeUnknown.Unknown) and !valueTypeEqual(t2, ValTypeUnknown.Unknown)) return error.ValidatorSelect;
-        if (valueTypeEqual(t1, ValTypeUnknown.Unknown)) {
-            try v.pushOperand(t2);
-        } else {
-            try v.pushOperand(t1);
-        }
-    }
-
-    pub fn validateReturn(v: *Validator) !void {
-        const frame = v.ctrl_stack.items[0];
-        try v.popOperands(labelTypes(frame));
-        try v.setUnreachable();
-    }
-
     pub fn validateMisc(v: *Validator, misc_type: MiscOpcode) !void {
         switch (misc_type) {
             .@"i32.trunc_sat_f32_s",
@@ -264,14 +233,40 @@ pub const Validator = struct {
             .@"table.set",
             => {
                 // These instructions are handled separately
+                unreachable;
             },
             .@"unreachable" => try v.setUnreachable(),
             .nop => {},
-            .end => try v.validateEnd(),
-            .@"else" => try v.validateElse(),
-            .@"return" => try v.validateReturn(),
-            .drop => _ = try v.popOperand(),
-            .select => try v.validateSelect(),
+            .end => {
+                const frame = try v.popControlFrame();
+                _ = try v.pushOperands(frame.end_types);
+            },
+            .@"else" => {
+                const frame = try v.popControlFrame();
+                if (frame.opcode != .@"if") return error.ElseMustOnlyOccurAfterIf;
+                try v.pushControlFrame(.@"else", frame.start_types, frame.end_types);
+            },
+            .@"return" => {
+                const frame = v.ctrl_stack.items[0];
+                try v.popOperands(labelTypes(frame));
+                try v.setUnreachable();
+            },
+            .drop => {
+                _ = try v.popOperand();
+            },
+            .select => {
+                _ = try v.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                const t1 = try v.popOperand();
+                const t2 = try v.popOperand();
+
+                if (!(isNum(t1) and isNum(t2))) return error.ExpectingBothNum;
+                if (!valueTypeEqual(t1, t2) and !valueTypeEqual(t1, ValTypeUnknown.Unknown) and !valueTypeEqual(t2, ValTypeUnknown.Unknown)) return error.ValidatorSelect;
+                if (valueTypeEqual(t1, ValTypeUnknown.Unknown)) {
+                    try v.pushOperand(t2);
+                } else {
+                    try v.pushOperand(t1);
+                }
+            },
             .@"memory.size" => {
                 _ = try v.pushOperand(ValTypeUnknown{ .Known = .I32 });
             },
