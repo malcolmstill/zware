@@ -96,11 +96,13 @@ pub const Parser = struct {
         const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         self.code = self.code[1..];
 
+        var rr: Rr = undefined;
+
         // 2. Find the start of the next instruction
-        const rr = switch (instr) {
-            .@"unreachable" => Rr.@"unreachable",
-            .nop => Rr.nop,
-            .block => rr: {
+        switch (instr) {
+            .@"unreachable" => rr = Rr.@"unreachable",
+            .nop => rr = Rr.nop,
+            .block => {
                 const block_type = try self.readILEB128Mem(i32);
 
                 var block_params: u16 = 0;
@@ -131,7 +133,7 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr);
                 self.scope += 1;
 
-                break :rr Rr{
+                rr = Rr{
                     .block = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
@@ -139,7 +141,7 @@ pub const Parser = struct {
                     },
                 };
             },
-            .loop => rr: {
+            .loop => {
                 const block_type = try self.readILEB128Mem(i32);
 
                 var block_params: u16 = 0;
@@ -169,7 +171,7 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr);
                 self.scope += 1;
 
-                break :rr Rr{
+                rr = Rr{
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
@@ -177,7 +179,7 @@ pub const Parser = struct {
                     },
                 };
             },
-            .@"if" => rr: {
+            .@"if" => {
                 const block_type = try self.readILEB128Mem(i32);
 
                 // 1. First assume the number of block params is 0
@@ -212,7 +214,7 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr);
                 self.scope += 1;
 
-                break :rr Rr{
+                rr = Rr{
                     .if_no_else = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
@@ -220,7 +222,7 @@ pub const Parser = struct {
                     },
                 };
             },
-            .@"else" => rr: {
+            .@"else" => {
                 const parsed_code_offset = self.peekContinuationStack();
 
                 switch (self.parsed.items[parsed_code_offset]) {
@@ -237,9 +239,9 @@ pub const Parser = struct {
                     else => return error.UnexpectedInstruction,
                 }
 
-                break :rr Rr.@"else";
+                rr = Rr.@"else";
             },
-            .end => rr: {
+            .end => {
                 self.scope -= 1;
                 // If we're not looking at the `end` of a function
                 if (self.scope != 0) {
@@ -261,19 +263,19 @@ pub const Parser = struct {
                     }
                 }
 
-                break :rr Rr.end;
+                rr = Rr.end;
             },
-            .br => rr: {
+            .br => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBr(label);
-                break :rr Rr{ .br = label };
+                rr = Rr{ .br = label };
             },
-            .br_if => rr: {
+            .br_if => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBrIf(label);
-                break :rr Rr{ .br_if = label };
+                rr = Rr{ .br_if = label };
             },
-            .br_table => rr: {
+            .br_table => {
                 const label_start = self.module.br_table_indices.items.len;
                 const label_count = try self.readULEB128Mem(u32);
 
@@ -287,26 +289,26 @@ pub const Parser = struct {
 
                 try self.validator.validateBrTable(l_star, ln);
 
-                break :rr Rr{
+                rr = Rr{
                     .br_table = .{
                         .ls = Range{ .offset = label_start, .count = label_count },
                         .ln = ln,
                     },
                 };
             },
-            .@"return" => Rr.@"return",
-            .call => rr: {
+            .@"return" => rr = Rr.@"return",
+            .call => {
                 const funcidx = try self.readULEB128Mem(u32);
                 const func = try self.module.functions.lookup(funcidx);
                 const functype = try self.module.types.lookup(func.typeidx);
 
                 try self.validator.validateCall(functype);
 
-                break :rr Rr{ .call = funcidx };
+                rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
-                // break :rr Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
+                // rr =  Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
-            .call_indirect => rr: {
+            .call_indirect => {
                 const typeidx = try self.readULEB128Mem(u32);
                 const functype = try self.module.types.lookup(typeidx);
 
@@ -315,16 +317,16 @@ pub const Parser = struct {
 
                 try self.validator.validateCallIndirect(functype);
 
-                break :rr Rr{
+                rr = Rr{
                     .call_indirect = .{
                         .typeidx = typeidx,
                         .tableidx = tableidx,
                     },
                 };
             },
-            .drop => Rr.drop,
-            .select => Rr.select,
-            .select_t => rr: {
+            .drop => rr = Rr.drop,
+            .select => rr = Rr.select,
+            .select_t => {
                 const type_count = try self.readULEB128Mem(u32);
                 if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
                 const valuetype_raw = try self.readULEB128Mem(i32);
@@ -332,25 +334,25 @@ pub const Parser = struct {
 
                 try self.validator.validateSelectT(valuetype);
 
-                break :rr Rr.select;
+                rr = Rr.select;
             },
-            .@"global.get" => rr: {
+            .@"global.get" => {
                 const globalidx = try self.readULEB128Mem(u32);
                 const global = try self.module.globals.lookup(globalidx);
 
                 try self.validator.validateGlobalGet(global);
 
-                break :rr Rr{ .@"global.get" = globalidx };
+                rr = Rr{ .@"global.get" = globalidx };
             },
-            .@"global.set" => rr: {
+            .@"global.set" => {
                 const globalidx = try self.readULEB128Mem(u32);
                 const global = try self.module.globals.lookup(globalidx);
 
                 try self.validator.validateGlobalSet(global);
 
-                break :rr Rr{ .@"global.set" = globalidx };
+                rr = Rr{ .@"global.set" = globalidx };
             },
-            .@"table.get" => rr: {
+            .@"table.get" => {
                 const tableidx = try self.readULEB128Mem(u32);
                 const table = try self.module.tables.lookup(tableidx);
 
@@ -362,9 +364,9 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
                 _ = try self.validator.pushOperand(ValTypeUnknown{ .Known = reftype });
 
-                break :rr Rr{ .@"table.get" = tableidx };
+                rr = Rr{ .@"table.get" = tableidx };
             },
-            .@"table.set" => rr: {
+            .@"table.set" => {
                 const tableidx = try self.readULEB128Mem(u32);
                 const table = try self.module.tables.lookup(tableidx);
 
@@ -376,9 +378,9 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
                 _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
 
-                break :rr Rr{ .@"table.set" = tableidx };
+                rr = Rr{ .@"table.set" = tableidx };
             },
-            .@"local.get" => rr: {
+            .@"local.get" => {
                 const localidx = try self.readULEB128Mem(u32);
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
@@ -404,9 +406,9 @@ pub const Parser = struct {
                     }
                 }
 
-                break :rr Rr{ .@"local.get" = localidx };
+                rr = Rr{ .@"local.get" = localidx };
             },
-            .@"local.set" => rr: {
+            .@"local.set" => {
                 const localidx = try self.readULEB128Mem(u32);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
@@ -433,9 +435,9 @@ pub const Parser = struct {
                     }
                 }
 
-                break :rr Rr{ .@"local.set" = localidx };
+                rr = Rr{ .@"local.set" = localidx };
             },
-            .@"local.tee" => rr: {
+            .@"local.tee" => {
                 const localidx = try self.readULEB128Mem(u32);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
@@ -462,39 +464,39 @@ pub const Parser = struct {
                     }
                 }
 
-                break :rr Rr{ .@"local.tee" = localidx };
+                rr = Rr{ .@"local.tee" = localidx };
             },
-            .@"memory.size" => rr: {
+            .@"memory.size" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                break :rr Rr{ .@"memory.size" = memidx };
+                rr = Rr{ .@"memory.size" = memidx };
             },
-            .@"memory.grow" => rr: {
+            .@"memory.grow" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                break :rr Rr{ .@"memory.grow" = memidx };
+                rr = Rr{ .@"memory.grow" = memidx };
             },
-            .@"i32.const" => rr: {
+            .@"i32.const" => {
                 const i32_const = try self.readILEB128Mem(i32);
-                break :rr Rr{ .@"i32.const" = i32_const };
+                rr = Rr{ .@"i32.const" = i32_const };
             },
-            .@"i64.const" => rr: {
+            .@"i64.const" => {
                 const i64_const = try self.readILEB128Mem(i64);
-                break :rr Rr{ .@"i64.const" = i64_const };
+                rr = Rr{ .@"i64.const" = i64_const };
             },
-            .@"f32.const" => rr: {
+            .@"f32.const" => {
                 const float_const = @bitCast(f32, try self.readU32());
-                break :rr Rr{ .@"f32.const" = float_const };
+                rr = Rr{ .@"f32.const" = float_const };
             },
-            .@"f64.const" => rr: {
+            .@"f64.const" => {
                 const float_const = @bitCast(f64, try self.readU64());
-                break :rr Rr{ .@"f64.const" = float_const };
+                rr = Rr{ .@"f64.const" = float_const };
             },
-            .@"i32.load" => rr: {
+            .@"i32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
                 const alignment = try self.readULEB128Mem(u32);
@@ -502,457 +504,457 @@ pub const Parser = struct {
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.load" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load" => rr: {
+            .@"i64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"f32.load" => rr: {
+            .@"f32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"f32.load" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"f64.load" => rr: {
+            .@"f64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"f64.load" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.load8_s" => rr: {
+            .@"i32.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.load8_s" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.load8_u" => rr: {
+            .@"i32.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.load8_u" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.load16_s" => rr: {
+            .@"i32.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.load16_s" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.load16_u" => rr: {
+            .@"i32.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.load16_u" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load8_s" => rr: {
+            .@"i64.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load8_s" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load8_u" => rr: {
+            .@"i64.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load8_u" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load16_s" => rr: {
+            .@"i64.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load16_s" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load16_u" => rr: {
+            .@"i64.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load16_u" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load32_s" => rr: {
+            .@"i64.load32_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load32_s" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.load32_u" => rr: {
+            .@"i64.load32_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.load32_u" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.store" => rr: {
+            .@"i32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.store" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.store" => rr: {
+            .@"i64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.store" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"f32.store" => rr: {
+            .@"f32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"f32.store" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"f64.store" => rr: {
+            .@"f64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"f64.store" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.store8" => rr: {
+            .@"i32.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.store8" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.store16" => rr: {
+            .@"i32.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i32.store16" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.store8" => rr: {
+            .@"i64.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.store8" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.store16" => rr: {
+            .@"i64.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.store16" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i64.store32" => rr: {
+            .@"i64.store32" => {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
                 if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
 
-                break :rr Rr{
+                rr = Rr{
                     .@"i64.store32" = .{
                         .alignment = alignment,
                         .offset = offset,
                     },
                 };
             },
-            .@"i32.eqz" => Rr.@"i32.eqz",
-            .@"i32.eq" => Rr.@"i32.eq",
-            .@"i32.ne" => Rr.@"i32.ne",
-            .@"i32.lt_s" => Rr.@"i32.lt_s",
-            .@"i32.lt_u" => Rr.@"i32.lt_u",
-            .@"i32.gt_s" => Rr.@"i32.gt_s",
-            .@"i32.gt_u" => Rr.@"i32.gt_u",
-            .@"i32.le_s" => Rr.@"i32.le_s",
-            .@"i32.le_u" => Rr.@"i32.le_u",
-            .@"i32.ge_s" => Rr.@"i32.ge_s",
-            .@"i32.ge_u" => Rr.@"i32.ge_u",
-            .@"i64.eqz" => Rr.@"i64.eqz",
-            .@"i64.eq" => Rr.@"i64.eq",
-            .@"i64.ne" => Rr.@"i64.ne",
-            .@"i64.lt_s" => Rr.@"i64.lt_s",
-            .@"i64.lt_u" => Rr.@"i64.lt_u",
-            .@"i64.gt_s" => Rr.@"i64.gt_s",
-            .@"i64.gt_u" => Rr.@"i64.gt_u",
-            .@"i64.le_s" => Rr.@"i64.le_s",
-            .@"i64.le_u" => Rr.@"i64.le_u",
-            .@"i64.ge_s" => Rr.@"i64.ge_s",
-            .@"i64.ge_u" => Rr.@"i64.ge_u",
-            .@"f32.eq" => Rr.@"f32.eq",
-            .@"f32.ne" => Rr.@"f32.ne",
-            .@"f32.lt" => Rr.@"f32.lt",
-            .@"f32.gt" => Rr.@"f32.gt",
-            .@"f32.le" => Rr.@"f32.le",
-            .@"f32.ge" => Rr.@"f32.ge",
-            .@"f64.eq" => Rr.@"f64.eq",
-            .@"f64.ne" => Rr.@"f64.ne",
-            .@"f64.lt" => Rr.@"f64.lt",
-            .@"f64.gt" => Rr.@"f64.gt",
-            .@"f64.le" => Rr.@"f64.le",
-            .@"f64.ge" => Rr.@"f64.ge",
-            .@"i32.clz" => Rr.@"i32.clz",
-            .@"i32.ctz" => Rr.@"i32.ctz",
-            .@"i32.popcnt" => Rr.@"i32.popcnt",
-            .@"i32.add" => Rr.@"i32.add",
-            .@"i32.sub" => Rr.@"i32.sub",
-            .@"i32.mul" => Rr.@"i32.mul",
-            .@"i32.div_s" => Rr.@"i32.div_s",
-            .@"i32.div_u" => Rr.@"i32.div_u",
-            .@"i32.rem_s" => Rr.@"i32.rem_s",
-            .@"i32.rem_u" => Rr.@"i32.rem_u",
-            .@"i32.and" => Rr.@"i32.and",
-            .@"i32.or" => Rr.@"i32.or",
-            .@"i32.xor" => Rr.@"i32.xor",
-            .@"i32.shl" => Rr.@"i32.shl",
-            .@"i32.shr_s" => Rr.@"i32.shr_s",
-            .@"i32.shr_u" => Rr.@"i32.shr_u",
-            .@"i32.rotl" => Rr.@"i32.rotl",
-            .@"i32.rotr" => Rr.@"i32.rotr",
-            .@"i64.clz" => Rr.@"i64.clz",
-            .@"i64.ctz" => Rr.@"i64.ctz",
-            .@"i64.popcnt" => Rr.@"i64.popcnt",
-            .@"i64.add" => Rr.@"i64.add",
-            .@"i64.sub" => Rr.@"i64.sub",
-            .@"i64.mul" => Rr.@"i64.mul",
-            .@"i64.div_s" => Rr.@"i64.div_s",
-            .@"i64.div_u" => Rr.@"i64.div_u",
-            .@"i64.rem_s" => Rr.@"i64.rem_s",
-            .@"i64.rem_u" => Rr.@"i64.rem_u",
-            .@"i64.and" => Rr.@"i64.and",
-            .@"i64.or" => Rr.@"i64.or",
-            .@"i64.xor" => Rr.@"i64.xor",
-            .@"i64.shl" => Rr.@"i64.shl",
-            .@"i64.shr_s" => Rr.@"i64.shr_s",
-            .@"i64.shr_u" => Rr.@"i64.shr_u",
-            .@"i64.rotl" => Rr.@"i64.rotl",
-            .@"i64.rotr" => Rr.@"i64.rotr",
-            .@"f32.abs" => Rr.@"f32.abs",
-            .@"f32.neg" => Rr.@"f32.neg",
-            .@"f32.ceil" => Rr.@"f32.ceil",
-            .@"f32.floor" => Rr.@"f32.floor",
-            .@"f32.trunc" => Rr.@"f32.trunc",
-            .@"f32.nearest" => Rr.@"f32.nearest",
-            .@"f32.sqrt" => Rr.@"f32.sqrt",
-            .@"f32.add" => Rr.@"f32.add",
-            .@"f32.sub" => Rr.@"f32.sub",
-            .@"f32.mul" => Rr.@"f32.mul",
-            .@"f32.div" => Rr.@"f32.div",
-            .@"f32.min" => Rr.@"f32.min",
-            .@"f32.max" => Rr.@"f32.max",
-            .@"f32.copysign" => Rr.@"f32.copysign",
-            .@"f64.abs" => Rr.@"f64.abs",
-            .@"f64.neg" => Rr.@"f64.neg",
-            .@"f64.ceil" => Rr.@"f64.ceil",
-            .@"f64.floor" => Rr.@"f64.floor",
-            .@"f64.trunc" => Rr.@"f64.trunc",
-            .@"f64.nearest" => Rr.@"f64.nearest",
-            .@"f64.sqrt" => Rr.@"f64.sqrt",
-            .@"f64.add" => Rr.@"f64.add",
-            .@"f64.sub" => Rr.@"f64.sub",
-            .@"f64.mul" => Rr.@"f64.mul",
-            .@"f64.div" => Rr.@"f64.div",
-            .@"f64.min" => Rr.@"f64.min",
-            .@"f64.max" => Rr.@"f64.max",
-            .@"f64.copysign" => Rr.@"f64.copysign",
-            .@"i32.wrap_i64" => Rr.@"i32.wrap_i64",
-            .@"i32.trunc_f32_s" => Rr.@"i32.trunc_f32_s",
-            .@"i32.trunc_f32_u" => Rr.@"i32.trunc_f32_u",
-            .@"i32.trunc_f64_s" => Rr.@"i32.trunc_f64_s",
-            .@"i32.trunc_f64_u" => Rr.@"i32.trunc_f64_u",
-            .@"i64.extend_i32_s" => Rr.@"i64.extend_i32_s",
-            .@"i64.extend_i32_u" => Rr.@"i64.extend_i32_u",
-            .@"i64.trunc_f32_s" => Rr.@"i64.trunc_f32_s",
-            .@"i64.trunc_f32_u" => Rr.@"i64.trunc_f32_u",
-            .@"i64.trunc_f64_s" => Rr.@"i64.trunc_f64_s",
-            .@"i64.trunc_f64_u" => Rr.@"i64.trunc_f64_u",
-            .@"f32.convert_i32_s" => Rr.@"f32.convert_i32_s",
-            .@"f32.convert_i32_u" => Rr.@"f32.convert_i32_u",
-            .@"f32.convert_i64_s" => Rr.@"f32.convert_i64_s",
-            .@"f32.convert_i64_u" => Rr.@"f32.convert_i64_u",
-            .@"f32.demote_f64" => Rr.@"f32.demote_f64",
-            .@"f64.convert_i32_s" => Rr.@"f64.convert_i32_s",
-            .@"f64.convert_i32_u" => Rr.@"f64.convert_i32_u",
-            .@"f64.convert_i64_s" => Rr.@"f64.convert_i64_s",
-            .@"f64.convert_i64_u" => Rr.@"f64.convert_i64_u",
-            .@"f64.promote_f32" => Rr.@"f64.promote_f32",
-            .@"i32.reinterpret_f32" => Rr.@"i32.reinterpret_f32",
-            .@"i64.reinterpret_f64" => Rr.@"i64.reinterpret_f64",
-            .@"f32.reinterpret_i32" => Rr.@"f32.reinterpret_i32",
-            .@"f64.reinterpret_i64" => Rr.@"f64.reinterpret_i64",
-            .@"i32.extend8_s" => Rr.@"i32.extend8_s",
-            .@"i32.extend16_s" => Rr.@"i32.extend16_s",
-            .@"i64.extend8_s" => Rr.@"i64.extend8_s",
-            .@"i64.extend16_s" => Rr.@"i64.extend16_s",
-            .@"i64.extend32_s" => Rr.@"i64.extend32_s",
-            .@"ref.null" => rr: {
+            .@"i32.eqz" => rr = Rr.@"i32.eqz",
+            .@"i32.eq" => rr = Rr.@"i32.eq",
+            .@"i32.ne" => rr = Rr.@"i32.ne",
+            .@"i32.lt_s" => rr = Rr.@"i32.lt_s",
+            .@"i32.lt_u" => rr = Rr.@"i32.lt_u",
+            .@"i32.gt_s" => rr = Rr.@"i32.gt_s",
+            .@"i32.gt_u" => rr = Rr.@"i32.gt_u",
+            .@"i32.le_s" => rr = Rr.@"i32.le_s",
+            .@"i32.le_u" => rr = Rr.@"i32.le_u",
+            .@"i32.ge_s" => rr = Rr.@"i32.ge_s",
+            .@"i32.ge_u" => rr = Rr.@"i32.ge_u",
+            .@"i64.eqz" => rr = Rr.@"i64.eqz",
+            .@"i64.eq" => rr = Rr.@"i64.eq",
+            .@"i64.ne" => rr = Rr.@"i64.ne",
+            .@"i64.lt_s" => rr = Rr.@"i64.lt_s",
+            .@"i64.lt_u" => rr = Rr.@"i64.lt_u",
+            .@"i64.gt_s" => rr = Rr.@"i64.gt_s",
+            .@"i64.gt_u" => rr = Rr.@"i64.gt_u",
+            .@"i64.le_s" => rr = Rr.@"i64.le_s",
+            .@"i64.le_u" => rr = Rr.@"i64.le_u",
+            .@"i64.ge_s" => rr = Rr.@"i64.ge_s",
+            .@"i64.ge_u" => rr = Rr.@"i64.ge_u",
+            .@"f32.eq" => rr = Rr.@"f32.eq",
+            .@"f32.ne" => rr = Rr.@"f32.ne",
+            .@"f32.lt" => rr = Rr.@"f32.lt",
+            .@"f32.gt" => rr = Rr.@"f32.gt",
+            .@"f32.le" => rr = Rr.@"f32.le",
+            .@"f32.ge" => rr = Rr.@"f32.ge",
+            .@"f64.eq" => rr = Rr.@"f64.eq",
+            .@"f64.ne" => rr = Rr.@"f64.ne",
+            .@"f64.lt" => rr = Rr.@"f64.lt",
+            .@"f64.gt" => rr = Rr.@"f64.gt",
+            .@"f64.le" => rr = Rr.@"f64.le",
+            .@"f64.ge" => rr = Rr.@"f64.ge",
+            .@"i32.clz" => rr = Rr.@"i32.clz",
+            .@"i32.ctz" => rr = Rr.@"i32.ctz",
+            .@"i32.popcnt" => rr = Rr.@"i32.popcnt",
+            .@"i32.add" => rr = Rr.@"i32.add",
+            .@"i32.sub" => rr = Rr.@"i32.sub",
+            .@"i32.mul" => rr = Rr.@"i32.mul",
+            .@"i32.div_s" => rr = Rr.@"i32.div_s",
+            .@"i32.div_u" => rr = Rr.@"i32.div_u",
+            .@"i32.rem_s" => rr = Rr.@"i32.rem_s",
+            .@"i32.rem_u" => rr = Rr.@"i32.rem_u",
+            .@"i32.and" => rr = Rr.@"i32.and",
+            .@"i32.or" => rr = Rr.@"i32.or",
+            .@"i32.xor" => rr = Rr.@"i32.xor",
+            .@"i32.shl" => rr = Rr.@"i32.shl",
+            .@"i32.shr_s" => rr = Rr.@"i32.shr_s",
+            .@"i32.shr_u" => rr = Rr.@"i32.shr_u",
+            .@"i32.rotl" => rr = Rr.@"i32.rotl",
+            .@"i32.rotr" => rr = Rr.@"i32.rotr",
+            .@"i64.clz" => rr = Rr.@"i64.clz",
+            .@"i64.ctz" => rr = Rr.@"i64.ctz",
+            .@"i64.popcnt" => rr = Rr.@"i64.popcnt",
+            .@"i64.add" => rr = Rr.@"i64.add",
+            .@"i64.sub" => rr = Rr.@"i64.sub",
+            .@"i64.mul" => rr = Rr.@"i64.mul",
+            .@"i64.div_s" => rr = Rr.@"i64.div_s",
+            .@"i64.div_u" => rr = Rr.@"i64.div_u",
+            .@"i64.rem_s" => rr = Rr.@"i64.rem_s",
+            .@"i64.rem_u" => rr = Rr.@"i64.rem_u",
+            .@"i64.and" => rr = Rr.@"i64.and",
+            .@"i64.or" => rr = Rr.@"i64.or",
+            .@"i64.xor" => rr = Rr.@"i64.xor",
+            .@"i64.shl" => rr = Rr.@"i64.shl",
+            .@"i64.shr_s" => rr = Rr.@"i64.shr_s",
+            .@"i64.shr_u" => rr = Rr.@"i64.shr_u",
+            .@"i64.rotl" => rr = Rr.@"i64.rotl",
+            .@"i64.rotr" => rr = Rr.@"i64.rotr",
+            .@"f32.abs" => rr = Rr.@"f32.abs",
+            .@"f32.neg" => rr = Rr.@"f32.neg",
+            .@"f32.ceil" => rr = Rr.@"f32.ceil",
+            .@"f32.floor" => rr = Rr.@"f32.floor",
+            .@"f32.trunc" => rr = Rr.@"f32.trunc",
+            .@"f32.nearest" => rr = Rr.@"f32.nearest",
+            .@"f32.sqrt" => rr = Rr.@"f32.sqrt",
+            .@"f32.add" => rr = Rr.@"f32.add",
+            .@"f32.sub" => rr = Rr.@"f32.sub",
+            .@"f32.mul" => rr = Rr.@"f32.mul",
+            .@"f32.div" => rr = Rr.@"f32.div",
+            .@"f32.min" => rr = Rr.@"f32.min",
+            .@"f32.max" => rr = Rr.@"f32.max",
+            .@"f32.copysign" => rr = Rr.@"f32.copysign",
+            .@"f64.abs" => rr = Rr.@"f64.abs",
+            .@"f64.neg" => rr = Rr.@"f64.neg",
+            .@"f64.ceil" => rr = Rr.@"f64.ceil",
+            .@"f64.floor" => rr = Rr.@"f64.floor",
+            .@"f64.trunc" => rr = Rr.@"f64.trunc",
+            .@"f64.nearest" => rr = Rr.@"f64.nearest",
+            .@"f64.sqrt" => rr = Rr.@"f64.sqrt",
+            .@"f64.add" => rr = Rr.@"f64.add",
+            .@"f64.sub" => rr = Rr.@"f64.sub",
+            .@"f64.mul" => rr = Rr.@"f64.mul",
+            .@"f64.div" => rr = Rr.@"f64.div",
+            .@"f64.min" => rr = Rr.@"f64.min",
+            .@"f64.max" => rr = Rr.@"f64.max",
+            .@"f64.copysign" => rr = Rr.@"f64.copysign",
+            .@"i32.wrap_i64" => rr = Rr.@"i32.wrap_i64",
+            .@"i32.trunc_f32_s" => rr = Rr.@"i32.trunc_f32_s",
+            .@"i32.trunc_f32_u" => rr = Rr.@"i32.trunc_f32_u",
+            .@"i32.trunc_f64_s" => rr = Rr.@"i32.trunc_f64_s",
+            .@"i32.trunc_f64_u" => rr = Rr.@"i32.trunc_f64_u",
+            .@"i64.extend_i32_s" => rr = Rr.@"i64.extend_i32_s",
+            .@"i64.extend_i32_u" => rr = Rr.@"i64.extend_i32_u",
+            .@"i64.trunc_f32_s" => rr = Rr.@"i64.trunc_f32_s",
+            .@"i64.trunc_f32_u" => rr = Rr.@"i64.trunc_f32_u",
+            .@"i64.trunc_f64_s" => rr = Rr.@"i64.trunc_f64_s",
+            .@"i64.trunc_f64_u" => rr = Rr.@"i64.trunc_f64_u",
+            .@"f32.convert_i32_s" => rr = Rr.@"f32.convert_i32_s",
+            .@"f32.convert_i32_u" => rr = Rr.@"f32.convert_i32_u",
+            .@"f32.convert_i64_s" => rr = Rr.@"f32.convert_i64_s",
+            .@"f32.convert_i64_u" => rr = Rr.@"f32.convert_i64_u",
+            .@"f32.demote_f64" => rr = Rr.@"f32.demote_f64",
+            .@"f64.convert_i32_s" => rr = Rr.@"f64.convert_i32_s",
+            .@"f64.convert_i32_u" => rr = Rr.@"f64.convert_i32_u",
+            .@"f64.convert_i64_s" => rr = Rr.@"f64.convert_i64_s",
+            .@"f64.convert_i64_u" => rr = Rr.@"f64.convert_i64_u",
+            .@"f64.promote_f32" => rr = Rr.@"f64.promote_f32",
+            .@"i32.reinterpret_f32" => rr = Rr.@"i32.reinterpret_f32",
+            .@"i64.reinterpret_f64" => rr = Rr.@"i64.reinterpret_f64",
+            .@"f32.reinterpret_i32" => rr = Rr.@"f32.reinterpret_i32",
+            .@"f64.reinterpret_i64" => rr = Rr.@"f64.reinterpret_i64",
+            .@"i32.extend8_s" => rr = Rr.@"i32.extend8_s",
+            .@"i32.extend16_s" => rr = Rr.@"i32.extend16_s",
+            .@"i64.extend8_s" => rr = Rr.@"i64.extend8_s",
+            .@"i64.extend16_s" => rr = Rr.@"i64.extend16_s",
+            .@"i64.extend32_s" => rr = Rr.@"i64.extend32_s",
+            .@"ref.null" => {
                 const rtype = try self.readULEB128Mem(i32);
                 const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
 
                 try self.validator.validateRefNull(reftype);
-                break :rr Rr{ .@"ref.null" = reftype };
+                rr = Rr{ .@"ref.null" = reftype };
             },
-            .@"ref.is_null" => Rr.@"ref.is_null",
-            .@"ref.func" => rr: {
+            .@"ref.is_null" => rr = Rr.@"ref.is_null",
+            .@"ref.func" => {
                 const funcidx = try self.readULEB128Mem(u32);
                 if (funcidx >= self.module.functions.list.items.len) return error.ValidatorInvalidFunction;
 
@@ -971,22 +973,22 @@ pub const Parser = struct {
                     if (!in_references) return error.ValidatorUnreferencedFunction;
                 }
 
-                break :rr Rr{ .@"ref.func" = funcidx };
+                rr = Rr{ .@"ref.func" = funcidx };
             },
-            .misc => rr: {
+            .misc => {
                 const version = try self.readULEB128Mem(u32);
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
 
                 switch (misc_opcode) {
-                    .@"i32.trunc_sat_f32_s" => break :rr Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_s" },
-                    .@"i32.trunc_sat_f32_u" => break :rr Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_u" },
-                    .@"i32.trunc_sat_f64_s" => break :rr Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_s" },
-                    .@"i32.trunc_sat_f64_u" => break :rr Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_u" },
-                    .@"i64.trunc_sat_f32_s" => break :rr Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_s" },
-                    .@"i64.trunc_sat_f32_u" => break :rr Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_u" },
-                    .@"i64.trunc_sat_f64_s" => break :rr Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_s" },
-                    .@"i64.trunc_sat_f64_u" => break :rr Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_u" },
+                    .@"i32.trunc_sat_f32_s" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_s" },
+                    .@"i32.trunc_sat_f32_u" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_u" },
+                    .@"i32.trunc_sat_f64_s" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_s" },
+                    .@"i32.trunc_sat_f64_u" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_u" },
+                    .@"i64.trunc_sat_f32_s" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_s" },
+                    .@"i64.trunc_sat_f32_u" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_u" },
+                    .@"i64.trunc_sat_f64_s" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_s" },
+                    .@"i64.trunc_sat_f64_u" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_u" },
                     .@"memory.init" => {
                         const dataidx = try self.readULEB128Mem(u32);
                         const memidx = try self.readByte();
@@ -995,7 +997,7 @@ pub const Parser = struct {
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                        break :rr Rr{
+                        rr = Rr{
                             .misc = MiscRr{
                                 .@"memory.init" = .{
                                     .dataidx = dataidx,
@@ -1010,7 +1012,7 @@ pub const Parser = struct {
                         const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };
+                        rr = Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };
                     },
                     .@"memory.copy" => {
                         const src_memidx = try self.readByte();
@@ -1018,7 +1020,7 @@ pub const Parser = struct {
                         const dest_memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"memory.copy" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"memory.copy" = .{
                             .src_memidx = src_memidx,
                             .dest_memidx = dest_memidx,
                         } } };
@@ -1027,7 +1029,7 @@ pub const Parser = struct {
                         const memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
+                        rr = Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
                         const elemidx = try self.readULEB128Mem(u32);
@@ -1038,7 +1040,7 @@ pub const Parser = struct {
 
                         if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"table.init" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"table.init" = .{
                             .elemidx = elemidx,
                             .tableidx = tableidx,
                         } } };
@@ -1048,7 +1050,7 @@ pub const Parser = struct {
 
                         if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
+                        rr = Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
                         const dest_tableidx = try self.readULEB128Mem(u32);
@@ -1059,7 +1061,7 @@ pub const Parser = struct {
 
                         if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"table.copy" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"table.copy" = .{
                             .dest_tableidx = dest_tableidx,
                             .src_tableidx = src_tableidx,
                         } } };
@@ -1078,7 +1080,7 @@ pub const Parser = struct {
 
                         try self.validator.pushOperand(ValTypeUnknown{ .Known = .I32 });
 
-                        break :rr Rr{ .misc = MiscRr{ .@"table.grow" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
                             .tableidx = tableidx,
                         } } };
                     },
@@ -1086,7 +1088,7 @@ pub const Parser = struct {
                         const tableidx = try self.readULEB128Mem(u32);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
-                        break :rr Rr{ .misc = MiscRr{ .@"table.size" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"table.size" = .{
                             .tableidx = tableidx,
                         } } };
                     },
@@ -1103,13 +1105,13 @@ pub const Parser = struct {
                         _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
                         _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
 
-                        break :rr Rr{ .misc = MiscRr{ .@"table.fill" = .{
+                        rr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
                             .tableidx = tableidx,
                         } } };
                     },
                 }
             },
-        };
+        }
 
         try self.validator.validate(instr);
         return rr;
