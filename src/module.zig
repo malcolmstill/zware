@@ -672,7 +672,7 @@ pub const Module = struct {
             const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
 
             if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
-            const parsed_code = try self.parseFunction(locals, function_index_start + i);
+            const parsed_code = try self.readFunction(locals, function_index_start + i);
 
             try self.codes.list.append(Code{
                 .locals_count = locals_count,
@@ -816,7 +816,7 @@ pub const Module = struct {
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
 
-    pub fn parseFunction(self: *Module, locals: []LocalType, funcidx: usize) !StartWithDepth {
+    pub fn readFunction(self: *Module, locals: []LocalType, funcidx: usize) !StartWithDepth {
         const rd = self.buf.reader();
         const code = self.module[rd.context.pos..];
 
