@@ -640,7 +640,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed reference type")) {
                         switch (err) {
-                            error.MalformedRefType => continue,
+                            error.InvalidValue => continue,
                             else => {},
                         }
                     }

@@ -618,10 +618,7 @@ pub const Module = struct {
                     });
                 },
                 5 => { // Passive
-                    const rtype = try self.readULEB128(u32);
-
-                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
-
+                    const reftype = try self.readEnum(RefType);
                     const expr_count = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
@@ -641,10 +638,7 @@ pub const Module = struct {
                     });
                 },
                 7 => { // Declarative
-                    const rtype = try self.readULEB128(u32);
-
-                    const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
-
+                    const reftype = try self.readEnum(RefType);
                     const expr_count = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
