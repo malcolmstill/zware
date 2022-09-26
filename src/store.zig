@@ -67,7 +67,7 @@ pub const ArrayListStore = struct {
 
             return importexport.handle;
         }
-        std.log.warn("Import not found: {s}.{s}\n", .{ module, name });
+
         return error.ImportNotFound;
     }
 

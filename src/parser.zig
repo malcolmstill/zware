@@ -503,7 +503,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.load" = .{
@@ -517,7 +517,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load" = .{
@@ -531,7 +531,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"f32.load" = .{
@@ -545,7 +545,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"f64.load" = .{
@@ -559,7 +559,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.load8_s" = .{
@@ -573,7 +573,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.load8_u" = .{
@@ -587,7 +587,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.load16_s" = .{
@@ -601,7 +601,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.load16_u" = .{
@@ -615,7 +615,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load8_s" = .{
@@ -629,7 +629,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load8_u" = .{
@@ -643,7 +643,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load16_s" = .{
@@ -657,7 +657,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load16_u" = .{
@@ -671,7 +671,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load32_s" = .{
@@ -685,7 +685,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.load32_u" = .{
@@ -699,7 +699,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.store" = .{
@@ -713,7 +713,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.store" = .{
@@ -727,7 +727,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"f32.store" = .{
@@ -741,7 +741,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 64) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"f64.store" = .{
@@ -755,7 +755,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.store8" = .{
@@ -769,7 +769,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i32.store16" = .{
@@ -783,7 +783,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 8) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.store8" = .{
@@ -797,7 +797,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 16) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.store16" = .{
@@ -810,7 +810,7 @@ pub const Parser = struct {
                 const alignment = try self.readULEB128Mem(u32);
                 const offset = try self.readULEB128Mem(u32);
 
-                if (8 * try std.math.powi(u32, 2, alignment) > 32) return error.InvalidAlignment;
+                if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
                 rr = Rr{
                     .@"i64.store32" = .{
