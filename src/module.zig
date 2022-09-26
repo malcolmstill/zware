@@ -86,9 +86,12 @@ pub const Module = struct {
                 error.WasmFileEnd => break,
                 else => return err,
             };
+            try self.verify();
         }
+
         try self.verify();
         if (self.codes.list.items.len != nonImportCount(self.functions.list.items)) return error.FunctionCodeSectionsInconsistent;
+
         self.decoded = true;
     }
 
