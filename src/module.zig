@@ -160,11 +160,7 @@ pub const Module = struct {
 
         var f: usize = 0;
         while (f < count) : (f += 1) {
-            const tag: u8 = rd.readByte() catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
+            const tag = try self.readByte();
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
             const param_count = try self.readULEB128(u32);
@@ -208,35 +204,19 @@ pub const Module = struct {
     }
 
     fn decodeImportSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         const count = try self.readULEB128(u32);
         self.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const module_name_length = try self.readULEB128(u32);
+            const module_name = try self.readSlice(module_name_length);
 
-            const module_name_start = rd.context.pos;
-
-            rd.skipBytes(module_name_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
-            const module_name = self.module[module_name_start .. module_name_start + module_name_length];
             if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
 
             const name_length = try self.readULEB128(u32);
+            const name = try self.readSlice(name_length);
 
-            const name_start = rd.context.pos;
-
-            rd.skipBytes(name_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
-            const name = self.module[name_start .. name_start + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
             const tag = try self.readEnum(Tag);
@@ -409,23 +389,14 @@ pub const Module = struct {
     }
 
     fn decodeExportSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         const count = try self.readULEB128(u32);
         self.exports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
             const name_length = try self.readULEB128(u32);
+            const name = try self.readSlice(name_length);
 
-            const name_start = rd.context.pos;
-
-            rd.skipBytes(name_length, .{}) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
-            const name = self.module[name_start .. name_start + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
             for (self.exports.list.items) |exprt| {
@@ -459,14 +430,13 @@ pub const Module = struct {
 
         const func = try self.functions.lookup(funcidx);
         const functype = try self.types.lookup(func.typeidx);
+
         if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
         self.start = funcidx;
     }
 
     fn decodeElementSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         const count = try self.readULEB128(u32);
         self.elements.count = count;
 
@@ -516,10 +486,7 @@ pub const Module = struct {
                 },
                 1 => {
                     // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = rd.readByte() catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    _ = try self.readByte();
 
                     // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
@@ -557,10 +524,7 @@ pub const Module = struct {
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
                     // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = rd.readByte() catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    _ = try self.readByte();
 
                     // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
@@ -595,10 +559,7 @@ pub const Module = struct {
                 },
                 3 => {
                     // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = rd.readByte() catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    _ = try self.readByte();
 
                     // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
@@ -757,8 +718,6 @@ pub const Module = struct {
     }
 
     fn decodeDataSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         const count = try self.readULEB128(u32);
 
         if (self.dataCount) |dataCount| {
@@ -780,16 +739,11 @@ pub const Module = struct {
                     const parsed_code = try self.readConstantExpression(.I32);
 
                     const data_length = try self.readULEB128(u32);
-
-                    const data_start = rd.context.pos;
-                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const data = try self.readSlice(data_length);
 
                     try self.datas.list.append(DataSegment{
                         .count = data_length,
-                        .data = self.module[data_start..rd.context.pos],
+                        .data = data,
                         .mode = DataSegmentMode{ .Active = .{
                             .memidx = 0,
                             .offset = parsed_code.start,
@@ -798,16 +752,11 @@ pub const Module = struct {
                 },
                 1 => {
                     const data_length = try self.readULEB128(u32);
-
-                    const data_start = rd.context.pos;
-                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const data = try self.readSlice(data_length);
 
                     try self.datas.list.append(DataSegment{
                         .count = data_length,
-                        .data = self.module[data_start..rd.context.pos],
+                        .data = data,
                         .mode = .Passive,
                     });
                 },
@@ -819,16 +768,11 @@ pub const Module = struct {
                     const parsed_code = try self.readConstantExpression(.I32);
 
                     const data_length = try self.readULEB128(u32);
-
-                    const data_start = rd.context.pos;
-                    rd.skipBytes(data_length, .{}) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    const data = try self.readSlice(data_length);
 
                     try self.datas.list.append(DataSegment{
                         .count = data_length,
-                        .data = self.module[data_start..rd.context.pos],
+                        .data = data,
                         .mode = DataSegmentMode{ .Active = .{
                             .memidx = 0,
                             .offset = parsed_code.start,
@@ -847,25 +791,12 @@ pub const Module = struct {
         const offset = rd.context.pos;
 
         const name_length = try self.readULEB128(u32);
-
-        const name_start = rd.context.pos;
-        rd.skipBytes(name_length, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        const name = self.module[name_start .. name_start + name_length];
+        const name = try self.readSlice(name_length);
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-        const data_start = rd.context.pos;
-        const data_size = try math.sub(usize, size, (rd.context.pos - offset));
-        rd.skipBytes(data_size, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        const data = self.module[data_start .. data_start + data_size];
+        const data_length = try math.sub(usize, size, (rd.context.pos - offset));
+        const data = try self.readSlice(data_length);
 
         try self.customs.list.append(Custom{
             .name = name,
@@ -916,10 +847,7 @@ pub const Module = struct {
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
 
         const bytes_read = it.bytesRead();
-        rd.skipBytes(bytes_read, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        _ = try self.readSlice(bytes_read);
 
         return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
     }
@@ -940,10 +868,7 @@ pub const Module = struct {
         }
 
         const bytes_read = it.bytesRead();
-        rd.skipBytes(bytes_read, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        _ = try self.readSlice(bytes_read);
 
         // Patch last end so that it is return
         self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
@@ -957,6 +882,15 @@ pub const Module = struct {
         }
 
         return error.ExportNotFound;
+    }
+
+    fn readByte(self: *Module) !u8 {
+        const rd = self.buf.reader();
+
+        return rd.readByte() catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
     }
 
     fn readEnum(self: *Module, comptime T: type) !T {
@@ -979,23 +913,23 @@ pub const Module = struct {
         };
     }
 
+    fn readSlice(self: *Module, count: usize) ![]const u8 {
+        const rd = self.buf.reader();
+        const s = rd.context.pos;
+
+        _ = rd.skipBytes(count, .{}) catch |err| switch (err) {
+            error.EndOfStream => return error.UnexpectedEndOfInput,
+            else => return err,
+        };
+
+        const e = rd.context.pos;
+
+        return self.module[s..e];
+    }
+
     fn pos(self: *Module) usize {
         return self.buf.reader().context.pos;
     }
-
-    // pub fn readSlice(self: *Module, count: usize) ![]u8 {
-    //     const rd = self.buf.reader();
-    //     _ = rd.context.pos;
-
-    //     _ = rd.skipBytes(count, .{}) catch |err| switch (err) {
-    //         error.EndOfStream => return error.UnexpectedEndOfInput,
-    //         else => return err,
-    //     };
-
-    //     _ = rd.context.pos;
-
-    //     return self.module[0..1];
-    // }
 
     pub fn print(module: *Module) void {
         std.debug.print("    Types: {}\n", .{module.types.list.items.len});
