@@ -77,6 +77,7 @@ pub const Module = struct {
 
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
+        // See https://github.com/malcolmstill/zware/pull/133
         try self.parsed_code.append(.@"return");
 
         var i: usize = 0;
