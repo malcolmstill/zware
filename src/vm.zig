@@ -2478,17 +2478,11 @@ pub const VirtualMachine = struct {
         const label = self.peekNthLabel(target);
         const n = label.return_arity;
 
-        // var dest = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
-        // const src = self.op_stack[self.op_stack.len - n ..];
-
         var i: usize = 0;
         while (i < n) : (i += 1) {
             self.op_stack[label.op_stack_len + i] = self.op_stack[self.op_ptr - n + i];
         }
 
-        // mem.copy(u64, dest, src);
-
-        // self.op_stack = self.op_stack[0 .. label.op_stack_len + n];
         self.op_ptr = label.op_stack_len + n;
         _ = self.popLabels(target);
 
@@ -2505,7 +2499,7 @@ pub const VirtualMachine = struct {
             i64 => @bitCast(u64, value),
             f32 => @as(u64, @bitCast(u32, value)),
             f64 => @bitCast(u64, value),
-            u32 => @as(u64, value), // TODO: figure out types
+            u32 => @as(u64, value),
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
@@ -2523,7 +2517,7 @@ pub const VirtualMachine = struct {
             i64 => @bitCast(u64, value),
             f32 => @as(u64, @bitCast(u32, value)),
             f64 => @bitCast(u64, value),
-            u32 => @as(u64, value), // TODO: figure out types
+            u32 => @as(u64, value),
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
@@ -2567,7 +2561,8 @@ pub const VirtualMachine = struct {
 
         const current_frame = &self.frame_stack[self.frame_ptr - 1];
         current_frame.* = frame;
-        // TODO: index out of bounds (error if we've run out of operand stack space):
+
+        try self.checkStackSpace(params_and_locals_count);
         current_frame.locals = self.op_stack[frame.op_stack_len .. frame.op_stack_len + params_and_locals_count];
     }
 
@@ -2614,29 +2609,6 @@ pub const VirtualMachine = struct {
 
         return self.label_stack[self.label_stack.len - target - 1];
     }
-
-    fn debug(self: *VirtualMachine, opcode: Rr) void {
-        // std.debug.print("{}\n", .{opcode});
-        std.debug.print("\n=====================================================\n", .{});
-        std.debug.print("before: {}\n", .{opcode});
-        var i: usize = 0;
-        while (i < self.op_ptr) : (i += 1) {
-            std.debug.print("stack[{}] = {}\n", .{ i, self.op_stack[i] });
-        }
-        std.debug.print("\n", .{});
-
-        i = 0;
-        while (i < self.label_ptr) : (i += 1) {
-            std.debug.print("label_stack[{}] = [ret_ari: {}, ops_start: {}, break: {x}]\n", .{ i, self.label_stack[i].return_arity, self.label_stack[i].op_stack_len, self.label_stack[i].branch_target });
-        }
-        std.debug.print("\n", .{});
-
-        i = 0;
-        while (i < self.frame_ptr) : (i += 1) {
-            std.debug.print("frame_stack[{}] = [ret_ari: {}, ops_start: {}, label_start: {}]\n", .{ i, self.frame_stack[i].return_arity, self.frame_stack[i].op_stack_len, self.frame_stack[i].label_stack_len });
-        }
-        std.debug.print("=====================================================\n", .{});
-    }
 };
 
 pub const WasmError = error{
@@ -2659,9 +2631,8 @@ pub const WasmError = error{
     OutOfBoundsMemoryAccess,
     MismatchedSignatures,
     UndefinedElement,
-    //
-    BadMemoryIndex, // TODO: I think we won't see this with validation
-    MemoryIndexOutOfBounds, // TODO: I think we won't see this with validation?
+    BadMemoryIndex,
+    MemoryIndexOutOfBounds,
     BadTableIndex,
     TableIndexOutOfBounds,
     BadGlobalIndex,

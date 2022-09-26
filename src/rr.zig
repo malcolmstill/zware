@@ -1,7 +1,6 @@
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const RefType = @import("valtype.zig").RefType;
 
-// Runtime opcodes (wasm opcodes + optimisations)
 pub const RrOpcode = enum(u8) {
     @"unreachable" = 0x0,
     nop = 0x01,
