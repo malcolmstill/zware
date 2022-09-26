@@ -621,7 +621,6 @@ pub fn main() anyerror!void {
                     if (mem.eql(u8, trap, "unexpected end") or mem.eql(u8, trap, "length out of bounds")) {
                         switch (err) {
                             error.Overflow => continue,
-                            error.UnexpectedEndOfInput => continue,
                             error.FunctionCodeSectionsInconsistent => continue,
                             error.EndOfStream => continue,
                             error.ElementsCountMismatch => continue,
@@ -640,7 +639,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed reference type")) {
                         switch (err) {
-                            error.MalformedRefType => continue,
+                            error.InvalidValue => continue,
                             else => {},
                         }
                     }
@@ -661,7 +660,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed section id")) {
                         switch (err) {
-                            error.UnknownSectionId => continue,
+                            error.InvalidValue => continue,
                             else => {},
                         }
                     }
@@ -685,7 +684,6 @@ pub fn main() anyerror!void {
                             error.InvalidValue => continue,
                             error.ExpectedFuncTypeTag => continue,
                             error.Overflow => continue,
-                            error.UnknownSectionId => continue,
                             else => {},
                         }
                     }
@@ -713,8 +711,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "unexpected end of section or function") or mem.eql(u8, trap, "section size mismatch") or mem.eql(u8, trap, "END opcode expected")) {
                         switch (err) {
-                            error.UnexpectedEndOfInput => continue,
-                            error.UnknownSectionId => continue, // if a section declares more elements than it has we might get this
+                            error.EndOfStream => continue,
                             error.TypeCountMismatch => continue,
                             error.ImportsCountMismatch => continue,
                             error.TablesCountMismatch => continue,
@@ -742,7 +739,6 @@ pub fn main() anyerror!void {
                     if (mem.eql(u8, trap, "integer too large")) {
                         switch (err) {
                             error.Overflow => continue,
-                            error.UnknownSectionId => continue,
                             error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
                             else => {},
                         }
