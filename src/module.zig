@@ -81,15 +81,10 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            self.decodeSection() catch |err| {
-                switch (err) {
-                    error.EndOfStream => {
-                        break;
-                    },
-                    else => return err,
-                }
+            self.decodeSection() catch |err| switch (err) {
+                error.WasmFileEnd => break,
+                else => return err,
             };
-            try self.verify();
         }
         try self.verify();
         if (self.codes.list.items.len != nonImportCount(self.functions.list.items)) return error.FunctionCodeSectionsInconsistent;
@@ -121,10 +116,8 @@ pub const Module = struct {
     }
 
     pub fn decodeSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
-        const id: SectionType = rd.readEnum(SectionType, .Little) catch |err| switch (err) {
-            error.InvalidValue => return error.UnknownSectionId,
+        const id: SectionType = self.readEnum(SectionType) catch |err| switch (err) {
+            error.EndOfStream => return error.WasmFileEnd,
             else => return err,
         };
 
@@ -881,40 +874,26 @@ pub const Module = struct {
     fn readByte(self: *Module) !u8 {
         const rd = self.buf.reader();
 
-        return rd.readByte() catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        return rd.readByte();
     }
 
     fn readEnum(self: *Module, comptime T: type) !T {
         const rd = self.buf.reader();
 
-        const r = rd.readEnum(T, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        return r;
+        return rd.readEnum(T, .Little);
     }
 
     fn readULEB128(self: *Module, comptime T: type) !T {
         const rd = self.buf.reader();
 
-        return leb.readULEB128(T, rd) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        return leb.readULEB128(T, rd);
     }
 
     fn readSlice(self: *Module, count: usize) ![]const u8 {
         const rd = self.buf.reader();
         const s = rd.context.pos;
 
-        _ = rd.skipBytes(count, .{}) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        _ = try rd.skipBytes(count, .{});
 
         const e = rd.context.pos;
 
