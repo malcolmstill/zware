@@ -880,19 +880,6 @@ pub const Module = struct {
     fn pos(self: *Module) usize {
         return self.buf.reader().context.pos;
     }
-
-    pub fn print(module: *Module) void {
-        std.debug.print("    Types: {}\n", .{module.types.list.items.len});
-        std.debug.print("Functions: {}\n", .{module.functions.list.items.len});
-        std.debug.print("   Tables: {}\n", .{module.tables.list.items.len});
-        std.debug.print(" Memories: {}\n", .{module.memories.list.items.len});
-        std.debug.print("  Globals: {}\n", .{module.globals.list.items.len});
-        std.debug.print("  Exports: {}\n", .{module.exports.list.items.len});
-        std.debug.print("  Imports: {}\n", .{module.imports.list.items.len});
-        std.debug.print("    Codes: {}\n", .{module.codes.list.items.len});
-        std.debug.print("    Datas: {}\n", .{module.datas.list.items.len});
-        std.debug.print("  Customs: {}\n", .{module.customs.list.items.len});
-    }
 };
 
 fn Section(comptime T: type) type {
