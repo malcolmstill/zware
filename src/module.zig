@@ -865,7 +865,6 @@ pub const Module = struct {
                     });
                 },
                 else => {
-                    std.log.err("elem type = {} not implemented", .{elem_type});
                     return error.ValidatorElemTypeNotImplemented;
                 },
             }
@@ -1043,7 +1042,6 @@ pub const Module = struct {
                     });
                 },
                 else => {
-                    std.log.err("unknown data section type {}", .{data_section_type});
                     return error.UnknownDataSectionType;
                 },
             }
