@@ -147,8 +147,6 @@ pub const Module = struct {
     }
 
     fn decodeTypeSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         const count = try self.readULEB128(u32);
         self.types.count = count;
 
@@ -158,26 +156,24 @@ pub const Module = struct {
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
             const param_count = try self.readULEB128(u32);
-
-            const params_start = rd.context.pos;
+            const params_start = self.pos();
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
                     _ = try self.readEnum(ValType);
                 }
             }
-            const params_end = rd.context.pos;
+            const params_end = self.pos();
 
             const results_count = try self.readULEB128(u32);
-
-            const results_start = rd.context.pos;
+            const results_start = self.pos();
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
                     _ = try self.readEnum(ValType);
                 }
             }
-            const results_end = rd.context.pos;
+            const results_end = self.pos();
 
             var params = self.module[params_start..params_end];
             var results = self.module[results_start..results_end];
@@ -420,8 +416,8 @@ pub const Module = struct {
 
     fn decodeStartSection(self: *Module) !void {
         if (self.start != null) return error.MultipleStartSections;
-        const funcidx = try self.readULEB128(u32);
 
+        const funcidx = try self.readULEB128(u32);
         const func = try self.functions.lookup(funcidx);
         const functype = try self.types.lookup(func.typeidx);
 
@@ -445,15 +441,12 @@ pub const Module = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
-                    // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        // When we pre-process all this data we can just store this
-                        // but for the moment we're just using it to skip over
                         const funcidx = try self.readULEB128(u32);
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
@@ -466,8 +459,6 @@ pub const Module = struct {
                         try self.element_init_offsets.append(init_offset);
                     }
 
-                    // The parsed code defines the offset of the data
-                    //
                     try self.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
@@ -482,15 +473,12 @@ pub const Module = struct {
                     // read elemkind (only 0x00 == .FuncRef supported)
                     _ = try self.readByte();
 
-                    // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        // When we pre-process all this data we can just store this
-                        // but for the moment we're just using it to skip over
                         const funcidx = try self.readULEB128(u32);
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
@@ -519,16 +507,12 @@ pub const Module = struct {
 
                     // read elemkind (only 0x00 == .FuncRef supported)
                     _ = try self.readByte();
-
-                    // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        // When we pre-process all this data we can just store this
-                        // but for the moment we're just using it to skip over
                         const funcidx = try self.readULEB128(u32);
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
@@ -554,16 +538,12 @@ pub const Module = struct {
                 3 => {
                     // read elemkind (only 0x00 == .FuncRef supported)
                     _ = try self.readByte();
-
-                    // Number of u32's in our data (not the length in bytes!)
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        // When we pre-process all this data we can just store this
-                        // but for the moment we're just using it to skip over
                         const funcidx = try self.readULEB128(u32);
 
                         if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
@@ -589,7 +569,6 @@ pub const Module = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
-                    // Number of u32's in our data (not the length in bytes!)
                     const init_expression_count = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
@@ -600,7 +579,6 @@ pub const Module = struct {
                         try self.element_init_offsets.append(parsed_init_code.start);
                     }
 
-                    // The parsed code defines the offset of the data
                     try self.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
@@ -663,7 +641,6 @@ pub const Module = struct {
     }
 
     fn decodeCodeSection(self: *Module) !void {
-        // count: the number of functions in the code section
         const count = try self.readULEB128(u32);
         self.codes.count = count;
 
@@ -775,15 +752,14 @@ pub const Module = struct {
     }
 
     fn decodeCustomSection(self: *Module, size: u32) !void {
-        const rd = self.buf.reader();
-        const offset = rd.context.pos;
+        const offset = self.pos();
 
         const name_length = try self.readULEB128(u32);
         const name = try self.readSlice(name_length);
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-        const data_length = try math.sub(usize, size, (rd.context.pos - offset));
+        const data_length = try math.sub(usize, size, (self.pos() - offset));
         const data = try self.readSlice(data_length);
 
         try self.customs.list.append(Custom{
