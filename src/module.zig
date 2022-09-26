@@ -130,7 +130,7 @@ pub const Module = struct {
 
         const size = try self.readULEB128(u32);
 
-        const section_start = rd.context.pos;
+        const section_start = self.pos();
 
         switch (id) {
             .Custom => try self.decodeCustomSection(size),
@@ -148,7 +148,7 @@ pub const Module = struct {
             .DataCount => try self.decodeDataCountSection(size),
         }
 
-        const section_end = rd.context.pos;
+        const section_end = self.pos();
         if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
     }
 
@@ -714,8 +714,6 @@ pub const Module = struct {
     }
 
     fn decodeCodeSection(self: *Module) !void {
-        const rd = self.buf.reader();
-
         // count: the number of functions in the code section
         const count = try self.readULEB128(u32);
         self.codes.count = count;
@@ -972,13 +970,17 @@ pub const Module = struct {
         return r;
     }
 
-    pub fn readULEB128(self: *Module, comptime T: type) !T {
+    fn readULEB128(self: *Module, comptime T: type) !T {
         const rd = self.buf.reader();
 
         return leb.readULEB128(T, rd) catch |err| switch (err) {
             error.EndOfStream => return error.UnexpectedEndOfInput,
             else => return err,
         };
+    }
+
+    fn pos(self: *Module) usize {
+        return self.buf.reader().context.pos;
     }
 
     // pub fn readSlice(self: *Module, count: usize) ![]u8 {
