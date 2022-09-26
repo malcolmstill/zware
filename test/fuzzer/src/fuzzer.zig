@@ -1,6 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const fs = std.fs;
+const fmt = std.fmt;
 const process = std.process;
 const zware = @import("zware");
 const ArrayList = std.ArrayList;
@@ -11,10 +12,16 @@ const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
 
+var prng = std.rand.DefaultPrng.init(0x12345678);
+var program: []u8 = undefined;
+var fuzzed_name: []u8 = undefined;
+var fuzzed_dir: [:0]const u8 = undefined;
+
 pub fn main() !void {
     var args = process.args();
     _ = args.skip();
     const directory = args.next() orelse return error.NoFilename;
+    fuzzed_dir = args.next() orelse return error.NoFilename;
 
     defer _ = gpa.deinit();
 
@@ -40,7 +47,8 @@ pub fn main() !void {
         }
     }
 
-    var prng = std.rand.DefaultPrng.init(0x12345678);
+    if (file_count == 0) return error.NoWasmFiles;
+
     const random = prng.random();
 
     const flips = [8]u8{
@@ -54,7 +62,11 @@ pub fn main() !void {
         0b10000000,
     };
 
-    while (true) {
+    var i: usize = 0;
+    while (true) : (i += 1) {
+        if (i % 5000 == 0) {
+            std.log.info("i = {}", .{i});
+        }
         var arena = ArenaAllocator.init(gpa.allocator());
         defer _ = arena.deinit();
         const alloc = arena.allocator();
@@ -63,16 +75,16 @@ pub fn main() !void {
         random.shuffle([]const u8, wasm_files.items);
         const wasm_file = wasm_files.items[0];
 
-        std.log.info("loading {s}", .{wasm_file});
-
         // 2. Load file
-        var program = try dir.dir.readFileAlloc(alloc, wasm_file, 0xFFFFFFF);
+        program = try dir.dir.readFileAlloc(alloc, wasm_file, 0xFFFFFFF);
         if (program.len == 0) continue;
 
         // 3. Flip a bit (maybe we should flip bits somewhat proportional to the file size)
         const byte_to_change = random.uintLessThan(usize, program.len);
         const bit_to_change = random.uintLessThan(u6, 8);
         program[byte_to_change] = program[byte_to_change] ^ flips[bit_to_change];
+        fuzzed_name = try fmt.allocPrint(name_alloc, "{}_{}.{s}", .{ byte_to_change, bit_to_change, wasm_file });
+        defer name_alloc.free(fuzzed_name);
 
         var store: Store = Store.init(alloc);
 
@@ -84,4 +96,13 @@ pub fn main() !void {
         var inst = store.instance(index) catch continue;
         inst.instantiate(index) catch continue;
     }
+}
+
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace) noreturn {
+    var out_dir = std.fs.cwd().openDir(fuzzed_dir, .{}) catch unreachable;
+    defer out_dir.close();
+
+    std.log.info("Fuzzer found bug: {s}", .{fuzzed_name});
+    out_dir.writeFile(fuzzed_name, program) catch unreachable;
+    std.builtin.default_panic(msg, error_return_trace);
 }
