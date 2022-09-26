@@ -173,10 +173,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    _ = try self.readEnum(ValType);
                 }
             }
             const params_end = rd.context.pos;
@@ -187,10 +184,7 @@ pub const Module = struct {
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    _ = rd.readEnum(ValType, .Little) catch |err| switch (err) {
-                        error.EndOfStream => return error.UnexpectedEndOfInput,
-                        else => return err,
-                    };
+                    _ = try self.readEnum(ValType);
                 }
             }
             const results_end = rd.context.pos;
@@ -245,10 +239,7 @@ pub const Module = struct {
             const name = self.module[name_start .. name_start + name_length];
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-            const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
+            const tag = try self.readEnum(Tag);
 
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
             const import_index = @truncate(u32, i);
@@ -303,17 +294,8 @@ pub const Module = struct {
     }
 
     fn decodeTable(self: *Module, import: ?u32) !void {
-        const rd = self.buf.reader();
-
-        const reftype = rd.readEnum(RefType, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        const reftype = try self.readEnum(RefType);
+        const limit_type = try self.readEnum(LimitType);
 
         switch (limit_type) {
             .Min => {
@@ -358,13 +340,8 @@ pub const Module = struct {
 
     fn decodeMemory(self: *Module, import: ?u32) !void {
         if (self.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
-        const rd = self.buf.reader();
 
-        const limit_type = rd.readEnum(LimitType, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
+        const limit_type = try self.readEnum(LimitType);
         switch (limit_type) {
             .Min => {
                 const min = try self.readULEB128(u32);
@@ -409,17 +386,8 @@ pub const Module = struct {
     }
 
     fn decodeGlobal(self: *Module, import: ?u32) !void {
-        const rd = self.buf.reader();
-
-        const global_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
-
-        const mutability = rd.readEnum(Mutability, .Little) catch |err| switch (err) {
-            error.EndOfStream => return error.UnexpectedEndOfInput,
-            else => return err,
-        };
+        const global_type = try self.readEnum(ValType);
+        const mutability = try self.readEnum(Mutability);
 
         var parsed_code: ?StartWithDepth = null;
 
@@ -464,11 +432,7 @@ pub const Module = struct {
                 if (mem.eql(u8, name, exprt.name)) return error.ValidatorDuplicateExportName;
             }
 
-            const tag = rd.readEnum(Tag, .Little) catch |err| switch (err) {
-                error.EndOfStream => return error.UnexpectedEndOfInput,
-                else => return err,
-            };
-
+            const tag = try self.readEnum(Tag);
             const index = try self.readULEB128(u32);
 
             switch (tag) {
@@ -774,12 +738,7 @@ pub const Module = struct {
             var locals_count: usize = 0;
             while (j < locals_definitions_count) : (j += 1) {
                 const type_count = try self.readULEB128(u32);
-
-                const local_type = rd.readEnum(ValType, .Little) catch |err| switch (err) {
-                    error.EndOfStream => return error.UnexpectedEndOfInput,
-                    else => return err,
-                };
-
+                const local_type = try self.readEnum(ValType);
                 locals_count += type_count;
 
                 try self.local_types.append(.{ .count = type_count, .valtype = local_type });
