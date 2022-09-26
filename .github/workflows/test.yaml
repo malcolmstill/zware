@@ -23,6 +23,15 @@ jobs:
       - run: cp bin/testrunner testrunner
       - run: cp test/testsuite-generated/* ./
       - run: bash test/run-generated.sh
+  parsecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: master
+      - run: zig build --build-file test/parsecheck/build.zig --prefix ./
+      - run: bin/parsecheck test/testsuite-generated
   lint:
     runs-on: ubuntu-latest
     steps:
