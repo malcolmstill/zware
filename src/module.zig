@@ -75,6 +75,7 @@ pub const Module = struct {
         const version = try rd.readIntLittle(u32);
         if (version != 1) return error.UnknownBinaryVersion;
 
+        // FIXME: in hindsight I don't like this:
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
         // See https://github.com/malcolmstill/zware/pull/133
