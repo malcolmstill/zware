@@ -473,8 +473,7 @@ pub const Module = struct {
                     });
                 },
                 1 => {
-                    // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = try self.readByte();
+                    _ = try self.readEnum(ElemKind);
 
                     const data_length = try self.readULEB128(u32);
 
@@ -508,8 +507,7 @@ pub const Module = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(.I32);
 
-                    // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = try self.readByte();
+                    _ = try self.readEnum(ElemKind);
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
@@ -539,8 +537,7 @@ pub const Module = struct {
                     });
                 },
                 3 => {
-                    // read elemkind (only 0x00 == .FuncRef supported)
-                    _ = try self.readByte();
+                    _ = try self.readEnum(ElemKind);
                     const data_length = try self.readULEB128(u32);
 
                     const first_init_offset = self.element_init_offsets.items.len;
@@ -935,6 +932,10 @@ const SectionType = enum(u8) {
     Code = 0x0a,
     Data = 0x0b,
     DataCount = 0x0c,
+};
+
+const ElemKind = enum(u8) {
+    FuncRef = 0x0,
 };
 
 const Code = struct {
