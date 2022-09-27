@@ -7,7 +7,7 @@ const LocalType = @import("module.zig").LocalType;
 const Opcode = @import("opcode.zig").Opcode;
 const MiscOpcode = @import("opcode.zig").MiscOpcode;
 const Validator = @import("validator.zig").Validator;
-const ValTypeUnknown = @import("validator.zig").ValTypeUnknown;
+const Type = @import("validator.zig").Type;
 const ValType = @import("valtype.zig").ValType;
 const RefType = @import("valtype.zig").RefType;
 const Range = @import("rr.zig").Range;
@@ -362,8 +362,8 @@ pub const Parser = struct {
                     .ExternRef => .ExternRef,
                 };
 
-                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
-                _ = try self.validator.pushOperand(ValTypeUnknown{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
+                _ = try self.validator.pushOperand(Type{ .Known = reftype });
 
                 rr = Rr{ .@"table.get" = tableidx };
             },
@@ -376,8 +376,8 @@ pub const Parser = struct {
                     .ExternRef => .ExternRef,
                 };
 
-                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
-                _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
+                _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
                 rr = Rr{ .@"table.set" = tableidx };
             },
@@ -1076,10 +1076,10 @@ pub const Parser = struct {
                             .ExternRef => .ExternRef,
                         };
 
-                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
-                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
 
-                        try self.validator.pushOperand(ValTypeUnknown{ .Known = .I32 });
+                        try self.validator.pushOperand(Type{ .Known = .I32 });
 
                         rr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
                             .tableidx = tableidx,
@@ -1102,9 +1102,9 @@ pub const Parser = struct {
                             .ExternRef => .ExternRef,
                         };
 
-                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
-                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = reftype });
-                        _ = try self.validator.popOperandExpecting(ValTypeUnknown{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
+                        _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
+                        _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
                         rr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
                             .tableidx = tableidx,
