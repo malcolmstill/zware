@@ -13,7 +13,7 @@ pub const Function = struct {
             locals_count: usize,
             start: usize,
             required_stack_space: usize,
-            instance: usize,
+            instance: *Instance,
         },
         host_function: struct {
             func: *const fn (*VirtualMachine) WasmError!void,

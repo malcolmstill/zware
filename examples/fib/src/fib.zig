@@ -22,14 +22,12 @@ pub fn main() !void {
     var module = Module.init(alloc, bytes);
     try module.decode();
 
-    var new_inst = Instance.init(alloc, &store, module);
-    const index = try store.addInstance(new_inst);
-    var inst = try store.instance(index);
-    try inst.instantiate(index);
+    var instance = Instance.init(alloc, &store, module);
+    try instance.instantiate();
 
     const n = 39;
     var in = [1]u64{n};
     var out = [1]u64{0};
-    try inst.invoke("fib", in[0..], out[0..], .{});
+    try instance.invoke("fib", in[0..], out[0..], .{});
     std.debug.print("fib({}) = {}\n", .{ n, @bitCast(i32, @truncate(u32, out[0])) });
 }
