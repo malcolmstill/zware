@@ -2,10 +2,10 @@ const std = @import("std");
 const mem = std.mem;
 const math = std.math;
 const ArrayList = std.ArrayList;
-const Module = @import("module.zig").Module;
-const ValType = @import("module.zig").ValType;
-const Instance = @import("instance.zig").Instance;
-const Rr = @import("rr.zig").Rr;
+const Module = @import("../module.zig").Module;
+const ValType = @import("../module.zig").ValType;
+const Instance = @import("../instance.zig").Instance;
+const Rr = @import("../rr.zig").Rr;
 
 // VirtualMachine:
 //

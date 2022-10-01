@@ -1,7 +1,7 @@
 const std = @import("std");
 const ValType = @import("../valtype.zig").ValType;
-const VirtualMachine = @import("../vm.zig").VirtualMachine;
-const WasmError = @import("../vm.zig").WasmError;
+const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
+const WasmError = @import("../instance/vm.zig").WasmError;
 const Instance = @import("../instance.zig").Instance;
 const FuncType = @import("../module.zig").FuncType;
 
