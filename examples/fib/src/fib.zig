@@ -9,21 +9,20 @@ var gpa = GeneralPurposeAllocator(.{}){};
 
 pub fn main() !void {
     defer _ = gpa.deinit();
-
-    var arena = ArenaAllocator.init(gpa.allocator());
-    defer _ = arena.deinit();
-
-    const alloc = arena.allocator();
+    const alloc = gpa.allocator();
 
     const bytes = @embedFile("fib.wasm");
 
     var store = Store.init(alloc);
+    defer store.deinit();
 
     var module = Module.init(alloc, bytes);
+    defer module.deinit();
     try module.decode();
 
     var instance = Instance.init(alloc, &store, module);
     try instance.instantiate();
+    defer instance.deinit();
 
     const n = 39;
     var in = [1]u64{n};
