@@ -1,10 +1,9 @@
 const std = @import("std");
 const zware = @import("zware");
-const Module = zware.Module;
 const Store = zware.Store;
+const Module = zware.Module;
 const Instance = zware.Instance;
 const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
-const ArenaAllocator = std.heap.ArenaAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
 
 pub fn main() !void {
