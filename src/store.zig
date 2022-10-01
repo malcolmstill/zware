@@ -37,7 +37,6 @@ pub const ArrayListStore = struct {
     elems: ArrayList(Elem),
     datas: ArrayList(Data),
     imports: ArrayList(ImportExport),
-    instances: ArrayList(Instance),
 
     pub fn init(alloc: mem.Allocator) ArrayListStore {
         var store = ArrayListStore{
@@ -49,7 +48,6 @@ pub const ArrayListStore = struct {
             .elems = ArrayList(Elem).init(alloc),
             .datas = ArrayList(Data).init(alloc),
             .imports = ArrayList(ImportExport).init(alloc),
-            .instances = ArrayList(Instance).init(alloc),
         };
 
         return store;
@@ -148,16 +146,5 @@ pub const ArrayListStore = struct {
         const data_ptr = try self.datas.addOne();
         data_ptr.* = try Data.init(self.alloc, count);
         return self.datas.items.len - 1;
-    }
-
-    pub fn instance(self: *ArrayListStore, handle: usize) !*Instance {
-        if (handle >= self.instances.items.len) return error.BadInstanceIndex;
-        return &self.instances.items[handle];
-    }
-
-    pub fn addInstance(self: *ArrayListStore, inst: Instance) !usize {
-        const instance_ptr = try self.instances.addOne();
-        instance_ptr.* = inst;
-        return self.instances.items.len - 1;
     }
 };

@@ -92,11 +92,11 @@ pub const Instance = struct {
         return try self.store.data(dataaddr);
     }
 
-    pub fn instantiate(self: *Instance, index: usize) !void {
+    pub fn instantiate(self: *Instance) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
         try self.instantiateImports();
-        try self.instantiateFunctions(index);
+        try self.instantiateFunctions();
         try self.instantiateGlobals();
         try self.instantiateMemories();
         try self.instantiateTables();
@@ -120,7 +120,7 @@ pub const Instance = struct {
         }
     }
 
-    fn instantiateFunctions(self: *Instance, index: usize) !void {
+    fn instantiateFunctions(self: *Instance) !void {
         // Initialise (internal) functions
         //
         // We have two possibilities:
@@ -153,7 +153,7 @@ pub const Instance = struct {
                             .start = code.start,
                             .required_stack_space = code.required_stack_space,
                             .locals_count = code.locals_count,
-                            .instance = index,
+                            .instance = self,
                         },
                     },
                 });
@@ -277,13 +277,11 @@ pub const Instance = struct {
 
         switch (function.subtype) {
             .function => |f| {
-                const function_instance = try self.store.instance(f.instance);
-
                 if (function.params.len != in.len) return error.ParamCountMismatch;
                 if (function.results.len != out.len) return error.ResultCountMismatch;
 
                 // 6. set up our stacks
-                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], f.instance);
 
                 const locals_start = vm.op_ptr;
 
@@ -306,7 +304,7 @@ pub const Instance = struct {
                     .op_stack_len = locals_start,
                     .label_stack_len = vm.label_ptr,
                     .return_arity = function.results.len,
-                    .inst = function_instance,
+                    .inst = f.instance,
                 }, f.locals_count + function.params.len);
 
                 // 7a.2. push label for our implicit function block. We know we don't have
@@ -342,8 +340,7 @@ pub const Instance = struct {
 
         switch (function.subtype) {
             .function => |f| {
-                const function_instance = try self.store.instance(f.instance);
-                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], try self.store.instance(f.instance));
+                var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], f.instance);
 
                 const locals_start = vm.op_ptr;
 
@@ -359,7 +356,7 @@ pub const Instance = struct {
                     .op_stack_len = locals_start,
                     .label_stack_len = vm.label_ptr,
                     .return_arity = 0,
-                    .inst = function_instance,
+                    .inst = f.instance,
                 }, f.locals_count);
 
                 try vm.pushLabel(VirtualMachine.Label{

@@ -239,7 +239,7 @@ pub const VirtualMachine = struct {
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += f.locals_count;
 
-                self.inst = try self.inst.store.instance(f.instance);
+                self.inst = f.instance;
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{
@@ -294,7 +294,7 @@ pub const VirtualMachine = struct {
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += func.locals_count;
 
-                self.inst = try self.inst.store.instance(func.instance);
+                self.inst = func.instance;
 
                 // Consume parameters from the stack
                 try self.pushFrame(Frame{

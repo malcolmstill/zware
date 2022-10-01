@@ -44,10 +44,8 @@ pub fn main() !void {
             var module = Module.init(alloc, program);
             module.decode() catch continue;
 
-            var new_inst = Instance.init(alloc, &store, module);
-            const index = store.addInstance(new_inst) catch continue;
-            var inst = store.instance(index) catch continue;
-            inst.instantiate(index) catch continue;
+            var instance = Instance.init(alloc, &store, module);
+            instance.instantiate() catch continue;
         }
     }
 }

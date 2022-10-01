@@ -255,9 +255,8 @@ pub fn main() anyerror!void {
     const print_f64_f64_name = "print_f64_f64";
     try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
 
-    var inst: *Instance = undefined;
-
-    var registered_names = StringHashMap(usize).init(alloc);
+    var current_instance: *Instance = undefined;
+    var registered_names = StringHashMap(*Instance).init(alloc);
 
     for (r.commands) |command| {
         switch (command) {
@@ -275,13 +274,12 @@ pub fn main() anyerror!void {
                 module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(alloc, &store, module);
-                const inst_index = try store.addInstance(new_inst);
-                inst = try store.instance(inst_index);
-                try inst.instantiate(inst_index);
+                current_instance = try alloc.create(Instance);
+                current_instance.* = Instance.init(alloc, &store, module);
+                try current_instance.instantiate();
 
                 if (command.module.name) |name| {
-                    try registered_names.put(name, inst_index);
+                    try registered_names.put(name, current_instance);
                 }
             },
             .assert_return => {
@@ -292,10 +290,10 @@ pub fn main() anyerror!void {
                         const field = action.invoke.field;
                         std.debug.print("(return): {s}:{}\n", .{ r.source_filename, command.assert_return.line });
 
-                        var instance = inst;
+                        var instance = current_instance;
                         if (command.assert_return.action.invoke.module) |name| {
-                            if (registered_names.get(name)) |inst_offset| {
-                                instance = try store.instance(inst_offset);
+                            if (registered_names.get(name)) |registered_instance| {
+                                instance = registered_instance;
                             }
                         }
 
@@ -376,8 +374,7 @@ pub fn main() anyerror!void {
                         std.debug.print("(return): get {s}:{} ({s})\n", .{ r.source_filename, command.assert_return.line, wasm_filename });
                         std.debug.print("(result) get \"{s}\"\n", .{field});
                         if (action.get.module) |m| {
-                            const registered_inst_offset = registered_names.get(m) orelse return error.NotRegistered;
-                            const registered_inst = try store.instance(registered_inst_offset);
+                            const registered_inst = registered_names.get(m) orelse return error.NotRegistered;
 
                             for (registered_inst.module.exports.list.items) |exprt| {
                                 if (mem.eql(u8, exprt.name, field)) {
@@ -394,9 +391,9 @@ pub fn main() anyerror!void {
                                 }
                             }
                         } else {
-                            for (inst.module.exports.list.items) |exprt, i| {
+                            for (current_instance.module.exports.list.items) |exprt, i| {
                                 if (mem.eql(u8, exprt.name, field)) {
-                                    const global = try inst.getGlobal(i);
+                                    const global = try current_instance.getGlobal(i);
 
                                     for (expected) |result, j| {
                                         if (j > 0) return error.ExpectedOneResult;
@@ -425,10 +422,10 @@ pub fn main() anyerror!void {
                             std.debug.print("(trap) invoke = {s} at {s}:{}\n", .{ field, r.source_filename, command.assert_trap.line });
                         }
 
-                        var instance = inst;
+                        var instance = current_instance;
                         if (command.assert_trap.action.invoke.module) |name| {
-                            if (registered_names.get(name)) |inst_offset| {
-                                instance = try store.instance(inst_offset);
+                            if (registered_names.get(name)) |registered_instance| {
+                                instance = registered_instance;
                             }
                         }
 
@@ -788,7 +785,7 @@ pub fn main() anyerror!void {
                         }
 
                         // Invoke the function
-                        inst.invoke(field, in, out, .{}) catch |err| {
+                        current_instance.invoke(field, in, out, .{}) catch |err| {
                             std.debug.print("(result) invoke = {s}\n", .{field});
                             std.debug.print("Testsuite failure: {s} at {s}:{}\n", .{ field, r.source_filename, command.action.line });
                             return err;
@@ -808,11 +805,9 @@ pub fn main() anyerror!void {
                 module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(alloc, &store, module);
-                const inst_index = try store.addInstance(new_inst);
-                inst = try store.instance(inst_index);
-
-                if (inst.instantiate(inst_index)) |_| {
+                var instance = try alloc.create(Instance);
+                instance.* = Instance.init(alloc, &store, module);
+                if (instance.instantiate()) |_| {
                     return error.ExpectedUnlinkable;
                 } else |err| switch (err) {
                     error.LimitMismatch => continue,
@@ -837,11 +832,9 @@ pub fn main() anyerror!void {
                 module = Module.init(alloc, program);
                 try module.decode();
 
-                var new_inst = Instance.init(alloc, &store, module);
-                const inst_index = try store.addInstance(new_inst);
-                inst = try store.instance(inst_index);
-
-                if (inst.instantiate(inst_index)) |_| {
+                var instance = try alloc.create(Instance);
+                instance.* = Instance.init(alloc, &store, module);
+                if (instance.instantiate()) |_| {
                     return error.ExpectedUninstantiable;
                 } else |err| switch (err) {
                     error.TrapUnreachable => continue,
@@ -855,8 +848,7 @@ pub fn main() anyerror!void {
             .register => {
                 std.debug.print("(register): {s}:{}\n", .{ r.source_filename, command.register.line });
                 if (command.register.name) |name| {
-                    const registered_inst_offset = registered_names.get(name) orelse return error.NotRegistered;
-                    const registered_inst = try store.instance(registered_inst_offset);
+                    const registered_inst = registered_names.get(name) orelse return error.NotRegistered;
 
                     for (registered_inst.module.exports.list.items) |exprt| {
                         switch (exprt.tag) {
@@ -879,22 +871,22 @@ pub fn main() anyerror!void {
                         }
                     }
                 } else {
-                    for (inst.module.exports.list.items) |exprt| {
+                    for (current_instance.module.exports.list.items) |exprt| {
                         switch (exprt.tag) {
                             .Table => {
-                                const handle = inst.tableaddrs.items[exprt.index];
+                                const handle = current_instance.tableaddrs.items[exprt.index];
                                 try store.@"export"(command.register.as, exprt.name, .Table, handle);
                             },
                             .Func => {
-                                const handle = inst.funcaddrs.items[exprt.index];
+                                const handle = current_instance.funcaddrs.items[exprt.index];
                                 try store.@"export"(command.register.as, exprt.name, .Func, handle);
                             },
                             .Global => {
-                                const handle = inst.globaladdrs.items[exprt.index];
+                                const handle = current_instance.globaladdrs.items[exprt.index];
                                 try store.@"export"(command.register.as, exprt.name, .Global, handle);
                             },
                             .Mem => {
-                                const handle = inst.memaddrs.items[exprt.index];
+                                const handle = current_instance.memaddrs.items[exprt.index];
                                 try store.@"export"(command.register.as, exprt.name, .Mem, handle);
                             },
                         }
