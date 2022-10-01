@@ -9,7 +9,7 @@ pub const Memory = @import("store/memory.zig").Memory;
 pub const ValType = @import("valtype.zig").ValType;
 
 test {
-    _ = @import("validator.zig");
+    _ = @import("module/validator.zig");
     _ = @import("vm.zig");
     _ = @import("module.zig");
 }
