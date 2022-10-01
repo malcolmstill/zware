@@ -80,9 +80,9 @@ pub const ArrayListStore = struct {
         });
     }
 
-    pub fn function(self: *ArrayListStore, handle: usize) !Function {
-        if (handle >= self.functions.items.len) return error.BadFunctionIndex;
-        return self.functions.items[handle];
+    pub fn function(self: *ArrayListStore, funcaddr: usize) !Function {
+        if (funcaddr >= self.functions.items.len) return error.BadFunctionIndex;
+        return self.functions.items[funcaddr];
     }
 
     pub fn addFunction(self: *ArrayListStore, func: Function) !usize {
@@ -91,9 +91,9 @@ pub const ArrayListStore = struct {
         return self.functions.items.len - 1;
     }
 
-    pub fn memory(self: *ArrayListStore, handle: usize) !*Memory {
-        if (handle >= self.memories.items.len) return error.BadMemoryIndex;
-        return &self.memories.items[handle];
+    pub fn memory(self: *ArrayListStore, memaddr: usize) !*Memory {
+        if (memaddr >= self.memories.items.len) return error.BadMemoryIndex;
+        return &self.memories.items[memaddr];
     }
 
     pub fn addMemory(self: *ArrayListStore, min: u32, max: ?u32) !usize {
@@ -103,9 +103,9 @@ pub const ArrayListStore = struct {
         return self.memories.items.len - 1;
     }
 
-    pub fn table(self: *ArrayListStore, handle: usize) !*Table {
-        if (handle >= self.tables.items.len) return error.BadTableIndex;
-        return &self.tables.items[handle];
+    pub fn table(self: *ArrayListStore, tableaddr: usize) !*Table {
+        if (tableaddr >= self.tables.items.len) return error.BadTableIndex;
+        return &self.tables.items[tableaddr];
     }
 
     pub fn addTable(self: *ArrayListStore, reftype: RefType, entries: u32, max: ?u32) !usize {
@@ -114,9 +114,9 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
-    pub fn global(self: *ArrayListStore, handle: usize) !*Global {
-        if (handle >= self.globals.items.len) return error.BadGlobalIndex;
-        return &self.globals.items[handle];
+    pub fn global(self: *ArrayListStore, globaladdr: usize) !*Global {
+        if (globaladdr >= self.globals.items.len) return error.BadGlobalIndex;
+        return &self.globals.items[globaladdr];
     }
 
     pub fn addGlobal(self: *ArrayListStore, value: Global) !usize {

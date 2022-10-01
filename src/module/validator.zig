@@ -14,14 +14,12 @@ pub const Validator = struct {
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
-    dataCountSection: bool,
     is_constant: bool,
 
-    pub fn init(alloc: mem.Allocator, dataCountSection: bool, is_constant: bool) Validator {
+    pub fn init(alloc: mem.Allocator, is_constant: bool) Validator {
         return Validator{
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
-            .dataCountSection = dataCountSection,
             .is_constant = is_constant,
         };
     }
@@ -680,7 +678,7 @@ test "validate add i32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator(), false, false);
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I32} ** 1;
@@ -697,7 +695,7 @@ test "validate add i64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator(), false, false);
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I64} ** 1;
@@ -712,7 +710,7 @@ test "validate add f32" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator(), false, false);
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.F32} ** 1;
@@ -727,7 +725,7 @@ test "validate add f64" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator(), false, false);
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.F64} ** 1;
@@ -742,7 +740,7 @@ test "validate: add error on mismatched types" {
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
-    var v = Validator.init(arena.allocator(), false, false);
+    var v = Validator.init(arena.allocator(), false);
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I32} ** 1;

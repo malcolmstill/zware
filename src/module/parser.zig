@@ -40,7 +40,7 @@ pub const Parser = struct {
             // TODO: what type of allocator is this?
             // we want to free this every function parse, so we
             // want a general purpose allocator, not an arena allocator
-            .validator = Validator.init(module.alloc, module.dataCount != null, is_constant),
+            .validator = Validator.init(module.alloc, is_constant),
             .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
             .is_constant = is_constant,
@@ -994,7 +994,7 @@ pub const Parser = struct {
                         const dataidx = try self.readULEB128Mem(u32);
                         const memidx = try self.readByte();
 
-                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -1010,7 +1010,7 @@ pub const Parser = struct {
                     .@"data.drop" => {
                         const dataidx = try self.readULEB128Mem(u32);
 
-                        const data_count = self.module.dataCount orelse return error.InstructionRequiresDataCountSection;
+                        const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
                         rr = Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };

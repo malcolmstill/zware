@@ -35,7 +35,7 @@ pub const Module = struct {
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     function_index_start: ?usize,
-    dataCount: ?u32 = null,
+    data_count: ?u32 = null,
     references: ArrayList(u32),
 
     pub fn init(alloc: mem.Allocator, module: []const u8) Module {
@@ -638,7 +638,7 @@ pub const Module = struct {
 
     fn decodeDataCountSection(self: *Module, size: u32) !void {
         if (size == 0) return;
-        self.dataCount = try self.readULEB128(u32);
+        self.data_count = try self.readULEB128(u32);
     }
 
     fn decodeCodeSection(self: *Module) !void {
@@ -686,8 +686,8 @@ pub const Module = struct {
     fn decodeDataSection(self: *Module) !void {
         const count = try self.readULEB128(u32);
 
-        if (self.dataCount) |dataCount| {
-            if (count != dataCount) return error.DataCountSectionDataSectionCountMismatch;
+        if (self.data_count) |data_count| {
+            if (count != data_count) return error.DataCountSectionDataSectionCountMismatch;
         }
 
         self.datas.count = count;
