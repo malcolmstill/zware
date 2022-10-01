@@ -40,7 +40,7 @@ pub fn main() !void {
     try module.decode();
 
     var instance = Instance.init(alloc, &store, module);
-    try instance.instantiate(index);
+    try instance.instantiate();
 
     const n = 28;
     var in = [1]u64{n};
