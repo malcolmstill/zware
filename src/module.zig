@@ -26,16 +26,16 @@ pub const Module = struct {
     memories: Section(MemType),
     globals: Section(GlobalType),
     exports: Section(Export),
-    start: ?u32,
     elements: Section(ElementSegment),
-    element_init_offsets: ArrayList(usize),
     codes: Section(Code),
     datas: Section(DataSegment),
+    start: ?u32 = null,
+    function_index_start: ?usize = null,
+    data_count: ?u32 = null,
+    element_init_offsets: ArrayList(usize),
     parsed_code: ArrayList(Rr),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
-    function_index_start: ?usize,
-    data_count: ?u32 = null,
     references: ArrayList(u32),
 
     pub fn init(alloc: mem.Allocator, module: []const u8) Module {
@@ -51,20 +51,36 @@ pub const Module = struct {
             .memories = Section(MemType).init(alloc),
             .globals = Section(GlobalType).init(alloc),
             .exports = Section(Export).init(alloc),
-            .start = null,
             .elements = Section(ElementSegment).init(alloc),
-            .element_init_offsets = ArrayList(usize).init(alloc),
             .codes = Section(Code).init(alloc),
             .datas = Section(DataSegment).init(alloc),
+            .element_init_offsets = ArrayList(usize).init(alloc),
             .parsed_code = ArrayList(Rr).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
-            .function_index_start = null,
             .references = ArrayList(u32).init(alloc),
         };
     }
 
-    // fn deinit?
+    pub fn deinit(self: *Module) void {
+        self.customs.deinit();
+        self.types.deinit();
+        self.imports.deinit();
+        self.functions.deinit();
+        self.tables.deinit();
+        self.memories.deinit();
+        self.globals.deinit();
+        self.exports.deinit();
+        self.elements.deinit();
+        self.codes.deinit();
+        self.datas.deinit();
+
+        self.element_init_offsets.deinit();
+        self.parsed_code.deinit();
+        self.local_types.deinit();
+        self.br_table_indices.deinit();
+        self.references.deinit();
+    }
 
     pub fn decode(self: *Module) !void {
         const rd = self.buf.reader();
@@ -782,6 +798,7 @@ pub const Module = struct {
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], true);
+        defer it.deinit();
 
         const in: [0]ValType = [_]ValType{} ** 0;
         const out: [1]ValType = [_]ValType{valtype} ** 1;
@@ -825,6 +842,7 @@ pub const Module = struct {
         const code_start = self.parsed_code.items.len;
 
         var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], false);
+        defer it.deinit();
 
         try it.pushFunction(locals, funcidx);
 
@@ -894,6 +912,10 @@ fn Section(comptime T: type) type {
             return Self{
                 .list = ArrayList(T).init(alloc),
             };
+        }
+
+        pub fn deinit(self: *Self) void {
+            self.list.deinit();
         }
 
         pub fn itemsSlice(self: *Self) []T {

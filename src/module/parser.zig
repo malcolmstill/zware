@@ -48,6 +48,10 @@ pub const Parser = struct {
         };
     }
 
+    pub fn deinit(self: *Parser) void {
+        self.validator.deinit();
+    }
+
     // pushFunction initiliase the validator for the current function
     pub fn pushFunction(self: *Parser, locals: []LocalType, funcidx: usize) !void {
         const func = try self.module.functions.lookup(funcidx);

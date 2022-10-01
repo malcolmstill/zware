@@ -53,6 +53,16 @@ pub const ArrayListStore = struct {
         return store;
     }
 
+    pub fn deinit(self: *ArrayListStore) void {
+        self.functions.deinit();
+        self.memories.deinit();
+        self.tables.deinit();
+        self.globals.deinit();
+        self.elems.deinit();
+        self.datas.deinit();
+        self.imports.deinit();
+    }
+
     // import
     //
     // import attempts to find in the store, the given module.name pair

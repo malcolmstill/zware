@@ -53,6 +53,15 @@ pub const Instance = struct {
         };
     }
 
+    pub fn deinit(self: *Instance) void {
+        self.funcaddrs.deinit();
+        self.memaddrs.deinit();
+        self.tableaddrs.deinit();
+        self.globaladdrs.deinit();
+        self.elemaddrs.deinit();
+        self.dataaddrs.deinit();
+    }
+
     pub fn getFunc(self: *Instance, funcidx: usize) !Function {
         if (funcidx >= self.funcaddrs.items.len) return error.FunctionIndexOutOfBounds;
         const funcaddr = self.funcaddrs.items[funcidx];

@@ -24,7 +24,11 @@ pub const Validator = struct {
         };
     }
 
-    // TODO: deinit?
+    pub fn deinit(self: *Validator) void {
+        // Static allocation?
+        self.op_stack.deinit();
+        self.ctrl_stack.deinit();
+    }
 
     pub fn validateBlock(v: *Validator, in_operands: []const ValType, out_operands: []const ValType) !void {
         try v.popOperands(in_operands);
@@ -679,6 +683,7 @@ test "validate add i32" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var v = Validator.init(arena.allocator(), false);
+    defer v.deinit();
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I32} ** 1;
@@ -696,6 +701,7 @@ test "validate add i64" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var v = Validator.init(arena.allocator(), false);
+    defer v.deinit();
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I64} ** 1;
@@ -711,6 +717,7 @@ test "validate add f32" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var v = Validator.init(arena.allocator(), false);
+    defer v.deinit();
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.F32} ** 1;
@@ -726,6 +733,7 @@ test "validate add f64" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var v = Validator.init(arena.allocator(), false);
+    defer v.deinit();
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.F64} ** 1;
@@ -741,6 +749,7 @@ test "validate: add error on mismatched types" {
     var arena = ArenaAllocator.init(testing.allocator);
     defer arena.deinit();
     var v = Validator.init(arena.allocator(), false);
+    defer v.deinit();
 
     var in: [0]ValType = [_]ValType{} ** 0;
     var out: [1]ValType = [_]ValType{.I32} ** 1;
