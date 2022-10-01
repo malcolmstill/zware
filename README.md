@@ -32,7 +32,7 @@ pub fn main() !void {
 
     const alloc = arena.allocator();
 
-    const bytes = @embedFile("../../../test/fib.wasm");
+    const bytes = @embedFile("fib.wasm");
 
     var store = Store.init(alloc);
 
@@ -42,10 +42,10 @@ pub fn main() !void {
     var instance = Instance.init(alloc, &store, module);
     try instance.instantiate();
 
-    const n = 28;
+    const n = 39;
     var in = [1]u64{n};
     var out = [1]u64{0};
-    try inst.invoke("fib", in[0..], out[0..], .{});
+    try instance.invoke("fib", in[0..], out[0..], .{});
     std.debug.print("fib({}) = {}\n", .{ n, @bitCast(i32, @truncate(u32, out[0])) });
 }
 ```
