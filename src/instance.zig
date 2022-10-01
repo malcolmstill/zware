@@ -10,7 +10,7 @@ const Table = @import("store/table.zig").Table;
 const Global = @import("store/global.zig").Global;
 const Elem = @import("store/elem.zig").Elem;
 const Data = @import("store/data.zig").Data;
-const VirtualMachine = @import("vm.zig").VirtualMachine;
+const VirtualMachine = @import("instance/vm.zig").VirtualMachine;
 
 const VirtualMachineOptions = struct {
     frame_stack_size: comptime_int = 1024,
