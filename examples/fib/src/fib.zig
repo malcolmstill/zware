@@ -17,7 +17,7 @@ pub fn main() !void {
 
     const bytes = @embedFile("fib.wasm");
 
-    var store: Store = Store.init(alloc);
+    var store = Store.init(alloc);
 
     var module = Module.init(alloc, bytes);
     try module.decode();
