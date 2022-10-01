@@ -45,7 +45,7 @@ pub fn main() !void {
             module.decode() catch continue;
 
             var instance = Instance.init(alloc, &store, module);
-            try instance.instantiate();
+            instance.instantiate() catch continue;
         }
     }
 }
