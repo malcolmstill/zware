@@ -14,14 +14,12 @@ pub const Validator = struct {
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
-    dataCountSection: bool,
     is_constant: bool,
 
-    pub fn init(alloc: mem.Allocator, dataCountSection: bool, is_constant: bool) Validator {
+    pub fn init(alloc: mem.Allocator, is_constant: bool) Validator {
         return Validator{
             .op_stack = OperandStack.init(alloc),
             .ctrl_stack = ControlStack.init(alloc),
-            .dataCountSection = dataCountSection,
             .is_constant = is_constant,
         };
     }
