@@ -2,17 +2,17 @@ const std = @import("std");
 const math = std.math;
 const leb = std.leb;
 const ArrayList = std.ArrayList;
-const Module = @import("module.zig").Module;
-const LocalType = @import("module.zig").LocalType;
-const Opcode = @import("opcode.zig").Opcode;
-const MiscOpcode = @import("opcode.zig").MiscOpcode;
+const Module = @import("../module.zig").Module;
+const LocalType = @import("../module.zig").LocalType;
+const Opcode = @import("../opcode.zig").Opcode;
+const MiscOpcode = @import("../opcode.zig").MiscOpcode;
 const Validator = @import("validator.zig").Validator;
 const Type = @import("validator.zig").Type;
-const ValType = @import("valtype.zig").ValType;
-const RefType = @import("valtype.zig").RefType;
-const Range = @import("rr.zig").Range;
-const Rr = @import("rr.zig").Rr;
-const MiscRr = @import("rr.zig").MiscRr;
+const ValType = @import("../valtype.zig").ValType;
+const RefType = @import("../valtype.zig").RefType;
+const Range = @import("../rr.zig").Range;
+const Rr = @import("../rr.zig").Rr;
+const MiscRr = @import("../rr.zig").MiscRr;
 
 pub const Parser = struct {
     function: []const u8,
