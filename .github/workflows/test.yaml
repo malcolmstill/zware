@@ -32,6 +32,14 @@ jobs:
           version: master
       - run: zig build --build-file test/parsecheck/build.zig --prefix ./
       - run: bin/parsecheck test/testsuite-generated
+  build_interface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: master
+      - run: zig build --build-file test/interface/build.zig
   lint:
     runs-on: ubuntu-latest
     steps:
