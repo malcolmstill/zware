@@ -8,6 +8,7 @@ const Rr = @import("rr.zig").Rr;
 const RrOpcode = @import("rr.zig").RrOpcode;
 const Instance = @import("instance.zig").Instance;
 const Parser = @import("module/parser.zig").Parser;
+const Parsed = @import("module/parser.zig").Parsed;
 const NumType = @import("valtype.zig").NumType;
 const ValType = @import("valtype.zig").ValType;
 const RefType = @import("valtype.zig").RefType;
@@ -379,7 +380,7 @@ pub const Module = struct {
         const global_type = try self.readEnum(ValType);
         const mutability = try self.readEnum(Mutability);
 
-        var parsed_code: ?StartWithDepth = null;
+        var parsed_code: ?Parsed = null;
 
         // If we're not importing the global we will expect
         // an expression
@@ -785,78 +786,24 @@ pub const Module = struct {
         });
     }
 
-    const StartWithDepth = struct {
-        start: usize,
-        max_depth: usize,
-    };
-
-    pub fn readConstantExpression(self: *Module, valtype: ValType) !StartWithDepth {
+    pub fn readConstantExpression(self: *Module, valtype: ValType) !Parsed {
         const rd = self.buf.reader();
         const code = self.module[rd.context.pos..];
 
-        var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
-        const code_start = self.parsed_code.items.len;
+        var parser = Parser.init(self);
+        defer parser.deinit();
 
-        var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], true);
-        defer it.deinit();
-
-        const in: [0]ValType = [_]ValType{} ** 0;
-        const out: [1]ValType = [_]ValType{valtype} ** 1;
-
-        try it.validator.pushControlFrame(
-            .block,
-            in[0..0],
-            out[0..1],
-        );
-
-        while (try it.next()) |instr| {
-            switch (instr) {
-                .@"i32.const",
-                .@"i64.const",
-                .@"f32.const",
-                .@"f64.const",
-                .@"global.get",
-                .@"ref.null",
-                .@"ref.func",
-                .end,
-                => |_| {},
-                else => return error.ValidatorConstantExpressionRequired,
-            }
-            try self.parsed_code.append(instr);
-        }
-
-        // Patch last end so that it is return
-        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
-
-        const bytes_read = it.bytesRead();
-        _ = try self.readSlice(bytes_read);
-
-        return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
+        return parser.parseConstantExpression(valtype, code);
     }
 
-    pub fn readFunction(self: *Module, locals: []LocalType, funcidx: usize) !StartWithDepth {
+    pub fn readFunction(self: *Module, locals: []LocalType, funcidx: usize) !Parsed {
         const rd = self.buf.reader();
         const code = self.module[rd.context.pos..];
 
-        var continuation_stack: [1024]usize = [_]usize{0} ** 1024;
-        const code_start = self.parsed_code.items.len;
+        var parser = Parser.init(self);
+        defer parser.deinit();
 
-        var it = Parser.init(self, code, &self.parsed_code, continuation_stack[0..], false);
-        defer it.deinit();
-
-        try it.pushFunction(locals, funcidx);
-
-        while (try it.next()) |instr| {
-            try self.parsed_code.append(instr);
-        }
-
-        const bytes_read = it.bytesRead();
-        _ = try self.readSlice(bytes_read);
-
-        // Patch last end so that it is return
-        self.parsed_code.items[self.parsed_code.items.len - 1] = .@"return";
-
-        return StartWithDepth{ .start = code_start, .max_depth = it.validator.max_depth };
+        return parser.parseFunction(funcidx, locals, code);
     }
 
     pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
@@ -885,7 +832,7 @@ pub const Module = struct {
         return leb.readULEB128(T, rd);
     }
 
-    fn readSlice(self: *Module, count: usize) ![]const u8 {
+    pub fn readSlice(self: *Module, count: usize) ![]const u8 {
         const rd = self.buf.reader();
         const s = rd.context.pos;
 

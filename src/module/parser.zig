@@ -14,36 +14,31 @@ const Range = @import("../rr.zig").Range;
 const Rr = @import("../rr.zig").Rr;
 const MiscRr = @import("../rr.zig").MiscRr;
 
+pub const Parsed = struct {
+    start: usize,
+    max_depth: usize,
+};
+
 pub const Parser = struct {
-    function: []const u8,
-    code: []const u8,
+    function: []const u8 = undefined,
+    code: []const u8 = undefined,
     code_ptr: usize,
-    parsed: *ArrayList(Rr),
     module: *Module,
-    validator: Validator,
+    validator: Validator = undefined,
     params: ?[]const ValType,
     locals: ?[]LocalType,
-    continuation_stack: []usize,
+    continuation_stack: [1024]usize = [_]usize{0} ** 1024,
     continuation_stack_ptr: usize,
-    is_constant: bool,
+    is_constant: bool = false,
     scope: usize,
 
-    pub fn init(module: *Module, function: []const u8, parsed_code: *ArrayList(Rr), continuation_stack: []usize, is_constant: bool) Parser {
+    pub fn init(module: *Module) Parser {
         return Parser{
-            .code = function,
-            .code_ptr = parsed_code.items.len,
-            .function = function,
-            .parsed = parsed_code,
+            .code_ptr = module.parsed_code.items.len,
             .module = module,
             .params = null,
             .locals = null,
-            // TODO: what type of allocator is this?
-            // we want to free this every function parse, so we
-            // want a general purpose allocator, not an arena allocator
-            .validator = Validator.init(module.alloc, is_constant),
-            .continuation_stack = continuation_stack,
             .continuation_stack_ptr = 0,
-            .is_constant = is_constant,
             .scope = 1,
         };
     }
@@ -52,8 +47,73 @@ pub const Parser = struct {
         self.validator.deinit();
     }
 
+    pub fn parseFunction(self: *Parser, funcidx: usize, locals: []LocalType, code: []const u8) !Parsed {
+        self.validator = Validator.init(self.module.alloc, false);
+        self.is_constant = false;
+
+        self.function = code;
+        self.code = code;
+        const code_start = self.module.parsed_code.items.len;
+
+        try self.pushFunction(locals, funcidx);
+
+        while (try self.next()) |instr| {
+            try self.module.parsed_code.append(instr);
+        }
+
+        const bytes_read = self.bytesRead();
+        _ = try self.module.readSlice(bytes_read);
+
+        // Patch last end so that it is return
+        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+
+        return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
+    }
+
+    pub fn parseConstantExpression(self: *Parser, valtype: ValType, code: []const u8) !Parsed {
+        self.validator = Validator.init(self.module.alloc, true);
+        self.is_constant = true;
+
+        self.function = code;
+        self.code = code;
+        const code_start = self.module.parsed_code.items.len;
+
+        const in: [0]ValType = [_]ValType{} ** 0;
+        const out: [1]ValType = [_]ValType{valtype} ** 1;
+
+        try self.validator.pushControlFrame(
+            .block,
+            in[0..0],
+            out[0..1],
+        );
+
+        while (try self.next()) |instr| {
+            switch (instr) {
+                .@"i32.const",
+                .@"i64.const",
+                .@"f32.const",
+                .@"f64.const",
+                .@"global.get",
+                .@"ref.null",
+                .@"ref.func",
+                .end,
+                => |_| {},
+                else => return error.ValidatorConstantExpressionRequired,
+            }
+            try self.module.parsed_code.append(instr);
+        }
+
+        const bytes_read = self.bytesRead();
+        _ = try self.module.readSlice(bytes_read);
+
+        // Patch last end so that it is return
+        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+
+        return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
+    }
+
     // pushFunction initiliase the validator for the current function
-    pub fn pushFunction(self: *Parser, locals: []LocalType, funcidx: usize) !void {
+    fn pushFunction(self: *Parser, locals: []LocalType, funcidx: usize) !void {
         const func = try self.module.functions.lookup(funcidx);
         const functype = try self.module.types.lookup(func.typeidx);
 
@@ -230,9 +290,9 @@ pub const Parser = struct {
             .@"else" => {
                 const parsed_code_offset = try self.peekContinuationStack();
 
-                switch (self.parsed.items[parsed_code_offset]) {
+                switch (self.module.parsed_code.items[parsed_code_offset]) {
                     .if_no_else => |*b| {
-                        self.parsed.items[parsed_code_offset] = Rr{
+                        self.module.parsed_code.items[parsed_code_offset] = Rr{
                             .@"if" = .{
                                 .param_arity = b.param_arity,
                                 .return_arity = b.return_arity,
@@ -252,7 +312,7 @@ pub const Parser = struct {
                 if (self.scope != 0) {
                     const parsed_code_offset = try self.popContinuationStack();
 
-                    switch (self.parsed.items[parsed_code_offset]) {
+                    switch (self.module.parsed_code.items[parsed_code_offset]) {
                         .block => |*b| b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                         .loop => {},
                         .@"if" => |*b| {
