@@ -93,8 +93,7 @@ pub const VirtualMachine = struct {
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
 
-    fn impl_ni(_: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
-        std.debug.print("not implemented: {any}\n", .{code[ip]});
+    fn impl_ni(_: *VirtualMachine, _: usize, _: []Rr) WasmError!void {
         return error.NotImplemented;
     }
 
