@@ -662,6 +662,8 @@ pub const Module = struct {
         const count = try self.readULEB128(u32);
         self.codes.count = count;
 
+        try self.parsed_code.ensureTotalCapacity(count * 32);
+
         if (count == 0) return;
 
         const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
