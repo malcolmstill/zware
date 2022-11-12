@@ -25,7 +25,8 @@ pub fn main() !void {
     // const vm_args = args[2..]; FIXME:
 
     const max_size = 50 * 1024 * 1024;
-    const module_bytes = try fs.cwd().readFileAlloc(arena, wasm_file, max_size);
+    // const module_bytes = try fs.cwd().readFileAlloc(arena, wasm_file, max_size);
+    const module_bytes = @embedFile("zig.wasm");
 
     const cwd = try fs.cwd().openDir(".", .{});
     const cache_dir = try cwd.makeOpenPath("zig1-cache", .{});
