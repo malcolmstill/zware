@@ -13,6 +13,7 @@ const RefType = @import("../valtype.zig").RefType;
 const Range = @import("../rr.zig").Range;
 const Rr = @import("../rr.zig").Rr;
 const MiscRr = @import("../rr.zig").MiscRr;
+const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 
 pub const Parsed = struct {
     start: usize,
@@ -59,6 +60,7 @@ pub const Parser = struct {
 
         while (try self.next()) |instr| {
             try self.module.parsed_code.append(instr);
+            try self.module.instructions.append(VirtualMachine.lookup[@enumToInt(instr)]);
         }
 
         const bytes_read = self.bytesRead();
@@ -101,6 +103,7 @@ pub const Parser = struct {
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.module.parsed_code.append(instr);
+            try self.module.instructions.append(VirtualMachine.lookup[@enumToInt(instr)]);
         }
 
         const bytes_read = self.bytesRead();
