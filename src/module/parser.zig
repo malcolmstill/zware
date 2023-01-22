@@ -68,6 +68,7 @@ pub const Parser = struct {
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
@@ -111,6 +112,7 @@ pub const Parser = struct {
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
