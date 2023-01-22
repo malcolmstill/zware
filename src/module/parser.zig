@@ -305,6 +305,7 @@ pub const Parser = struct {
                                 .else_ip = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                             },
                         };
+                        self.module.instructions.items[parsed_code_offset] = VirtualMachine.@"if";
                     },
                     else => return error.UnexpectedInstruction,
                 }
