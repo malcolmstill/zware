@@ -73,20 +73,10 @@ pub const VirtualMachine = struct {
         };
     }
 
-    pub fn lookupWasiPreopen(self: *VirtualMachine, wasi_fd: os.wasi.fd_t) ?WasiPreopen {
-        return self.wasi_preopens.get(wasi_fd);
-    }
-
-    pub fn getHostFd(self: *VirtualMachine, wasi_fd: wasi.fd_t) os.fd_t {
-        const preopen = self.lookupWasiPreopen(wasi_fd) orelse return wasi_fd;
-
-        return preopen.host_fd;
-    }
-
     pub fn invoke(self: *VirtualMachine, ip: usize) !void {
         const instr = self.inst.module.instructions.items[ip];
 
-        try @call(.auto, instr, .{ self, ip, self.inst.module.parsed_code.items, @as([]Instruction, @ptrCast(self.inst.module.instructions.items)) });
+        try @call(.{}, instr, .{ self, ip, self.inst.module.parsed_code.items, @as([]Instruction, @ptrCast(self.inst.module.instructions.items)) });
     }
 
     // To avoid a recursive definition, define similar function pointer type we will cast to / from
