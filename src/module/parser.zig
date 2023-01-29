@@ -12,30 +12,38 @@ const ValType = @import("../valtype.zig").ValType;
 const RefType = @import("../valtype.zig").RefType;
 const Range = @import("../rr.zig").Range;
 const Rr = @import("../rr.zig").Rr;
+const r = @import("../rr.zig");
+const RrOpcode = @import("../rr.zig").RrOpcode;
 const MiscRr = @import("../rr.zig").MiscRr;
 const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
+const Instruction = VirtualMachine.Instruction;
 
 pub const Parsed = struct {
     start: usize,
     max_depth: usize,
 };
 
+pub const Continuation = struct {
+    ip: [*]Instruction,
+    tag: RrOpcode,
+};
+
 pub const Parser = struct {
     function: []const u8 = undefined,
     code: []const u8 = undefined,
-    code_ptr: usize,
+    code_ptr: [*]Instruction,
     module: *Module,
     validator: Validator = undefined,
     params: ?[]const ValType,
     locals: ?[]LocalType,
-    continuation_stack: [1024]usize = [_]usize{0} ** 1024,
+    continuation_stack: [1024]Continuation = undefined,
     continuation_stack_ptr: usize,
     is_constant: bool = false,
     scope: usize,
 
     pub fn init(module: *Module) Parser {
         return Parser{
-            .code_ptr = module.parsed_code.items.len,
+            .code_ptr = @as([*]Instruction, @ptrCast(&module.instructions.items[module.instructions.items.len - 1])),
             .module = module,
             .params = null,
             .locals = null,
@@ -54,12 +62,11 @@ pub const Parser = struct {
 
         self.function = code;
         self.code = code;
-        const code_start = self.module.parsed_code.items.len;
+        const code_start = self.module.instructions.items.len;
 
         try self.pushFunction(locals, funcidx);
 
         while (try self.next()) |instr| {
-            try self.module.parsed_code.append(instr);
             try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
@@ -67,7 +74,6 @@ pub const Parser = struct {
         _ = try self.module.readSlice(bytes_read);
 
         // Patch last end so that it is return
-        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
         self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
@@ -79,7 +85,7 @@ pub const Parser = struct {
 
         self.function = code;
         self.code = code;
-        const code_start = self.module.parsed_code.items.len;
+        const code_start = self.module.instructions.items.len;
 
         const in: [0]ValType = [_]ValType{} ** 0;
         const out: [1]ValType = [_]ValType{valtype} ** 1;
@@ -103,7 +109,6 @@ pub const Parser = struct {
                 => {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
-            try self.module.parsed_code.append(instr);
             try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
@@ -111,7 +116,6 @@ pub const Parser = struct {
         _ = try self.module.readSlice(bytes_read);
 
         // Patch last end so that it is return
-        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
         self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
@@ -132,19 +136,19 @@ pub const Parser = struct {
         );
     }
 
-    fn pushContinuationStack(self: *Parser, offset: usize) !void {
+    fn pushContinuationStack(self: *Parser, ip: [*]Instruction, tag: RrOpcode) !void {
         defer self.continuation_stack_ptr += 1;
         if (self.continuation_stack_ptr >= self.continuation_stack.len) return error.ContinuationStackOverflow;
 
-        self.continuation_stack[self.continuation_stack_ptr] = offset;
+        self.continuation_stack[self.continuation_stack_ptr] = .{ .ip = ip, .tag = tag };
     }
 
-    fn peekContinuationStack(self: *Parser) !usize {
+    fn peekContinuationStack(self: *Parser) !Continuation {
         if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow; // No test covering this
         return self.continuation_stack[self.continuation_stack_ptr - 1];
     }
 
-    fn popContinuationStack(self: *Parser) !usize {
+    fn popContinuationStack(self: *Parser) !Continuation {
         if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow;
         self.continuation_stack_ptr -= 1;
 
@@ -200,14 +204,14 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                try self.pushContinuationStack(self.code_ptr, .block);
                 self.scope += 1;
 
                 rr = Rr{
                     .block = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .branch_target = 0,
+                        .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
                     },
                 };
             },
@@ -238,14 +242,14 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                try self.pushContinuationStack(self.code_ptr, .loop);
                 self.scope += 1;
 
                 rr = Rr{
                     .loop = .{
                         .param_arity = block_params,
                         .return_arity = block_params,
-                        .branch_target = math.cast(u32, self.code_ptr) orelse return error.FailedCast,
+                        .branch_target = self.code_ptr,
                     },
                 };
             },
@@ -281,31 +285,32 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                // Assume we'll have an if with no else, if we later later parse a corresponding else
+                // we'll patch this
+                try self.pushContinuationStack(self.code_ptr, .if_no_else);
                 self.scope += 1;
 
                 rr = Rr{
                     .if_no_else = .{
                         .param_arity = block_params,
                         .return_arity = block_returns,
-                        .branch_target = 0,
+                        .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
                     },
                 };
             },
             .@"else" => {
-                const parsed_code_offset = try self.peekContinuationStack();
+                const continuation = try self.peekContinuationStack();
 
-                switch (self.module.parsed_code.items[parsed_code_offset]) {
-                    .if_no_else => |*b| {
-                        self.module.parsed_code.items[parsed_code_offset] = Rr{
-                            .@"if" = .{
-                                .param_arity = b.param_arity,
-                                .return_arity = b.return_arity,
-                                .branch_target = 0,
-                                .else_ip = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
-                            },
-                        };
-                        self.module.instructions.items[parsed_code_offset] = VirtualMachine.@"if";
+                switch (continuation.tag) {
+                    .if_no_else => {
+                        const b = @as(r.if_no_else, @bitCast(continuation.ip[1]));
+                        continuation.ip[1] = @as(Instruction, @bitCast(r.@"if"{
+                            .param_arity = b.param_arity,
+                            .return_arity = b.return_arity,
+                            .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
+                            .else_ip = self.code_ptr + 1,
+                        }));
+                        continuation.ip.* = VirtualMachine.@"if";
                     },
                     else => return error.UnexpectedInstruction,
                 }
@@ -319,16 +324,16 @@ pub const Parser = struct {
                     const parsed_code_offset = try self.popContinuationStack();
 
                     switch (self.module.parsed_code.items[parsed_code_offset]) {
-                        .block => |*b| b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
+                        .block => |*b| b.branch_target = self.code_ptr + 1,
                         .loop => {},
                         .@"if" => |*b| {
-                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            b.branch_target = self.code_ptr + 1;
                         },
                         .if_no_else => |*b| {
                             // We have an if with no else, check that this works arity-wise and replace with fast if
                             if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            b.branch_target = self.code_ptr + 1;
                         },
                         else => return error.UnexpectedInstruction,
                     }

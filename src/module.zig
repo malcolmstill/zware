@@ -5,7 +5,9 @@ const math = std.math;
 const unicode = std.unicode;
 const ArrayList = std.ArrayList;
 const VirtualMachine = @import("instance/vm.zig").VirtualMachine;
-const Rr = @import("rr.zig").Rr;
+const Instruction = VirtualMachine.Instruction;
+const InstructionFunction = VirtualMachine.InstructionFunction;
+// const Rr = @import("rr.zig").Rr;
 const RrOpcode = @import("rr.zig").RrOpcode;
 const Instance = @import("instance.zig").Instance;
 const Parser = @import("module/parser.zig").Parser;
@@ -35,7 +37,6 @@ pub const Module = struct {
     function_index_start: ?usize = null,
     data_count: ?u32 = null,
     element_init_offsets: ArrayList(usize),
-    parsed_code: ArrayList(Rr),
     instructions: ArrayList(VirtualMachine.InstructionFunction),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
@@ -58,7 +59,6 @@ pub const Module = struct {
             .codes = Section(Code).init(alloc),
             .datas = Section(DataSegment).init(alloc),
             .element_init_offsets = ArrayList(usize).init(alloc),
-            .parsed_code = ArrayList(Rr).init(alloc),
             .instructions = ArrayList(VirtualMachine.InstructionFunction).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
@@ -80,7 +80,6 @@ pub const Module = struct {
         self.datas.deinit();
 
         self.element_init_offsets.deinit();
-        self.parsed_code.deinit();
         self.instructions.deinit();
         self.local_types.deinit();
         self.br_table_indices.deinit();
@@ -100,8 +99,7 @@ pub const Module = struct {
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
         // See https://github.com/malcolmstill/zware/pull/133
-        try self.parsed_code.append(.@"return");
-        try self.instructions.append(VirtualMachine.@"return");
+        try self.instructions.append(@as(InstructionFunction, @ptrCast(&VirtualMachine.@"return")));
 
         var i: usize = 0;
         while (true) : (i += 1) {
@@ -479,10 +477,8 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -512,10 +508,8 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -547,10 +541,8 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -579,10 +571,8 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -628,7 +618,7 @@ pub const Module = struct {
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
-                        const init_offset = self.parsed_code.items.len;
+                        const init_offset = self.instructions.items.len;
                         _ = try self.readConstantExpression(.FuncRef);
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -675,7 +665,7 @@ pub const Module = struct {
         const count = try self.readULEB128(u32);
         self.codes.count = count;
 
-        try self.parsed_code.ensureTotalCapacity(count * 32);
+        try self.instructions.ensureTotalCapacity(count * 32);
 
         if (count == 0) return;
 
