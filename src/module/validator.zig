@@ -84,11 +84,11 @@ pub const Validator = struct {
             if (!(arity <= 64)) return error.TODOAllocation;
 
             var temp = [_]Type{.{ .Known = .I32 }} ** 64; // TODO: allocate some memory for this
-            for (labelTypes(frame_n)) |_, i| {
+            for (labelTypes(frame_n), 0..) |_, i| {
                 temp[i] = try v.popOperandExpecting(Type{ .Known = labelTypes(frame_n)[arity - i - 1] });
             }
 
-            for (labelTypes(frame_n)) |_, i| {
+            for (labelTypes(frame_n), 0..) |_, i| {
                 try v.pushOperand(temp[arity - 1 - i]);
             }
         }
@@ -581,7 +581,7 @@ pub const Validator = struct {
 
     fn popOperands(v: *Validator, operands: []const ValType) !void {
         const len = operands.len;
-        for (operands) |_, i| {
+        for (operands, 0..) |_, i| {
             _ = try v.popOperandExpecting(Type{ .Known = operands[len - i - 1] });
         }
     }

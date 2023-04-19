@@ -302,7 +302,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             if (mem.eql(u8, value.value, "null")) {
                                 in[i] = VirtualMachine.REF_NULL;
                             } else {
@@ -318,7 +318,7 @@ pub fn main() anyerror!void {
                             return err;
                         };
 
-                        for (expected) |result, i| {
+                        for (expected, 0..) |result, i| {
                             const valtype = try valueTypeFromString(result.@"type");
                             switch (valtype) {
                                 .I32, .I64, .F32, .F64 => {
@@ -380,7 +380,7 @@ pub fn main() anyerror!void {
                                 if (mem.eql(u8, exprt.name, field)) {
                                     const global = try registered_inst.getGlobal(exprt.index);
 
-                                    for (expected) |result, j| {
+                                    for (expected, 0..) |result, j| {
                                         if (j > 0) return error.ExpectedOneResult;
                                         const result_value = try fmt.parseInt(u64, result.value, 10);
 
@@ -391,11 +391,11 @@ pub fn main() anyerror!void {
                                 }
                             }
                         } else {
-                            for (current_instance.module.exports.list.items) |exprt, i| {
+                            for (current_instance.module.exports.list.items, 0..) |exprt, i| {
                                 if (mem.eql(u8, exprt.name, field)) {
                                     const global = try current_instance.getGlobal(i);
 
-                                    for (expected) |result, j| {
+                                    for (expected, 0..) |result, j| {
                                         if (j > 0) return error.ExpectedOneResult;
                                         const result_value = try fmt.parseInt(u64, result.value, 10);
                                         if (global.value != result_value) {
@@ -434,7 +434,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             if (mem.eql(u8, value.value, "null")) {
                                 in[i] = VirtualMachine.REF_NULL;
                             } else {
@@ -779,7 +779,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             const arg = try fmt.parseInt(u64, value.value, 10);
                             in[i] = arg;
                         }
