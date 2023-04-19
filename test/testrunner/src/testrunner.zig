@@ -319,7 +319,7 @@ pub fn main() anyerror!void {
                         };
 
                         for (expected, 0..) |result, i| {
-                            const valtype = try valueTypeFromString(result.@"type");
+                            const valtype = try valueTypeFromString(result.type);
                             switch (valtype) {
                                 .I32, .I64, .F32, .F64 => {
                                     if (mem.startsWith(u8, result.value, "nan:")) {
@@ -914,58 +914,58 @@ const Wast = struct {
 };
 
 const Command = union(enum) { module: struct {
-    comptime @"type": []const u8 = "module",
+    comptime type: []const u8 = "module",
     line: usize,
     name: ?[]const u8 = null,
     filename: []const u8,
 }, assert_return: struct {
-    comptime @"type": []const u8 = "assert_return",
+    comptime type: []const u8 = "assert_return",
     line: usize,
     action: Action,
     expected: []const Value,
 }, assert_trap: struct {
-    comptime @"type": []const u8 = "assert_trap",
+    comptime type: []const u8 = "assert_trap",
     line: usize,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
 }, assert_malformed: struct {
-    comptime @"type": []const u8 = "assert_malformed",
+    comptime type: []const u8 = "assert_malformed",
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
 }, assert_invalid: struct {
-    comptime @"type": []const u8 = "assert_invalid",
+    comptime type: []const u8 = "assert_invalid",
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
 }, assert_exhaustion: struct {
-    comptime @"type": []const u8 = "assert_exhaustion",
+    comptime type: []const u8 = "assert_exhaustion",
     line: usize,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
 }, assert_unlinkable: struct {
-    comptime @"type": []const u8 = "assert_unlinkable",
+    comptime type: []const u8 = "assert_unlinkable",
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
 }, assert_uninstantiable: struct {
-    comptime @"type": []const u8 = "assert_uninstantiable",
+    comptime type: []const u8 = "assert_uninstantiable",
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
 }, action: struct {
-    comptime @"type": []const u8 = "action",
+    comptime type: []const u8 = "action",
     line: usize,
     action: Action,
     expected: []const ValueTrap,
 }, register: struct {
-    comptime @"type": []const u8 = "register",
+    comptime type: []const u8 = "register",
     line: usize,
     name: ?[]const u8 = null,
     as: []const u8,
@@ -973,13 +973,13 @@ const Command = union(enum) { module: struct {
 
 const Action = union(enum) {
     invoke: struct {
-        comptime @"type": []const u8 = "invoke",
+        comptime type: []const u8 = "invoke",
         field: []const u8,
         module: ?[]const u8 = null,
         args: []const Value,
     },
     get: struct {
-        comptime @"type": []const u8 = "get",
+        comptime type: []const u8 = "get",
         field: []const u8,
         module: ?[]const u8 = null,
     },
@@ -988,10 +988,10 @@ const Action = union(enum) {
 // const Action = ;
 
 const Value = struct {
-    @"type": []const u8,
+    type: []const u8,
     value: []const u8,
 };
 
 const ValueTrap = struct {
-    @"type": []const u8,
+    type: []const u8,
 };
