@@ -61,7 +61,7 @@ pub const VirtualMachine = struct {
     pub fn invoke(self: *VirtualMachine, ip: usize) !void {
         const instr = self.inst.module.parsed_code.items[ip];
 
-        try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
+        try @call(.auto, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
     }
 
     const InstructionFunction = *const fn (*VirtualMachine, usize, []Rr) WasmError!void;
@@ -88,7 +88,7 @@ pub const VirtualMachine = struct {
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip];
 
-        return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
+        return try @call(.always_tail, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
@@ -2074,7 +2074,7 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip].misc;
 
-        return try @call(.{ .modifier = .always_tail }, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
+        return try @call(.always_tail, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
