@@ -35,7 +35,7 @@ pub const Memory = struct {
 
         const old_size = self.data.items.len;
         _ = try self.data.resize(self.data.items.len + num_pages);
-        mem.set(u8, self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * (old_size + num_pages)], 0);
+        @memset(self.asSlice()[PAGE_SIZE * old_size .. PAGE_SIZE * (old_size + num_pages)], 0);
         return old_size;
     }
 
