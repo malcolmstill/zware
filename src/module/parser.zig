@@ -174,7 +174,7 @@ pub const Parser = struct {
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
 
                 if (block_type >= 0) {
-                    const funcidx = @intCast(u32, block_type);
+                    const funcidx: u32 = @intCast(block_type);
                     const functype = try self.module.types.lookup(funcidx);
                     block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
                     block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
@@ -212,7 +212,7 @@ pub const Parser = struct {
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const funcidx = @intCast(u32, block_type);
+                    const funcidx: u32 = @intCast(block_type);
                     const functype = try self.module.types.lookup(funcidx);
                     block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
                     block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
@@ -255,7 +255,7 @@ pub const Parser = struct {
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
                 if (block_type >= 0) {
-                    const funcidx = @intCast(u32, block_type);
+                    const funcidx: u32 = @intCast(block_type);
                     const functype = try self.module.types.lookup(funcidx);
                     block_params = math.cast(u16, functype.params.len) orelse return error.FailedCast;
                     block_returns = math.cast(u16, functype.results.len) orelse return error.FailedCast;
@@ -554,11 +554,11 @@ pub const Parser = struct {
                 rr = Rr{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
-                const float_const = @bitCast(f32, try self.readU32());
+                const float_const: f32 = @bitCast(try self.readU32());
                 rr = Rr{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
-                const float_const = @bitCast(f64, try self.readU64());
+                const float_const: f64 = @bitCast(try self.readU64());
                 rr = Rr{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {

@@ -22,7 +22,7 @@ pub const Memory = struct {
 
     // Return the size of the memory (in pages)
     pub fn size(self: *Memory) u32 {
-        return @truncate(u32, self.data.items.len);
+        return @truncate(self.data.items.len);
     }
 
     pub fn sizeBytes(self: *Memory) u33 {
@@ -65,14 +65,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little),
+            => return mem.readInt(T, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[page][page_offset])), .Little),
             f32 => {
-                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
-                return @bitCast(f32, x);
+                const x = mem.readInt(u32, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[page][page_offset])), .Little);
+                return @bitCast(x);
             },
             f64 => {
-                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[page][page_offset]), .Little);
-                return @bitCast(f64, x);
+                const x = mem.readInt(u64, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[page][page_offset])), .Little);
+                return @bitCast(x);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }
@@ -94,14 +94,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[page][page_offset]), value, .Little),
+            => std.mem.writeInt(T, @as(*[@sizeOf(T)]u8, @ptrCast(&self.data.items[page][page_offset])), value, .Little),
             f32 => {
-                const x = @bitCast(u32, value);
-                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[page][page_offset]), x, .Little);
+                const x: u32 = @bitCast(value);
+                std.mem.writeInt(u32, @as(*[@sizeOf(u32)]u8, @ptrCast(&self.data.items[page][page_offset])), x, .Little);
             },
             f64 => {
-                const x = @bitCast(u64, value);
-                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[page][page_offset]), x, .Little);
+                const x: u64 = @bitCast(value);
+                std.mem.writeInt(u64, @as(*[@sizeOf(u64)]u8, @ptrCast(&self.data.items[page][page_offset])), x, .Little);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }
@@ -109,7 +109,7 @@ pub const Memory = struct {
 
     pub fn asSlice(self: *Memory) []u8 {
         var slice: []u8 = undefined;
-        slice.ptr = if (self.data.items.len > 0) @ptrCast([*]u8, &self.data.items[0][0]) else undefined;
+        slice.ptr = if (self.data.items.len > 0) @ptrCast(&self.data.items[0][0]) else undefined;
         slice.len = PAGE_SIZE * self.data.items.len;
         return slice;
     }

@@ -250,7 +250,7 @@ pub const Instance = struct {
 
             for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count], 0..) |expr, j| {
                 const funcaddr = try self.invokeExpression(expr, u32, .{});
-                try elem.set(@intCast(u32, j), funcaddr);
+                try elem.set(@intCast(j), funcaddr);
             }
 
             if (elemtype.mode != .Passive) {
@@ -265,7 +265,7 @@ pub const Instance = struct {
                 if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
                 for (elem.elem, 0..) |funcaddr, i| {
-                    try table.set(@intCast(u32, offset + i), funcaddr);
+                    try table.set(@intCast(offset + i), funcaddr);
                 }
             }
         }

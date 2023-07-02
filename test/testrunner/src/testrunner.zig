@@ -323,10 +323,10 @@ pub fn main() anyerror!void {
                             switch (valtype) {
                                 .I32, .I64, .F32, .F64 => {
                                     if (mem.startsWith(u8, result.value, "nan:")) {
-                                        if (valtype == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                        if (valtype == .F32 and math.isNan(@as(f32, @bitCast(@as(u32, @truncate(out[i])))))) {
                                             continue;
                                         }
-                                        if (valtype == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                        if (valtype == .F64 and math.isNan(@as(f64, @bitCast(out[i])))) {
                                             continue;
                                         }
 
