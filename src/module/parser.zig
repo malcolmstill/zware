@@ -97,7 +97,7 @@ pub const Parser = struct {
                 .@"ref.null",
                 .@"ref.func",
                 .end,
-                => |_| {},
+                => {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.module.parsed_code.append(instr);
