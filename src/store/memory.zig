@@ -39,7 +39,10 @@ pub const Memory = struct {
         const old_size_in_bytes = self.data.items.len;
         const old_size_in_pages = self.size();
         _ = try self.data.resize(self.data.items.len + PAGE_SIZE * num_pages);
+
+        // Zero memory. FIXME: I don't think this is required (maybe do this only in debug build)
         mem.set(u8, self.data.items[old_size_in_bytes .. old_size_in_bytes + PAGE_SIZE * num_pages], 0);
+
         return old_size_in_pages;
     }
 
@@ -107,7 +110,7 @@ pub const Memory = struct {
         }
     }
 
-    pub fn asSlice(self: *Memory) []u8 {
+    pub fn memory(self: *Memory) []u8 {
         return self.data.items[0..];
     }
 };
@@ -152,7 +155,7 @@ test "Memory test" {
     try testing.expectEqual(@as(u8, 0xAD), try mem0.read(u8, 0, 0xFFFF));
     try testing.expectEqual(@as(u8, 0xDE), try mem0.read(u8, 0, 0xFFFF + 1));
     try testing.expectEqual(@as(u16, 0xDEAD), try mem0.read(u16, 0, 0xFFFF));
-    const slice = mem0.asSlice();
+    const slice = mem0.memory();
     try testing.expectEqual(@as(u8, 0xAD), slice[0xFFFF]);
     try testing.expectEqual(@as(u8, 0xDE), slice[0xFFFF + 1]);
 

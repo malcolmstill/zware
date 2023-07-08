@@ -724,7 +724,7 @@ pub const VirtualMachine = struct {
     fn @"memory.size"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const memory = try self.inst.getMemory(0);
 
-        self.pushOperandNoCheck(u32, @intCast(u32, memory.data.items.len));
+        self.pushOperandNoCheck(u32, @intCast(u32, memory.size()));
 
         return dispatch(self, ip + 1, code);
     }
