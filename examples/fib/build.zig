@@ -13,6 +13,7 @@ pub fn build(b: *Builder) void {
     exe.addAnonymousModule("zware", .{
         .source_file = .{ .path = "../../src/main.zig" },
     });
+    b.installArtifact(exe);
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
