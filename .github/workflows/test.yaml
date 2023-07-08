@@ -60,3 +60,13 @@ jobs:
         with:
           version: master
       - run: zig fmt --check src/*.zig
+  fib:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - uses: goto-bus-stop/setup-zig@v1
+        with:
+          version: master
+      - name: Build fib
+        working-directory: ./examples/fib
+        run: zig build

@@ -43,8 +43,11 @@ pub fn main() !void {
     const n = 39;
     var in = [1]u64{n};
     var out = [1]u64{0};
+
     try instance.invoke("fib", in[0..], out[0..], .{});
-    std.debug.print("fib({}) = {}\n", .{ n, @bitCast(i32, @truncate(u32, out[0])) });
+
+    const result: i32 = @bitCast(@as(u32, @truncate(out[0])));
+    std.debug.print("fib({}) = {}\n", .{ n, result });
 }
 ```
 
