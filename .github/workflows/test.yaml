@@ -29,7 +29,6 @@ jobs:
         working-directory: ./test/testrunner
         run: zig build --prefix ./
       - name: Run testsuite
-        working-directory: ./test/
         run: bash test/run-generated.sh
   parsecheck:
     runs-on: ubuntu-latest
