@@ -724,7 +724,7 @@ pub const VirtualMachine = struct {
     fn @"memory.size"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const memory = try self.inst.getMemory(0);
 
-        self.pushOperandNoCheck(u32, @as(u32, @intCast(memory.data.items.len)));
+        self.pushOperandNoCheck(u32, @as(u32, @intCast(memory.size())));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2298,24 +2298,17 @@ pub const VirtualMachine = struct {
 
         if (@as(u33, src) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
         if (@as(u33, dest) + @as(u33, n) > mem_size) return error.OutOfBoundsMemoryAccess;
+
         if (n == 0) {
             return dispatch(self, ip + 1, code);
         }
 
+        // FIXME: move initial bounds check into Memory implementation
+        const data = memory.memory();
         if (dest <= src) {
-            var i: u32 = 0;
-            while (i < n) : (i += 1) {
-                // FIXME: no check
-                // FIXME: take single address which is u33 (for write / read)
-                try memory.write(u8, 0, dest + i, try memory.read(u8, 0, src + i));
-            }
+            memory.uncheckedCopy(dest, data[src..src+n]);
         } else {
-            var i: u32 = 0;
-            while (i < n) : (i += 1) {
-                // FIXME: no check
-                // FIXME: take single address which is u33?
-                try memory.write(u8, 0, dest + n - 1 - i, try memory.read(u8, 0, src + n - 1 - i));
-            }
+            memory.uncheckedCopyBackwards(dest, data[src..src+n]);
         }
 
         return dispatch(self, ip + 1, code);
@@ -2334,12 +2327,7 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        var i: u32 = 0;
-        while (i < n) : (i += 1) {
-            // FIXME: no check
-            // FIXME: take single address which is u33 (for write / read)
-            try memory.write(u8, 0, dest + i, @as(u8, @truncate(value)));
-        }
+        memory.uncheckedFill(dest, n, @as(u8, @truncate(value)));
 
         return dispatch(self, ip + 1, code);
     }
