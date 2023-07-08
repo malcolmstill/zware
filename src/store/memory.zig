@@ -29,7 +29,7 @@ pub const Memory = struct {
 
     pub fn sizeBytes(self: *Memory) u33 {
         // FIXME: add assertion that len fits in u33
-        return @truncate(u33, self.data.items.len);
+        return @truncate(self.data.items.len);
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
