@@ -52,7 +52,7 @@ pub const Memory = struct {
     }
 
    pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
-        mem.set(u8, self.data.items[dst_address .. dst_address + n], value);
+        @memset(self.data.items[dst_address .. dst_address + n], value);
     }
 
     pub fn uncheckedCopy(self: *Memory, dst_address: u32, data: []const u8) void {
