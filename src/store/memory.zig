@@ -1,6 +1,5 @@
 const std = @import("std");
 const mem = std.mem;
-const math = std.math;
 const ArrayList = std.ArrayList;
 
 pub const MAX_PAGES = 64 * 1024;
@@ -25,23 +24,23 @@ pub const Memory = struct {
     pub fn size(self: *Memory) u32 {
         std.debug.assert(self.data.items.len % PAGE_SIZE == 0);
 
-        return @truncate(u32, self.data.items.len / PAGE_SIZE);
+        return @truncate(self.data.items.len / PAGE_SIZE);
     }
 
     pub fn sizeBytes(self: *Memory) u33 {
         // FIXME: add assertion that len fits in u33
-        return @truncate(u33, self.data.items.len);
+        return @truncate(self.data.items.len);
     }
 
     pub fn grow(self: *Memory, num_pages: u32) !usize {
-        if (self.size() + num_pages > math.min(self.max orelse MAX_PAGES, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
+        if (self.size() + num_pages > @min(self.max orelse MAX_PAGES, MAX_PAGES)) return error.OutOfBoundsMemoryAccess;
 
         const old_size_in_bytes = self.data.items.len;
         const old_size_in_pages = self.size();
         _ = try self.data.resize(self.data.items.len + PAGE_SIZE * num_pages);
 
         // Zero memory. FIXME: I don't think this is required (maybe do this only in debug build)
-        mem.set(u8, self.data.items[old_size_in_bytes .. old_size_in_bytes + PAGE_SIZE * num_pages], 0);
+        @memset(self.data.items[old_size_in_bytes .. old_size_in_bytes + PAGE_SIZE * num_pages], 0);
 
         return old_size_in_pages;
     }
@@ -53,7 +52,7 @@ pub const Memory = struct {
     }
 
    pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
-        mem.set(u8, self.data.items[dst_address .. dst_address + n], value);
+        @memset(self.data.items[dst_address .. dst_address + n], value);
     }
 
     pub fn uncheckedCopy(self: *Memory, dst_address: u32, data: []const u8) void {
@@ -83,14 +82,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => return mem.readInt(T, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[effective_address]), .Little),
+            => return mem.readInt(T, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little),
             f32 => {
-                const x = mem.readInt(u32, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[effective_address]), .Little);
-                return @bitCast(f32, x);
+                const x = mem.readInt(u32, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little);
+                return @bitCast(x);
             },
             f64 => {
-                const x = mem.readInt(u64, @ptrCast(*const [@sizeOf(T)]u8, &self.data.items[effective_address]), .Little);
-                return @bitCast(f64, x);
+                const x = mem.readInt(u64, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little);
+                return @bitCast(x);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }
@@ -109,14 +108,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => std.mem.writeInt(T, @ptrCast(*[@sizeOf(T)]u8, &self.data.items[effective_address]), value, .Little),
+            => std.mem.writeInt(T, @as(*[@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), value, .Little),
             f32 => {
-                const x = @bitCast(u32, value);
-                std.mem.writeInt(u32, @ptrCast(*[@sizeOf(u32)]u8, &self.data.items[effective_address]), x, .Little);
+                const x: u32 = @bitCast(value);
+                std.mem.writeInt(u32, @as(*[@sizeOf(u32)]u8, @ptrCast(&self.data.items[effective_address])), x, .Little);
             },
             f64 => {
-                const x = @bitCast(u64, value);
-                std.mem.writeInt(u64, @ptrCast(*[@sizeOf(u64)]u8, &self.data.items[effective_address]), x, .Little);
+                const x: u64 = @bitCast(value);
+                std.mem.writeInt(u64, @as(*[@sizeOf(u64)]u8, @ptrCast(&self.data.items[effective_address])), x, .Little);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }

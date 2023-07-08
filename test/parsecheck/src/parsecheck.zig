@@ -29,7 +29,7 @@ pub fn main() !void {
 
     var file_count: usize = 0;
     while (try it.next()) |entry| {
-        if (entry.kind == .File) file_count += 1;
+        if (entry.kind == .file) file_count += 1;
         if (mem.endsWith(u8, entry.name, ".wasm")) {
             std.log.info("{s}", .{entry.name});
             var arena = ArenaAllocator.init(gpa.allocator());

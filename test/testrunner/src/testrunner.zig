@@ -87,15 +87,8 @@ pub fn main() anyerror!void {
     // 2. Parse json and find .wasm file
     const json_string = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
 
-    // See https://github.com/ziglang/zig/issues/12624
-    comptime {
-        @setEvalBranchQuota(100000);
-        _ = json.ParseError([]const Command);
-        _ = json.ParseError(Wast);
-    }
-
-    var ts = json.TokenStream.init(json_string);
-    const r = try json.parse(Wast, &ts, json.ParseOptions{ .allocator = alloc });
+    const dynamic_tree = try std.json.parseFromSliceLeaky(std.json.Value, alloc, json_string, .{});
+    const r = try std.json.parseFromValueLeaky(Wast, alloc, dynamic_tree, .{});
 
     // 2.a. Find the wasm file
     var wasm_filename: []const u8 = undefined;
@@ -302,7 +295,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             if (mem.eql(u8, value.value, "null")) {
                                 in[i] = VirtualMachine.REF_NULL;
                             } else {
@@ -318,15 +311,15 @@ pub fn main() anyerror!void {
                             return err;
                         };
 
-                        for (expected) |result, i| {
-                            const valtype = try valueTypeFromString(result.@"type");
+                        for (expected, 0..) |result, i| {
+                            const valtype = try valueTypeFromString(result.type);
                             switch (valtype) {
                                 .I32, .I64, .F32, .F64 => {
                                     if (mem.startsWith(u8, result.value, "nan:")) {
-                                        if (valtype == .F32 and math.isNan(@bitCast(f32, @truncate(u32, out[i])))) {
+                                        if (valtype == .F32 and math.isNan(@as(f32, @bitCast(@as(u32, @truncate(out[i])))))) {
                                             continue;
                                         }
-                                        if (valtype == .F64 and math.isNan(@bitCast(f64, out[i]))) {
+                                        if (valtype == .F64 and math.isNan(@as(f64, @bitCast(out[i])))) {
                                             continue;
                                         }
 
@@ -380,7 +373,7 @@ pub fn main() anyerror!void {
                                 if (mem.eql(u8, exprt.name, field)) {
                                     const global = try registered_inst.getGlobal(exprt.index);
 
-                                    for (expected) |result, j| {
+                                    for (expected, 0..) |result, j| {
                                         if (j > 0) return error.ExpectedOneResult;
                                         const result_value = try fmt.parseInt(u64, result.value, 10);
 
@@ -391,11 +384,11 @@ pub fn main() anyerror!void {
                                 }
                             }
                         } else {
-                            for (current_instance.module.exports.list.items) |exprt, i| {
+                            for (current_instance.module.exports.list.items, 0..) |exprt, i| {
                                 if (mem.eql(u8, exprt.name, field)) {
                                     const global = try current_instance.getGlobal(i);
 
-                                    for (expected) |result, j| {
+                                    for (expected, 0..) |result, j| {
                                         if (j > 0) return error.ExpectedOneResult;
                                         const result_value = try fmt.parseInt(u64, result.value, 10);
                                         if (global.value != result_value) {
@@ -434,7 +427,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             if (mem.eql(u8, value.value, "null")) {
                                 in[i] = VirtualMachine.REF_NULL;
                             } else {
@@ -779,7 +772,7 @@ pub fn main() anyerror!void {
                         var out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
-                        for (action.invoke.args) |value, i| {
+                        for (action.invoke.args, 0..) |value, i| {
                             const arg = try fmt.parseInt(u64, value.value, 10);
                             in[i] = arg;
                         }
@@ -913,85 +906,162 @@ const Wast = struct {
     commands: []const Command,
 };
 
-const Command = union(enum) { module: struct {
-    comptime @"type": []const u8 = "module",
+const Command = union(enum) {
+    module: CommandModule,
+    assert_return: CommandAssertReturn,
+    assert_trap: CommandAssertTrap,
+    assert_malformed: CommandAssertMalformed,
+    assert_invalid: CommandAssertInvalid,
+    assert_exhaustion: CommandAssertExhaustion,
+    assert_unlinkable: CommandAssertUnlinkable,
+    assert_uninstantiable: CommandAssertUninstantiable,
+    action: CommandAction,
+    register: CommandRegister,
+
+    pub fn jsonParseFromValue(allocator: mem.Allocator, source: std.json.Value, options: std.json.ParseOptions) !@This() {
+        if (source != .object) return error.UnexpectedToken;
+
+        const type_value = source.object.get("type") orelse return error.UnexpectedToken;
+        if (type_value != .string) return error.UnexpectedToken;
+
+        const type_str = type_value.string;
+        var child_options = options;
+
+        child_options.ignore_unknown_fields = true;
+
+        if (std.mem.eql(u8, type_str, "module")) return .{ .module = try std.json.parseFromValueLeaky(CommandModule, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_return")) return .{ .assert_return = try std.json.parseFromValueLeaky(CommandAssertReturn, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_trap")) return .{ .assert_trap = try std.json.parseFromValueLeaky(CommandAssertTrap, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_malformed")) return .{ .assert_malformed = try std.json.parseFromValueLeaky(CommandAssertMalformed, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_invalid")) return .{ .assert_invalid = try std.json.parseFromValueLeaky(CommandAssertInvalid, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_exhaustion")) return .{ .assert_exhaustion = try std.json.parseFromValueLeaky(CommandAssertExhaustion, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_unlinkable")) return .{ .assert_unlinkable = try std.json.parseFromValueLeaky(CommandAssertUnlinkable, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "assert_uninstantiable")) return .{ .assert_uninstantiable = try std.json.parseFromValueLeaky(CommandAssertUninstantiable, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "action")) return .{ .action = try std.json.parseFromValueLeaky(CommandAction, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "register")) return .{ .register = try std.json.parseFromValueLeaky(CommandRegister, allocator, source, child_options) };
+
+        return error.UnexpectedToken;
+    }
+};
+
+const CommandModule = struct {
+    // type: "module"
     line: usize,
     name: ?[]const u8 = null,
     filename: []const u8,
-}, assert_return: struct {
-    comptime @"type": []const u8 = "assert_return",
+};
+
+const CommandAssertReturn = struct {
+    // type: "assert_return"
     line: usize,
     action: Action,
     expected: []const Value,
-}, assert_trap: struct {
-    comptime @"type": []const u8 = "assert_trap",
+};
+
+const CommandAssertTrap = struct {
+    // type: "assert_trap"
     line: usize,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
-}, assert_malformed: struct {
-    comptime @"type": []const u8 = "assert_malformed",
+};
+
+const CommandAssertMalformed = struct {
+    // type: "assert_malformed"
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
-}, assert_invalid: struct {
-    comptime @"type": []const u8 = "assert_invalid",
+};
+
+const CommandAssertInvalid = struct {
+    // type: "assert_invalid"
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
-}, assert_exhaustion: struct {
-    comptime @"type": []const u8 = "assert_exhaustion",
+};
+
+const CommandAssertExhaustion = struct {
+    // type: "assert_exhaustion"
     line: usize,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
-}, assert_unlinkable: struct {
-    comptime @"type": []const u8 = "assert_unlinkable",
+};
+
+const CommandAssertUnlinkable = struct {
+    // type: "assert_unlinkable"
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
-}, assert_uninstantiable: struct {
-    comptime @"type": []const u8 = "assert_uninstantiable",
+};
+
+const CommandAssertUninstantiable = struct {
+    // type: "assert_uninstantiable"
     line: usize,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
-}, action: struct {
-    comptime @"type": []const u8 = "action",
+};
+
+const CommandAction = struct {
+    // type: "action"
     line: usize,
     action: Action,
     expected: []const ValueTrap,
-}, register: struct {
-    comptime @"type": []const u8 = "register",
+};
+
+const CommandRegister = struct {
+    // type: "register"
     line: usize,
     name: ?[]const u8 = null,
     as: []const u8,
-} };
-
-const Action = union(enum) {
-    invoke: struct {
-        comptime @"type": []const u8 = "invoke",
-        field: []const u8,
-        module: ?[]const u8 = null,
-        args: []const Value,
-    },
-    get: struct {
-        comptime @"type": []const u8 = "get",
-        field: []const u8,
-        module: ?[]const u8 = null,
-    },
 };
 
-// const Action = ;
+
+const Action = union(enum) {
+    invoke: ActionInvoke,
+    get: ActionGet,
+
+    pub fn jsonParseFromValue(allocator: mem.Allocator, source: std.json.Value, options: std.json.ParseOptions) !@This() {
+        if (source != .object) return error.UnexpectedToken;
+
+        const type_value = source.object.get("type") orelse return error.UnexpectedToken;
+        if (type_value != .string) return error.UnexpectedToken;
+
+        const type_str = type_value.string;
+        var child_options = options;
+
+        child_options.ignore_unknown_fields = true;
+
+        if (std.mem.eql(u8, type_str, "invoke")) return .{ .invoke = try std.json.parseFromValueLeaky(ActionInvoke, allocator, source, child_options) };
+        if (std.mem.eql(u8, type_str, "get")) return .{ .get = try std.json.parseFromValueLeaky(ActionGet, allocator, source, child_options) };
+
+        return error.UnexpectedToken;
+    }
+};
+
+const ActionInvoke = struct {
+    // type: "invoke"
+    field: []const u8,
+    module: ?[]const u8 = null,
+    args: []const Value,
+};
+
+const ActionGet = struct {
+    // type: "get"
+    field: []const u8,
+    module: ?[]const u8 = null,
+};
+
 
 const Value = struct {
-    @"type": []const u8,
+    type: []const u8,
     value: []const u8,
 };
 
 const ValueTrap = struct {
-    @"type": []const u8,
+    type: []const u8,
 };

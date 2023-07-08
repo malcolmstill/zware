@@ -61,7 +61,7 @@ pub const VirtualMachine = struct {
     pub fn invoke(self: *VirtualMachine, ip: usize) !void {
         const instr = self.inst.module.parsed_code.items[ip];
 
-        try @call(.{}, lookup[@enumToInt(instr)], .{ self, ip, self.inst.module.parsed_code.items });
+        try @call(.auto, lookup[@intFromEnum(instr)], .{ self, ip, self.inst.module.parsed_code.items });
     }
 
     const InstructionFunction = *const fn (*VirtualMachine, usize, []Rr) WasmError!void;
@@ -88,7 +88,7 @@ pub const VirtualMachine = struct {
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip];
 
-        return try @call(.{ .modifier = .always_tail }, lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
+        return try @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
@@ -665,7 +665,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].@"i32.store8";
 
         const memory = try self.inst.getMemory(0);
-        const value = @truncate(u8, self.popOperand(u32));
+        const value: u8 = @truncate(self.popOperand(u32));
         const address = self.popOperand(u32);
 
         try memory.write(u8, meta.offset, address, value);
@@ -677,7 +677,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].@"i32.store16";
 
         const memory = try self.inst.getMemory(0);
-        const value = @truncate(u16, self.popOperand(u32));
+        const value: u16 = @truncate(self.popOperand(u32));
         const address = self.popOperand(u32);
 
         try memory.write(u16, meta.offset, address, value);
@@ -689,7 +689,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].@"i64.store8";
 
         const memory = try self.inst.getMemory(0);
-        const value = @truncate(u8, self.popOperand(u64));
+        const value: u8 = @truncate(self.popOperand(u64));
         const address = self.popOperand(u32);
 
         try memory.write(u8, meta.offset, address, value);
@@ -701,7 +701,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].@"i64.store16";
 
         const memory = try self.inst.getMemory(0);
-        const value = @truncate(u16, self.popOperand(u64));
+        const value: u16 = @truncate(self.popOperand(u64));
         const address = self.popOperand(u32);
 
         try memory.write(u16, meta.offset, address, value);
@@ -713,7 +713,7 @@ pub const VirtualMachine = struct {
         const meta = code[ip].@"i64.store32";
 
         const memory = try self.inst.getMemory(0);
-        const value = @truncate(u32, self.popOperand(u64));
+        const value: u32 = @truncate(self.popOperand(u64));
         const address = self.popOperand(u32);
 
         try memory.write(u32, meta.offset, address, value);
@@ -724,7 +724,7 @@ pub const VirtualMachine = struct {
     fn @"memory.size"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const memory = try self.inst.getMemory(0);
 
-        self.pushOperandNoCheck(u32, @intCast(u32, memory.size()));
+        self.pushOperandNoCheck(u32, @as(u32, @intCast(memory.size())));
 
         return dispatch(self, ip + 1, code);
     }
@@ -734,7 +734,7 @@ pub const VirtualMachine = struct {
 
         const num_pages = self.popOperand(u32);
         if (memory.grow(num_pages)) |old_size| {
-            self.pushOperandNoCheck(u32, @intCast(u32, old_size));
+            self.pushOperandNoCheck(u32, @as(u32, @intCast(old_size)));
         } else |_| {
             self.pushOperandNoCheck(i32, @as(i32, -1));
         }
@@ -1534,7 +1534,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(f32, c2);
             }
         } else {
-            self.pushOperandNoCheck(f32, math.min(c1, c2));
+            self.pushOperandNoCheck(f32, @min(c1, c2));
         }
 
         return dispatch(self, ip + 1, code);
@@ -1560,7 +1560,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(f32, c1);
             }
         } else {
-            self.pushOperandNoCheck(f32, math.max(c1, c2));
+            self.pushOperandNoCheck(f32, @max(c1, c2));
         }
 
         return dispatch(self, ip + 1, code);
@@ -1697,7 +1697,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(f64, c2);
             }
         } else {
-            self.pushOperandNoCheck(f64, math.min(c1, c2));
+            self.pushOperandNoCheck(f64, @min(c1, c2));
         }
 
         return dispatch(self, ip + 1, code);
@@ -1719,7 +1719,7 @@ pub const VirtualMachine = struct {
                 self.pushOperandNoCheck(f64, c1);
             }
         } else {
-            self.pushOperandNoCheck(f64, math.max(c1, c2));
+            self.pushOperandNoCheck(f64, @max(c1, c2));
         }
 
         return dispatch(self, ip + 1, code);
@@ -1741,7 +1741,7 @@ pub const VirtualMachine = struct {
     fn @"i32.wrap_i64"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(i32, @truncate(i32, c1));
+        self.pushOperandNoCheck(i32, @as(i32, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1753,10 +1753,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, math.maxInt(i32))) return error.Overflow;
-        if (trunc < @intToFloat(f32, math.minInt(i32))) return error.Overflow;
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(i32)))) return error.Overflow;
+        if (trunc < @as(f32, @floatFromInt(math.minInt(i32)))) return error.Overflow;
 
-        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        self.pushOperandNoCheck(i32, @as(i32, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1768,10 +1768,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, math.maxInt(u32))) return error.Overflow;
-        if (trunc < @intToFloat(f32, math.minInt(u32))) return error.Overflow;
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(u32)))) return error.Overflow;
+        if (trunc < @as(f32, @floatFromInt(math.minInt(u32)))) return error.Overflow;
 
-        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        self.pushOperandNoCheck(u32, @as(u32, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1783,10 +1783,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, math.maxInt(i32))) return error.Overflow;
-        if (trunc < @intToFloat(f64, math.minInt(i32))) return error.Overflow;
+        if (trunc > @as(f64, @floatFromInt(math.maxInt(i32)))) return error.Overflow;
+        if (trunc < @as(f64, @floatFromInt(math.minInt(i32)))) return error.Overflow;
 
-        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        self.pushOperandNoCheck(i32, @as(i32, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1798,10 +1798,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc > @intToFloat(f64, math.maxInt(u32))) return error.Overflow;
-        if (trunc < @intToFloat(f64, math.minInt(u32))) return error.Overflow;
+        if (trunc > @as(f64, @floatFromInt(math.maxInt(u32)))) return error.Overflow;
+        if (trunc < @as(f64, @floatFromInt(math.minInt(u32)))) return error.Overflow;
 
-        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        self.pushOperandNoCheck(u32, @as(u32, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1809,7 +1809,7 @@ pub const VirtualMachine = struct {
     fn @"i64.extend_i32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(i64, @truncate(i32, c1));
+        self.pushOperandNoCheck(i64, @as(i32, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1817,7 +1817,7 @@ pub const VirtualMachine = struct {
     fn @"i64.extend_i32_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(u64);
 
-        self.pushOperandNoCheck(u64, @truncate(u32, c1));
+        self.pushOperandNoCheck(u64, @as(u32, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1829,10 +1829,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, math.maxInt(i64))) return error.Overflow;
-        if (trunc < @intToFloat(f32, math.minInt(i64))) return error.Overflow;
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(i64)))) return error.Overflow;
+        if (trunc < @as(f32, @floatFromInt(math.minInt(i64)))) return error.Overflow;
 
-        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        self.pushOperandNoCheck(i64, @as(i64, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1844,10 +1844,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f32, math.maxInt(u64))) return error.Overflow;
-        if (trunc < @intToFloat(f32, math.minInt(u64))) return error.Overflow;
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(u64)))) return error.Overflow;
+        if (trunc < @as(f32, @floatFromInt(math.minInt(u64)))) return error.Overflow;
 
-        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        self.pushOperandNoCheck(u64, @as(u64, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1859,10 +1859,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, math.maxInt(i64))) return error.Overflow;
-        if (trunc < @intToFloat(f64, math.minInt(i64))) return error.Overflow;
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(i64)))) return error.Overflow;
+        if (trunc < @as(f64, @floatFromInt(math.minInt(i64)))) return error.Overflow;
 
-        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        self.pushOperandNoCheck(i64, @as(i64, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1874,10 +1874,10 @@ pub const VirtualMachine = struct {
 
         const trunc = @trunc(c1);
 
-        if (trunc >= @intToFloat(f64, math.maxInt(u64))) return error.Overflow;
-        if (trunc < @intToFloat(f64, math.minInt(u64))) return error.Overflow;
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(u64)))) return error.Overflow;
+        if (trunc < @as(f64, @floatFromInt(math.minInt(u64)))) return error.Overflow;
 
-        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        self.pushOperandNoCheck(u64, @as(u64, @intFromFloat(trunc)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1885,7 +1885,7 @@ pub const VirtualMachine = struct {
     fn @"f32.convert_i32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i32);
 
-        self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1893,7 +1893,7 @@ pub const VirtualMachine = struct {
     fn @"f32.convert_i32_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(u32);
 
-        self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1901,7 +1901,7 @@ pub const VirtualMachine = struct {
     fn @"f32.convert_i64_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1909,7 +1909,7 @@ pub const VirtualMachine = struct {
     fn @"f32.convert_i64_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(u64);
 
-        self.pushOperandNoCheck(f32, @intToFloat(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1917,7 +1917,7 @@ pub const VirtualMachine = struct {
     fn @"f32.demote_f64"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        self.pushOperandNoCheck(f32, @floatCast(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @floatCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1925,7 +1925,7 @@ pub const VirtualMachine = struct {
     fn @"f64.convert_i32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i32);
 
-        self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1933,7 +1933,7 @@ pub const VirtualMachine = struct {
     fn @"f64.convert_i32_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(u32);
 
-        self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1941,7 +1941,7 @@ pub const VirtualMachine = struct {
     fn @"f64.convert_i64_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1949,7 +1949,7 @@ pub const VirtualMachine = struct {
     fn @"f64.convert_i64_u"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(u64);
 
-        self.pushOperandNoCheck(f64, @intToFloat(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @floatFromInt(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1957,7 +1957,7 @@ pub const VirtualMachine = struct {
     fn @"f64.promote_f32"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        self.pushOperandNoCheck(f64, @floatCast(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @floatCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1965,7 +1965,7 @@ pub const VirtualMachine = struct {
     fn @"i32.reinterpret_f32"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        self.pushOperandNoCheck(i32, @bitCast(i32, c1));
+        self.pushOperandNoCheck(i32, @as(i32, @bitCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1973,7 +1973,7 @@ pub const VirtualMachine = struct {
     fn @"i64.reinterpret_f64"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        self.pushOperandNoCheck(i64, @bitCast(i64, c1));
+        self.pushOperandNoCheck(i64, @as(i64, @bitCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1981,7 +1981,7 @@ pub const VirtualMachine = struct {
     fn @"f32.reinterpret_i32"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i32);
 
-        self.pushOperandNoCheck(f32, @bitCast(f32, c1));
+        self.pushOperandNoCheck(f32, @as(f32, @bitCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1989,7 +1989,7 @@ pub const VirtualMachine = struct {
     fn @"f64.reinterpret_i64"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(f64, @bitCast(f64, c1));
+        self.pushOperandNoCheck(f64, @as(f64, @bitCast(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1997,7 +1997,7 @@ pub const VirtualMachine = struct {
     fn @"i32.extend8_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i32);
 
-        self.pushOperandNoCheck(i32, @truncate(i8, c1));
+        self.pushOperandNoCheck(i32, @as(i8, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2005,7 +2005,7 @@ pub const VirtualMachine = struct {
     fn @"i32.extend16_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i32);
 
-        self.pushOperandNoCheck(i32, @truncate(i16, c1));
+        self.pushOperandNoCheck(i32, @as(i16, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2013,7 +2013,7 @@ pub const VirtualMachine = struct {
     fn @"i64.extend8_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(i64, @truncate(i8, c1));
+        self.pushOperandNoCheck(i64, @as(i8, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2021,7 +2021,7 @@ pub const VirtualMachine = struct {
     fn @"i64.extend16_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(i64, @truncate(i16, c1));
+        self.pushOperandNoCheck(i64, @as(i16, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2029,7 +2029,7 @@ pub const VirtualMachine = struct {
     fn @"i64.extend32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(i64);
 
-        self.pushOperandNoCheck(i64, @truncate(i32, c1));
+        self.pushOperandNoCheck(i64, @as(i32, @truncate(c1)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2074,7 +2074,7 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip].misc;
 
-        return try @call(.{ .modifier = .always_tail }, misc_lookup[@enumToInt(next_instr)], .{ self, next_ip, code });
+        return try @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
@@ -2086,16 +2086,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f32, math.maxInt(i32))) {
-            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(i32)))) {
+            self.pushOperandNoCheck(i32, @as(i32, @bitCast(@as(u32, 0x7fffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f32, math.minInt(i32))) {
-            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
+        if (trunc < @as(f32, @floatFromInt(math.minInt(i32)))) {
+            self.pushOperandNoCheck(i32, @as(i32, @bitCast(@as(u32, 0x80000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        self.pushOperandNoCheck(i32, @as(i32, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2108,16 +2108,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f32, math.maxInt(u32))) {
-            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(u32)))) {
+            self.pushOperandNoCheck(u32, @as(u32, @bitCast(@as(u32, 0xffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f32, math.minInt(u32))) {
-            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
+        if (trunc < @as(f32, @floatFromInt(math.minInt(u32)))) {
+            self.pushOperandNoCheck(u32, @as(u32, @bitCast(@as(u32, 0x00000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        self.pushOperandNoCheck(u32, @as(u32, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2130,16 +2130,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f64, math.maxInt(i32))) {
-            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x7fffffff)));
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(i32)))) {
+            self.pushOperandNoCheck(i32, @as(i32, @bitCast(@as(u32, 0x7fffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f64, math.minInt(i32))) {
-            self.pushOperandNoCheck(i32, @bitCast(i32, @as(u32, 0x80000000)));
+        if (trunc < @as(f64, @floatFromInt(math.minInt(i32)))) {
+            self.pushOperandNoCheck(i32, @as(i32, @bitCast(@as(u32, 0x80000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(i32, @floatToInt(i32, trunc));
+        self.pushOperandNoCheck(i32, @as(i32, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2152,16 +2152,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f64, math.maxInt(u32))) {
-            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0xffffffff)));
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(u32)))) {
+            self.pushOperandNoCheck(u32, @as(u32, @bitCast(@as(u32, 0xffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f64, math.minInt(u32))) {
-            self.pushOperandNoCheck(u32, @bitCast(u32, @as(u32, 0x00000000)));
+        if (trunc < @as(f64, @floatFromInt(math.minInt(u32)))) {
+            self.pushOperandNoCheck(u32, @as(u32, @bitCast(@as(u32, 0x00000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(u32, @floatToInt(u32, trunc));
+        self.pushOperandNoCheck(u32, @as(u32, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2174,16 +2174,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f32, math.maxInt(i64))) {
-            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(i64)))) {
+            self.pushOperandNoCheck(i64, @as(i64, @bitCast(@as(u64, 0x7fffffffffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f32, math.minInt(i64))) {
-            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+        if (trunc < @as(f32, @floatFromInt(math.minInt(i64)))) {
+            self.pushOperandNoCheck(i64, @as(i64, @bitCast(@as(u64, 0x8000000000000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        self.pushOperandNoCheck(i64, @as(i64, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2196,16 +2196,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f32, math.maxInt(u64))) {
-            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+        if (trunc >= @as(f32, @floatFromInt(math.maxInt(u64)))) {
+            self.pushOperandNoCheck(u64, @as(u64, @bitCast(@as(u64, 0xffffffffffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f32, math.minInt(u64))) {
-            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+        if (trunc < @as(f32, @floatFromInt(math.minInt(u64)))) {
+            self.pushOperandNoCheck(u64, @as(u64, @bitCast(@as(u64, 0x0000000000000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        self.pushOperandNoCheck(u64, @as(u64, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2218,16 +2218,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f64, math.maxInt(i64))) {
-            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x7fffffffffffffff)));
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(i64)))) {
+            self.pushOperandNoCheck(i64, @as(i64, @bitCast(@as(u64, 0x7fffffffffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f64, math.minInt(i64))) {
-            self.pushOperandNoCheck(i64, @bitCast(i64, @as(u64, 0x8000000000000000)));
+        if (trunc < @as(f64, @floatFromInt(math.minInt(i64)))) {
+            self.pushOperandNoCheck(i64, @as(i64, @bitCast(@as(u64, 0x8000000000000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(i64, @floatToInt(i64, trunc));
+        self.pushOperandNoCheck(i64, @as(i64, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2240,16 +2240,16 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        if (trunc >= @intToFloat(f64, math.maxInt(u64))) {
-            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0xffffffffffffffff)));
+        if (trunc >= @as(f64, @floatFromInt(math.maxInt(u64)))) {
+            self.pushOperandNoCheck(u64, @as(u64, @bitCast(@as(u64, 0xffffffffffffffff))));
             return dispatch(self, ip + 1, code);
         }
-        if (trunc < @intToFloat(f64, math.minInt(u64))) {
-            self.pushOperandNoCheck(u64, @bitCast(u64, @as(u64, 0x0000000000000000)));
+        if (trunc < @as(f64, @floatFromInt(math.minInt(u64)))) {
+            self.pushOperandNoCheck(u64, @as(u64, @bitCast(@as(u64, 0x0000000000000000))));
             return dispatch(self, ip + 1, code);
         }
 
-        self.pushOperandNoCheck(u64, @floatToInt(u64, trunc));
+        self.pushOperandNoCheck(u64, @as(u64, @intFromFloat(trunc)));
         return dispatch(self, ip + 1, code);
     }
 
@@ -2327,7 +2327,7 @@ pub const VirtualMachine = struct {
             return dispatch(self, ip + 1, code);
         }
 
-        memory.uncheckedFill(dest, n, @truncate(u8, value));
+        memory.uncheckedFill(dest, n, @as(u8, @truncate(value)));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2432,7 +2432,7 @@ pub const VirtualMachine = struct {
 
         const table = try self.inst.getTable(tableidx);
 
-        self.pushOperandNoCheck(u32, @intCast(u32, table.size()));
+        self.pushOperandNoCheck(u32, @as(u32, @intCast(table.size())));
 
         return dispatch(self, ip + 1, code);
     }
@@ -2482,10 +2482,10 @@ pub const VirtualMachine = struct {
         self.op_ptr += 1;
 
         self.op_stack[self.op_ptr - 1] = switch (T) {
-            i32 => @as(u64, @bitCast(u32, value)),
-            i64 => @bitCast(u64, value),
-            f32 => @as(u64, @bitCast(u32, value)),
-            f64 => @bitCast(u64, value),
+            i32 => @as(u32, @bitCast(value)),
+            i64 => @as(u64, @bitCast(value)),
+            f32 => @as(u32, @bitCast(value)),
+            f64 => @as(u64, @bitCast(value)),
             u32 => @as(u64, value),
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
@@ -2500,10 +2500,10 @@ pub const VirtualMachine = struct {
         self.op_ptr += 1;
 
         self.op_stack[self.op_ptr - 1] = switch (T) {
-            i32 => @as(u64, @bitCast(u32, value)),
-            i64 => @bitCast(u64, value),
-            f32 => @as(u64, @bitCast(u32, value)),
-            f64 => @bitCast(u64, value),
+            i32 => @as(u32, @bitCast(value)),
+            i64 => @as(u64, @bitCast(value)),
+            f32 => @as(u32, @bitCast(value)),
+            f64 => @as(u64, @bitCast(value)),
             u32 => @as(u64, value),
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
@@ -2515,11 +2515,11 @@ pub const VirtualMachine = struct {
 
         const value = self.op_stack[self.op_ptr - 1];
         return switch (T) {
-            i32 => @bitCast(i32, @truncate(u32, value)),
-            i64 => @bitCast(i64, value),
-            f32 => @bitCast(f32, @truncate(u32, value)),
-            f64 => @bitCast(f64, value),
-            u32 => @truncate(u32, value),
+            i32 => @as(i32, @bitCast(@as(u32, @truncate(value)))),
+            i64 => @as(i64, @bitCast(value)),
+            f32 => @as(f32, @bitCast(@as(u32, @truncate(value)))),
+            f64 => @as(f64, @bitCast(value)),
+            u32 => @as(u32, @truncate(value)),
             u64 => value,
             else => |t| @compileError("Unsupported operand type: " ++ @typeName(t)),
         };
@@ -2684,4 +2684,3 @@ test "operand push / pop test" {
 
 //     try testing.expectEqual(@as(i32, -1), i.popOperand(i32));
 // }
-

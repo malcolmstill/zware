@@ -200,11 +200,11 @@ pub const Module = struct {
             var results = self.module[results_start..results_end];
 
             var params_valtype: []const ValType = undefined;
-            params_valtype.ptr = @ptrCast([*]const ValType, params.ptr);
+            params_valtype.ptr = @ptrCast(params.ptr);
             params_valtype.len = params.len;
 
             var results_valtype: []const ValType = undefined;
-            results_valtype.ptr = @ptrCast([*]const ValType, results.ptr);
+            results_valtype.ptr = @ptrCast(results.ptr);
             results_valtype.len = results.len;
 
             try self.types.list.append(FuncType{
@@ -233,7 +233,7 @@ pub const Module = struct {
             const tag = try self.readEnum(Tag);
 
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
-            const import_index = @truncate(u32, i);
+            const import_index: u32 = @truncate(i);
             _ = switch (tag) {
                 .Func => try self.decodeFunction(import_index),
                 .Table => try self.decodeTable(import_index),
@@ -1061,7 +1061,7 @@ test "module loading (simple add function)" {
     var in = [2]u64{ 22, 23 };
     var out = [1]u64{0};
     try instance.invoke("add", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 45), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 45), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 }
 
 test "module loading (fib)" {
@@ -1085,31 +1085,31 @@ test "module loading (fib)" {
     var in = [1]u64{0};
     var out = [1]u64{0};
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 0), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 0), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 1;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 1), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 2;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 1), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 3;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 2), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 4;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 3), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 3), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 5;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 5), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 5), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 6;
     try instance.invoke("fib", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 8), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 8), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 }
 
 test "module loading (fact)" {
@@ -1133,21 +1133,21 @@ test "module loading (fact)" {
     var in = [1]u64{1};
     var out = [1]u64{0};
     try instance.invoke("fact", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 1), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 1), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 2;
     try instance.invoke("fact", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 2), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 2), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 3;
     try instance.invoke("fact", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 6), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 6), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 4;
     try instance.invoke("fact", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 24), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 24), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 
     in[0] = 12;
     try instance.invoke("fact", in[0..], out[0..], .{});
-    try testing.expectEqual(@as(i32, 479001600), @bitCast(i32, @truncate(u32, out[0])));
+    try testing.expectEqual(@as(i32, 479001600), @as(i32, @bitCast(@as(u32, @truncate(out[0])))));
 }

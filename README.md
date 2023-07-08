@@ -52,7 +52,7 @@ pub fn main() !void {
 
 ### Compile-time
 
-- Zig 0.10.0
+- Zig 0.11 (master)
 
 ### Run-time
 
@@ -80,7 +80,8 @@ pub fn main() !void {
 1. Build the test runner
 
 ```
-zig build --build-file test/testrunner/build.zig --prefix ./
+cd test/testrunner
+zig build --prefix ./
 ```
 
 2. Run

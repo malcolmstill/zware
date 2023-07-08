@@ -2,7 +2,7 @@
 set -e
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
-BIN_DIR=$SCRIPT_DIR/../bin
+BIN_DIR=$SCRIPT_DIR/testrunner/bin
 GENERATED_DIR=$SCRIPT_DIR/testsuite-generated
 
 pushd $GENERATED_DIR

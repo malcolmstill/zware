@@ -141,7 +141,7 @@ pub const Instance = struct {
         //
         // For 2, we need to add the function to the store
         const imported_function_count = self.funcaddrs.items.len;
-        for (self.module.functions.list.items) |function_def, i| {
+        for (self.module.functions.list.items, 0..) |function_def, i| {
             if (function_def.import) |_| {
                 // Check that the function defintion (which this module expects)
                 // is the same as the function in the store
@@ -174,7 +174,7 @@ pub const Instance = struct {
     }
 
     fn instantiateGlobals(self: *Instance) !void {
-        for (self.module.globals.list.items) |global_def, i| {
+        for (self.module.globals.list.items, 0..) |global_def, i| {
             if (global_def.import != null) {
                 const imported_global = try self.getGlobal(i);
                 if (imported_global.mutability != global_def.mutability) return error.MismatchedMutability;
@@ -192,7 +192,7 @@ pub const Instance = struct {
     }
 
     fn instantiateMemories(self: *Instance) !void {
-        for (self.module.memories.list.items) |memtype, i| {
+        for (self.module.memories.list.items, 0..) |memtype, i| {
             if (memtype.import != null) {
                 const imported_mem = try self.getMemory(i);
                 // Use the current size of the imported mem as min (rather than imported_mem.min). See https://github.com/WebAssembly/spec/pull/1293
@@ -205,7 +205,7 @@ pub const Instance = struct {
     }
 
     fn instantiateTables(self: *Instance) !void {
-        for (self.module.tables.list.items) |tabletype, i| {
+        for (self.module.tables.list.items, 0..) |tabletype, i| {
             if (tabletype.import != null) {
                 const imported_table = try self.getTable(i);
                 if (imported_table.reftype != tabletype.reftype) return error.ImportedTableRefTypeMismatch;
@@ -224,7 +224,7 @@ pub const Instance = struct {
             var data = try self.store.data(dataddr);
 
             // TODO: Do we actually need to copy the data or just close over module bytes?
-            for (datatype.data) |byte, j| {
+            for (datatype.data, 0..) |byte, j| {
                 try data.set(j, byte);
             }
 
@@ -248,9 +248,9 @@ pub const Instance = struct {
             try self.elemaddrs.append(elemaddr);
             var elem = try self.store.elem(elemaddr);
 
-            for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count]) |expr, j| {
+            for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count], 0..) |expr, j| {
                 const funcaddr = try self.invokeExpression(expr, u32, .{});
-                try elem.set(@intCast(u32, j), funcaddr);
+                try elem.set(@intCast(j), funcaddr);
             }
 
             if (elemtype.mode != .Passive) {
@@ -264,8 +264,8 @@ pub const Instance = struct {
                 const index = math.add(u32, offset, elemtype.count) catch return error.OutOfBoundsMemoryAccess;
                 if (index > table.size()) return error.OutOfBoundsMemoryAccess;
 
-                for (elem.elem) |funcaddr, i| {
-                    try table.set(@intCast(u32, offset + i), funcaddr);
+                for (elem.elem, 0..) |funcaddr, i| {
+                    try table.set(@intCast(offset + i), funcaddr);
                 }
             }
         }
@@ -329,7 +329,7 @@ pub const Instance = struct {
                 try vm.invoke(f.start);
 
                 // 9.
-                for (out) |_, out_index| {
+                for (out, 0..) |_, out_index| {
                     out[out_index] = vm.popOperand(u64);
                 }
             },

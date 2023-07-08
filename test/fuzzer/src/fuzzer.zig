@@ -39,7 +39,7 @@ pub fn main() !void {
 
     var file_count: usize = 0;
     while (try it.next()) |entry| {
-        if (entry.kind == .File) file_count += 1;
+        if (entry.kind == .file) file_count += 1;
         if (mem.endsWith(u8, entry.name, ".wasm")) {
             const s = try name_alloc.alloc(u8, entry.name.len);
             mem.copy(u8, s, entry.name);
@@ -96,11 +96,11 @@ pub fn main() !void {
     }
 }
 
-pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace) noreturn {
+pub fn panic(msg: []const u8, error_return_trace: ?*std.builtin.StackTrace, ret_addr: ?usize) noreturn {
     var out_dir = std.fs.cwd().openDir(fuzzed_dir, .{}) catch unreachable;
     defer out_dir.close();
 
     std.log.info("Fuzzer found bug: {s}", .{fuzzed_name});
     out_dir.writeFile(fuzzed_name, program) catch unreachable;
-    std.builtin.default_panic(msg, error_return_trace);
+    std.builtin.default_panic(msg, error_return_trace, ret_addr);
 }

@@ -27,12 +27,12 @@ pub fn main() !void {
     try module.decode();
 
     std.log.info("Imports:", .{});
-    for (module.imports.list.items) |import, i| {
+    for (module.imports.list.items, 0..) |import, i| {
         std.log.info("{}: import = {s}, tag = {}", .{ i, import.name, import.desc_tag });
     }
 
     std.log.info("Exports:", .{});
-    for (module.exports.list.items) |exprt, i| {
+    for (module.exports.list.items, 0..) |exprt, i| {
         std.log.info("{}: export = {s}, tag = {}", .{ i, exprt.name, exprt.tag });
     }
 }

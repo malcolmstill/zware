@@ -24,11 +24,11 @@ pub const Function = struct {
         if (self.params.len != b.params.len) return error.MismatchedSignatures;
         if (self.results.len != b.results.len) return error.MismatchedSignatures;
 
-        for (self.params) |p_a, i| {
+        for (self.params, 0..) |p_a, i| {
             if (p_a != b.params[i]) return error.MismatchedSignatures;
         }
 
-        for (self.results) |r_a, i| {
+        for (self.results, 0..) |r_a, i| {
             if (r_a != b.results[i]) return error.MismatchedSignatures;
         }
     }
