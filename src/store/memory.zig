@@ -52,6 +52,18 @@ pub const Memory = struct {
         mem.copy(u8, self.data.items[address .. address + data.len], data);
     }
 
+   pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
+        mem.set(u8, self.data.items[dst_address .. dst_address + n], value);
+    }
+
+    pub fn uncheckedCopy(self: *Memory, dst_address: u32, data: []const u8) void {
+        mem.copy(u8, self.data.items[dst_address .. dst_address + data.len], data);
+    }
+
+    pub fn uncheckedCopyBackwards(self: *Memory, dst_address: u32, data: []const u8) void {
+        mem.copyBackwards(u8, self.data.items[dst_address .. dst_address + data.len], data);
+    }
+
     // as per copy but don't actually mutate
     pub fn check(self: *Memory, address: u32, data: []const u8) !void {
         if (address + data.len > self.data.items.len) return error.OutOfBoundsMemoryAccess;
