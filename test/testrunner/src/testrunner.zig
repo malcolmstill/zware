@@ -145,108 +145,13 @@ pub fn main() anyerror!void {
     const f64_name = "global_f64";
     try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
 
-    var print_params = [_]ValType{.I32} ** 0;
-    var print_results = [_]ValType{.I32} ** 0;
-    const print_handle = try store.addFunction(Function{
-        .params = print_params[0..],
-        .results = print_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print,
-            },
-        },
-    });
-    const print_name = "print";
-    try store.@"export"(spectest_module[0..], print_name[0..], .Func, print_handle);
-
-    var print_i32_params = [_]ValType{.I32} ** 1;
-    var print_i32_results = [_]ValType{.I32} ** 0;
-    const print_i32_handle = try store.addFunction(Function{
-        .params = print_i32_params[0..],
-        .results = print_i32_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_i32,
-            },
-        },
-    });
-    const print_i32_name = "print_i32";
-    try store.@"export"(spectest_module[0..], print_i32_name[0..], .Func, print_i32_handle);
-
-    // print_i64
-    var print_i64_params = [_]ValType{.I64} ** 1;
-    var print_i64_results = [_]ValType{.I64} ** 0;
-    const print_i64_handle = try store.addFunction(Function{
-        .params = print_i64_params[0..],
-        .results = print_i64_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_i64,
-            },
-        },
-    });
-    const print_i64_name = "print_i64";
-    try store.@"export"(spectest_module[0..], print_i64_name[0..], .Func, print_i64_handle);
-
-    // export print_f32
-    var print_f32_params = [_]ValType{.F32} ** 1;
-    var print_f32_results = [_]ValType{.F32} ** 0;
-    const print_f32_handle = try store.addFunction(Function{
-        .params = print_f32_params[0..],
-        .results = print_f32_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_f32,
-            },
-        },
-    });
-    const print_f32_name = "print_f32";
-    try store.@"export"(spectest_module[0..], print_f32_name[0..], .Func, print_f32_handle);
-
-    // export print_f64
-    var print_f64_params = [_]ValType{.F64} ** 1;
-    var print_f64_results = [_]ValType{.F64} ** 0;
-    const print_f64_handle = try store.addFunction(Function{
-        .params = print_f64_params[0..],
-        .results = print_f64_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_f64,
-            },
-        },
-    });
-    const print_f64_name = "print_f64";
-    try store.@"export"(spectest_module[0..], print_f64_name[0..], .Func, print_f64_handle);
-
-    // export print_i32_f32
-    var print_i32_f32_params: [2]ValType = [_]ValType{ .I32, .F32 };
-    var print_i32_f32_results = [_]ValType{.F32} ** 0;
-    const print_i32_f32_handle = try store.addFunction(Function{
-        .params = print_i32_f32_params[0..],
-        .results = print_i32_f32_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_i32_f32,
-            },
-        },
-    });
-    const print_i32_f32_name = "print_i32_f32";
-    try store.@"export"(spectest_module[0..], print_i32_f32_name[0..], .Func, print_i32_f32_handle);
-
-    // export print_i64_f64
-    var print_f64_f64_params: [2]ValType = [_]ValType{ .F64, .F64 };
-    var print_f64_f64_results: [0]ValType = [_]ValType{};
-    const print_f64_f64_handle = try store.addFunction(Function{
-        .params = print_f64_f64_params[0..],
-        .results = print_f64_f64_results[0..],
-        .subtype = .{
-            .host_function = .{
-                .func = print_f64_f64,
-            },
-        },
-    });
-    const print_f64_f64_name = "print_f64_f64";
-    try store.@"export"(spectest_module[0..], print_f64_f64_name[0..], .Func, print_f64_f64_handle);
+    try store.addHostFunction(spectest_module[0..], "print", print, &[_]ValType{}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_i32", print_i32, &[_]ValType{.I32}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_i64", print_i64, &[_]ValType{.I64}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_f32", print_f32, &[_]ValType{.F32}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_f64", print_f64, &[_]ValType{.F64}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_i32_f32", print_i32_f32, &[_]ValType{.I32, .F32}, &[_]ValType{});
+    try store.addHostFunction(spectest_module[0..], "print_f64_f64", print_f64_f64, &[_]ValType{.F64, .F64}, &[_]ValType{});
 
     var current_instance: *Instance = undefined;
     var registered_names = StringHashMap(*Instance).init(alloc);

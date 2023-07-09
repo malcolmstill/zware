@@ -101,6 +101,21 @@ pub const ArrayListStore = struct {
         return self.functions.items.len - 1;
     }
 
+    // Helper function for adding a host function
+    pub fn addHostFunction(self: *ArrayListStore, module: []const u8, function_name: []const u8, host_function_pointer: anytype, params: []const ValType, results: []const ValType) !void {
+        const handle = try self.addFunction(Function{
+            .params = params,
+            .results = results,
+            .subtype = .{
+                .host_function = .{
+                    .func = host_function_pointer,
+                },
+            },
+        });
+
+        try self.@"export"(module[0..], function_name[0..], .Func, handle);
+    }
+
     pub fn memory(self: *ArrayListStore, memaddr: usize) !*Memory {
         if (memaddr >= self.memories.items.len) return error.BadMemoryIndex;
         return &self.memories.items[memaddr];
