@@ -55,7 +55,7 @@ pub const ArrayListStore = struct {
 
     pub fn deinit(self: *ArrayListStore) void {
         for (self.memories.items) |*m| {
-            t.deinit();
+            m.deinit();
         }
         for (self.tables.items) |*t| {
             t.deinit();
