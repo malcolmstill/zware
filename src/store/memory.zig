@@ -20,6 +20,10 @@ pub const Memory = struct {
         };
     }
 
+    pub fn deinit(self: *Memory) void {
+        self.data.deinit();
+    }
+
     // Return the size of the memory (in pages)
     pub fn size(self: *Memory) u32 {
         std.debug.assert(self.data.items.len % PAGE_SIZE == 0);
