@@ -82,7 +82,7 @@ pub fn main() !void {
         for (function_type.params) |_| {
             try stdout.print("{{}}, ", .{});
         }
-        try stdout.print(")\", .{{", .{});
+        try stdout.print(")\\n\", .{{", .{});
         for (function_type.params, 0..) |_, i| {
             try stdout.print("param{}, ", .{i});
         }
