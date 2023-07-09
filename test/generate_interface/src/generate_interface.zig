@@ -34,7 +34,7 @@ pub fn main() !void {
     try stdout.print("const zware = @import(\"zware\");\n\n", .{});
 
     // Generate loader
-    try stdout.print("pub fn initHostFunctions(module: []const u8, store: *zware.Store) !void {{\n", .{});
+    try stdout.print("pub fn initHostFunctions(store: *zware.Store) !void {{\n", .{});
     for (module.functions.list.items) |function| {
         const import_index = function.import orelse continue;
 
@@ -42,7 +42,7 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("\ttry store.addHostFunction(module, \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.name, function_import.name});
+        try stdout.print("\ttry store.addHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
         for (function_type.params) |param| {
             try stdout.print(".{s}, ", .{@tagName(param)});
         }
