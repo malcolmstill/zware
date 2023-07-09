@@ -43,12 +43,16 @@ pub fn main() !void {
         const function_type = module.types.list.items[function.typeidx];
 
         try stdout.print("\ttry store.addHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
-        for (function_type.params) |param| {
-            try stdout.print(".{s}, ", .{@tagName(param)});
+        for (function_type.params, 0..) |param, i| {
+            try stdout.print(".{s}", .{@tagName(param)});
+
+            if (i < function_type.params.len - 1) try stdout.print(", ", .{});
         }
         try stdout.print("}}, &[_]zware.ValType{{", .{});
-        for (function_type.results) |result| {
-            try stdout.print(".{s}, ", .{@tagName(result)});
+        for (function_type.results, 0..) |result, i| {
+            try stdout.print(".{s}", .{@tagName(result)});
+
+            if (i < function_type.results.len - 1) try stdout.print(", ", .{});
         }        
         try stdout.print("}});\n", .{});
     }
@@ -73,12 +77,16 @@ pub fn main() !void {
         }
 
         try stdout.print("\tstd.debug.print(\"Unimplemented: {s}(", .{function_import.name});
-        for (function_type.params) |_| {
-            try stdout.print("{{}}, ", .{});
+        for (function_type.params, 0..) |_, i| {
+            try stdout.print("{{}}", .{});
+
+            if (i < function_type.params.len - 1) try stdout.print(", ", .{});
         }
         try stdout.print(")\\n\", .{{", .{});
         for (function_type.params, 0..) |_, i| {
-            try stdout.print("param{}, ", .{i});
+            try stdout.print("param{}", .{i});
+
+            if (i < function_type.params.len - 1) try stdout.print(", ", .{});
         }
         try stdout.print("}});\n", .{});
  
