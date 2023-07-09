@@ -24,6 +24,10 @@ pub const Table = struct {
         };
     }
 
+    pub fn deinit(self: *Table) void {
+        self.data.deinit();
+    }
+
     pub fn lookup(self: *Table, index: u32) !usize {
         if (index >= self.data.items.len) return error.OutOfBoundsMemoryAccess;
         return self.data.items[index] orelse return error.UndefinedElement;
