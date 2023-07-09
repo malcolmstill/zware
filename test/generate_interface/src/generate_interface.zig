@@ -69,17 +69,7 @@ pub fn main() !void {
         }
 
         for (function_type.params, 0..) |param, i| {
-            const zig_type = switch (param) {
-                .I32 => "i32",
-                .I64 => "i64",
-                .F32 => "f32",
-                .F64 => "f64",
-                .V128 => "v128", // FIXME
-                .FuncRef => "funcref", // FIXME
-                .ExternRef => "externref", // FIXME
-            };
-
-            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{i, zig_type});
+            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{i, zigType(param)});
         }
 
         try stdout.print("\tstd.debug.print(\"Unimplemented: {s}(", .{function_import.name});
@@ -108,16 +98,16 @@ pub fn main() !void {
         try stdout.print("pub fn {s}(instance: *zware.Instance", .{exprt.name}); 
 
         // Emit function params
-        for (function_type.params, 0..) |_, i| {
-            try stdout.print(", param{}: u64", .{i});
+        for (function_type.params, 0..) |param, i| {
+            try stdout.print(", param{}: {s}", .{i, zigType(param)});
         }
 
-        try stdout.print(") zware.WasmError!", .{});
+        try stdout.print(") !", .{});
 
         if (function_type.results.len == 0) {
             try stdout.print("void", .{});
         } else if (function_type.results.len == 1) {
-            try stdout.print("u64", .{});
+            try stdout.print("{s}", .{zigType(function_type.results[0])});
         } else {
             try stdout.print("struct {{", .{});
 
@@ -132,8 +122,17 @@ pub fn main() !void {
 
         // Push params into input array
         try stdout.print("\tvar in = [_]u64{{", .{});
-        for (function_type.params, 0..) |_, i| {
-            try stdout.print("param{}", .{i});
+        for (function_type.params, 0..) |param, i| {
+            switch (param) {
+                .I32 => try stdout.print("@bitCast(@as(i64, param{}))", .{i}),
+                .I64 => try stdout.print("@bitCast(param{})", .{i}),
+                .F32 => try stdout.print("@bitCast(@as(f64, param{}))", .{i}),
+                .F64 => try stdout.print("@bitCast(param{})", .{i}),
+                .V128 => try stdout.print("FIXME{}", .{i}),
+                .FuncRef => try stdout.print("@bitCast(param{})", .{i}),
+                .ExternRef => try stdout.print("@bitCast(param{})", .{i}),
+            }
+
             if (i < function_type.params.len - 1) try stdout.print(", ", .{});
         }
         try stdout.print("}};\n", .{});
@@ -152,12 +151,37 @@ pub fn main() !void {
         if (function_type.results.len == 0) {
             //
         } else if (function_type.results.len == 1) {
-            try stdout.print("\treturn out[0];\n", .{});
+            try stdout.print("\treturn ", .{});
+            const i = 0;
+
+            switch (function_type.results[0]) {
+                .I32 => try stdout.print("@bitCast(@as(u32, @truncate(out[{}])))", .{i}),
+                .I64 => try stdout.print("@bitCast(out[{}])", .{i}),
+                .F32 => try stdout.print("@bitCast(@as(u32, @truncate(out[{}])))", .{i}),
+                .F64 => try stdout.print("@bitCast(out[{}])", .{i}),
+                .V128 => try stdout.print("FIXME{}", .{i}), // FIXME
+                .FuncRef => try stdout.print("@bitCast(out[{}])", .{i}), // FIXME
+                .ExternRef => try stdout.print("@bitCast(out[{}])", .{i}), // FIXME
+            }
+
+            try stdout.print(";\n", .{});
         } else {
             try stdout.print("\treturn .{{", .{});
 
-            for (function_type.results, 0..) |_, i| {
-                try stdout.print(".result{} = out[{}],\n", .{i, i});
+            for (function_type.results, 0..) |result, i| {
+                try stdout.print(".result{} = ", .{i});
+
+                switch (result) {
+                    .I32 => try stdout.print("@bitCast(@as(u32, @truncate(out[{}])))", .{i}),
+                    .I64 => try stdout.print("@bitCast(out[{}])", .{i}),
+                    .F32 => try stdout.print("@bitCast(@as(u32, @truncate(out[{}])))", .{i}),
+                    .F64 => try stdout.print("@bitCast(out[{}])", .{i}),
+                    .V128 => try stdout.print("FIXME{}", .{i}), // FIXME
+                    .FuncRef => try stdout.print("@bitCast(out[{}])", .{i}), // FIXME
+                    .ExternRef => try stdout.print("@bitCast(out[{}])", .{i}), // FIXME
+                }
+
+                try stdout.print(",\n", .{});
             }
 
             try stdout.print("}};\n", .{});
@@ -167,4 +191,16 @@ pub fn main() !void {
     }
 
     try bw.flush();
+}
+
+fn zigType(v: zware.ValType) []const u8 {
+    return switch (v) {
+        .I32 => "i32",
+        .I64 => "i64",
+        .F32 => "f32",
+        .F64 => "f64",
+        .V128 => "u128",
+        .FuncRef => "anyopaque",
+        .ExternRef => "anyopaque",
+    };
 }
