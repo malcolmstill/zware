@@ -39,9 +39,17 @@ pub fn main() !void {
 
         const function_import = module.imports.list.items[import_index];
 
-        // const function_type = module.types.list.items[function.typeidx];
+        const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("\ttry store.addHostFunction(module, \"{s}\", {s}, [_]ValType{{}}, [_]ValType{{}});\n", .{function_import.name, function_import.name});
+        try stdout.print("\ttry store.addHostFunction(module, \"{s}\", {s}, [_]ValType{{", .{function_import.name, function_import.name});
+        for (function_type.params) |param| {
+            try stdout.print(".{s}, ", .{@tagName(param)});
+        }
+        try stdout.print("}}, [_]ValType{{", .{}); 
+        for (function_type.results) |result| {
+            try stdout.print(".{s}, ", .{@tagName(result)});
+        }        
+        try stdout.print("}});\n", .{});
     }
     try stdout.print("}}\n\n", .{});
 
@@ -51,10 +59,37 @@ pub fn main() !void {
 
         const function_import = module.imports.list.items[import_index];
 
+        const function_type = module.types.list.items[function.typeidx];
+
         try stdout.print("pub fn {s}(vm: *VirtualMachine) WasmError!void {{\n", .{function_import.name});
+
+        for (function_type.params, 0..) |param, i| {
+            const zig_type = switch (param) {
+                .I32 => "i32",
+                .I64 => "i64",
+                .F32 => "f32",
+                .F64 => "f64",
+                .V128 => "v128", // FIXME
+                .FuncRef => "funcref", // FIXME
+                .ExternRef => "externref", // FIXME
+            };
+
+            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{i, zig_type});
+        }
+
+        try stdout.print("\tstd.debug.print(\"Unimplemented: {s}(", .{function_import.name});
+        for (function_type.params) |_| {
+            try stdout.print("{{}}, ", .{});
+        }
+        try stdout.print(")\", .{{", .{});
+        for (function_type.params, 0..) |_, i| {
+            try stdout.print("param{}, ", .{i});
+        }
+        try stdout.print("}});\n", .{});
+ 
         try stdout.print("\t@panic(\"Unimplemented: {s}\");\n", .{function_import.name});
         try stdout.print("}}\n\n", .{});
     }
 
-    try bw.flush(); // don't forget to flush!
+    try bw.flush();
 }
