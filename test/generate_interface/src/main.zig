@@ -30,7 +30,7 @@ pub fn main() !void {
     var bw = std.io.bufferedWriter(stdout_file);
     const stdout = bw.writer();
 
-    try stdout.print("const std = @import(\"std\");\n\n", .{});
+    try stdout.print("const std = @import(\"std\");\n", .{});
     try stdout.print("const zware = @import(\"zware\");\n\n", .{});
 
     // Generate loader
