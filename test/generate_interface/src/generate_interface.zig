@@ -34,7 +34,7 @@ pub fn main() !void {
     try stdout.print("const zware = @import(\"zware\");\n\n", .{});
 
     // Generate loader
-    try stdout.print("pub fn initHostFunctions(module: []const u8, store: *zware.Store) !void {{\n", .{});
+    try stdout.print("pub fn initHostFunctions(store: *zware.Store) !void {{\n", .{});
     for (module.functions.list.items) |function| {
         const import_index = function.import orelse continue;
 
@@ -42,11 +42,11 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("\ttry store.addHostFunction(module, \"{s}\", {s}, [_]ValType{{", .{function_import.name, function_import.name});
+        try stdout.print("\ttry store.addHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
         for (function_type.params) |param| {
             try stdout.print(".{s}, ", .{@tagName(param)});
         }
-        try stdout.print("}}, [_]ValType{{", .{}); 
+        try stdout.print("}}, &[_]zware.ValType{{", .{});
         for (function_type.results) |result| {
             try stdout.print(".{s}, ", .{@tagName(result)});
         }        
@@ -62,7 +62,11 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("pub fn {s}(vm: *VirtualMachine) WasmError!void {{\n", .{function_import.name});
+        try stdout.print("pub fn {s}(vm: *zware.VirtualMachine) zware.WasmError!void {{\n", .{function_import.name});
+
+        if (function_type.params.len == 0) {
+            try stdout.print("\t_ = vm;\n", .{});
+        }
 
         for (function_type.params, 0..) |param, i| {
             const zig_type = switch (param) {

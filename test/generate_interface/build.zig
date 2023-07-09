@@ -6,7 +6,7 @@ pub fn build(b: *Builder) void {
 
     const exe = b.addExecutable(.{
         .name = "generate_interface",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/generate_interface.zig" },
         .target = target,
         .optimize = optimize,
     });
