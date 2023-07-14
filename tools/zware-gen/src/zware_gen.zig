@@ -94,8 +94,14 @@ pub fn main() !void {
         try stdout.print("}}\n\n", .{});
     }
 
-    // Generate stubs
-    for (module.exports.list.items) |exprt| {
+    // Generate api
+    try stdout.print("pub const Api = struct {{\n", .{});
+    try stdout.print("\tinstance: *zware.Instance,\n\n", .{});
+    try stdout.print("\tconst Self = @This();\n\n", .{});
+    try stdout.print("\tpub fn init(instance: *zware.Instance) Self {{\n", .{});
+    try stdout.print("\t\treturn .{{ .instance = instance }};\n", .{});
+    try stdout.print("\t}}\n\n", .{});
+    for (module.exports.list.items, 0..) |exprt, j| {
         if (exprt.tag != .Func) continue;
 
         const function = module.functions.list.items[exprt.index];
@@ -103,7 +109,7 @@ pub fn main() !void {
         const function_type = module.types.list.items[function.typeidx];
 
         // Emit function definition
-        try stdout.print("pub fn {s}(instance: *zware.Instance", .{exprt.name}); 
+        try stdout.print("\tpub fn {s}(self: *Self", .{exprt.name});
 
         // Emit function params
         for (function_type.params, 0..) |param, i| {
@@ -129,7 +135,7 @@ pub fn main() !void {
         try stdout.print(" {{\n", .{});
 
         // Push params into input array
-        try stdout.print("\tvar in = [_]u64{{", .{});
+        try stdout.print("\t\tvar in = [_]u64{{", .{});
         for (function_type.params, 0..) |param, i| {
             switch (param) {
                 .I32 => try stdout.print("@bitCast(@as(i64, param{}))", .{i}),
@@ -146,20 +152,20 @@ pub fn main() !void {
         try stdout.print("}};\n", .{});
 
 
-        try stdout.print("\tvar out = [_]u64{{", .{});
+        try stdout.print("\t\tvar out = [_]u64{{", .{});
         for (function_type.results, 0..) |_, i| {
             try stdout.print("0", .{});
             if (i < function_type.results.len - 1) try stdout.print(", ", .{});
         }        
         try stdout.print("}};\n", .{});
 
-        try stdout.print("\ttry instance.invoke(\"{s}\", in[0..], out[0..], .{{}});\n", .{exprt.name});
+        try stdout.print("\t\ttry self.instance.invoke(\"{s}\", in[0..], out[0..], .{{}});\n", .{exprt.name});
 
         // Return results
         if (function_type.results.len == 0) {
             //
         } else if (function_type.results.len == 1) {
-            try stdout.print("\treturn ", .{});
+            try stdout.print("\t\treturn ", .{});
             const i = 0;
 
             switch (function_type.results[0]) {
@@ -195,8 +201,11 @@ pub fn main() !void {
             try stdout.print("}};\n", .{});
         }
 
-        try stdout.print("}}\n\n", .{});
+        try stdout.print("\t}}\n", .{});
+
+        if (j < module.exports.list.items.len - 1) try stdout.print("\n", .{});
     }
+    try stdout.print("}};\n\n", .{});
 
     try bw.flush();
 }
