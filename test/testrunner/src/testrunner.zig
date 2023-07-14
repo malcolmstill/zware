@@ -97,61 +97,28 @@ pub fn main() anyerror!void {
 
     // Initialise a store
     var store: Store = Store.init(alloc);
-    const spectest_module = "spectest";
+    const spectest = "spectest";
 
     // Init spectest memory
-    const mem_handle = try store.addMemory(1, 2);
-    _ = try store.memory(mem_handle);
+    try store.exposeMemory(spectest, "memory", 1, 2);
 
-    const spectest_memory_name = "memory";
-    try store.@"export"(spectest_module[0..], spectest_memory_name[0..], .Mem, mem_handle);
+    // Init spectest table
+    try store.exposeTable(spectest, "table", .FuncRef, 10, 20);
 
-    // Init spec test table
-    const table_handle = try store.addTable(.FuncRef, 10, 20);
-    const spectest_table_name = "table";
+    // Expose spectest globals
+    try store.exposeGlobal(spectest, "global_i32", 666, .I32, .Immutable);
+    try store.exposeGlobal(spectest, "global_i64", 666, .I64, .Immutable);
+    try store.exposeGlobal(spectest, "global_f32", 666, .F32, .Immutable);
+    try store.exposeGlobal(spectest, "global_f64", 666, .F64, .Immutable);
 
-    try store.@"export"(spectest_module[0..], spectest_table_name[0..], .Table, table_handle);
-
-    // Initiliase spectest globals
-    const i32_handle = try store.addGlobal(Global{
-        .value = 666,
-        .valtype = .I32,
-        .mutability = .Immutable,
-    });
-    const i32_name = "global_i32";
-    try store.@"export"(spectest_module[0..], i32_name[0..], .Global, i32_handle);
-
-    const i64_handle = try store.addGlobal(Global{
-        .value = 666,
-        .valtype = .I64,
-        .mutability = .Immutable,
-    });
-    const i64_name = "global_i64";
-    try store.@"export"(spectest_module[0..], i64_name[0..], .Global, i64_handle);
-
-    const f32_handle = try store.addGlobal(Global{
-        .value = 666,
-        .valtype = .F32,
-        .mutability = .Immutable,
-    });
-    const f32_name = "global_f32";
-    try store.@"export"(spectest_module[0..], f32_name[0..], .Global, f32_handle);
-
-    const f64_handle = try store.addGlobal(Global{
-        .value = 666,
-        .valtype = .F64,
-        .mutability = .Immutable,
-    });
-    const f64_name = "global_f64";
-    try store.@"export"(spectest_module[0..], f64_name[0..], .Global, f64_handle);
-
-    try store.addHostFunction(spectest_module[0..], "print", print, &[_]ValType{}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_i32", print_i32, &[_]ValType{.I32}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_i64", print_i64, &[_]ValType{.I64}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_f32", print_f32, &[_]ValType{.F32}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_f64", print_f64, &[_]ValType{.F64}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_i32_f32", print_i32_f32, &[_]ValType{.I32, .F32}, &[_]ValType{});
-    try store.addHostFunction(spectest_module[0..], "print_f64_f64", print_f64_f64, &[_]ValType{.F64, .F64}, &[_]ValType{});
+    // Expose host functions
+    try store.exposeHostFunction(spectest, "print", print, &[_]ValType{}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i32", print_i32, &[_]ValType{.I32}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i64", print_i64, &[_]ValType{.I64}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f32", print_f32, &[_]ValType{.F32}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f64", print_f64, &[_]ValType{.F64}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i32_f32", print_i32_f32, &[_]ValType{.I32, .F32}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f64_f64", print_f64_f64, &[_]ValType{.F64, .F64}, &[_]ValType{});
 
     var current_instance: *Instance = undefined;
     var registered_names = StringHashMap(*Instance).init(alloc);
