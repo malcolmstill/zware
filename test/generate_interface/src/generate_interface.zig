@@ -42,7 +42,7 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("\ttry store.addHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
+        try stdout.print("\ttry store.exposeHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
         for (function_type.params, 0..) |param, i| {
             try stdout.print(".{s}", .{@tagName(param)});
 

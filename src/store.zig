@@ -10,6 +10,7 @@ const Elem = @import("store/elem.zig").Elem;
 const Data = @import("store/data.zig").Data;
 const Import = @import("module.zig").Import;
 const Tag = @import("module.zig").Tag;
+const Mutability = @import("module.zig").Mutability;
 const RefType = @import("valtype.zig").RefType;
 const ValType = @import("valtype.zig").ValType;
 const Instance = @import("instance.zig").Instance;
@@ -103,6 +104,8 @@ pub const ArrayListStore = struct {
         });
     }
 
+    /// Given a funcaddr return a Function if the funcaddr exists
+    /// otherwise error with BadFunctionIndex.
     pub fn function(self: *ArrayListStore, funcaddr: usize) !Function {
         if (funcaddr >= self.functions.items.len) return error.BadFunctionIndex;
         return self.functions.items[funcaddr];
@@ -114,26 +117,14 @@ pub const ArrayListStore = struct {
         return self.functions.items.len - 1;
     }
 
-    // Helper function for adding a host function
-    pub fn addHostFunction(self: *ArrayListStore, module: []const u8, function_name: []const u8, host_function_pointer: anytype, params: []const ValType, results: []const ValType) !void {
-        const handle = try self.addFunction(Function{
-            .params = params,
-            .results = results,
-            .subtype = .{
-                .host_function = .{
-                    .func = host_function_pointer,
-                },
-            },
-        });
-
-        try self.@"export"(module[0..], function_name[0..], .Func, handle);
-    }
-
+    /// Given a memaddr return a pointer to the Memory if the memaddr exists
+    /// otherwise error with BadMemoryIndex.
     pub fn memory(self: *ArrayListStore, memaddr: usize) !*Memory {
         if (memaddr >= self.memories.items.len) return error.BadMemoryIndex;
         return &self.memories.items[memaddr];
     }
 
+    /// Allocate a new Memory with min / max size and add to store.
     pub fn addMemory(self: *ArrayListStore, min: u32, max: ?u32) !usize {
         const mem_ptr = try self.memories.addOne();
         mem_ptr.* = Memory.init(self.alloc, min, max);
@@ -141,6 +132,8 @@ pub const ArrayListStore = struct {
         return self.memories.items.len - 1;
     }
 
+    /// Given a tableaddr return a pointer to the Table if the tableaddr exists
+    /// otherwise error with BadTableIndex.
     pub fn table(self: *ArrayListStore, tableaddr: usize) !*Table {
         if (tableaddr >= self.tables.items.len) return error.BadTableIndex;
         return &self.tables.items[tableaddr];
@@ -152,11 +145,14 @@ pub const ArrayListStore = struct {
         return self.tables.items.len - 1;
     }
 
+    /// Given a globaladdr return a pointer to the Global if the globaladdr exists
+    /// otherwise error with BadGlobalIndex.
     pub fn global(self: *ArrayListStore, globaladdr: usize) !*Global {
         if (globaladdr >= self.globals.items.len) return error.BadGlobalIndex;
         return &self.globals.items[globaladdr];
     }
 
+    /// Add a Global to the store and return its globaladdr
     pub fn addGlobal(self: *ArrayListStore, value: Global) !usize {
         const glbl_ptr = try self.globals.addOne();
         glbl_ptr.* = value;
@@ -164,6 +160,8 @@ pub const ArrayListStore = struct {
         return self.globals.items.len - 1;
     }
 
+    /// Given a elemaddr return a pointer to the Elem if the elemaddr exists
+    /// otherwise error with BadElemAddr.
     pub fn elem(self: *ArrayListStore, elemaddr: usize) !*Elem {
         if (elemaddr >= self.elems.items.len) return error.BadElemAddr;
         return &self.elems.items[elemaddr];
@@ -175,6 +173,8 @@ pub const ArrayListStore = struct {
         return self.elems.items.len - 1;
     }
 
+    /// Given a dataaddr return a pointer to the Data if the dataaddr exists
+    /// otherwise error with BadDataAddr.
     pub fn data(self: *ArrayListStore, dataaddr: usize) !*Data {
         if (dataaddr >= self.datas.items.len) return error.BadDataAddr;
         return &self.datas.items[dataaddr];
@@ -184,5 +184,55 @@ pub const ArrayListStore = struct {
         const data_ptr = try self.datas.addOne();
         data_ptr.* = try Data.init(self.alloc, count);
         return self.datas.items.len - 1;
+    }
+
+    // Helper functions for exposing values
+
+    pub fn exposeHostFunction(self: *ArrayListStore, module: []const u8, function_name: []const u8, host_function_pointer: anytype, params: []const ValType, results: []const ValType) !void {
+        const funcaddr = try self.addFunction(Function{
+            .params = params,
+            .results = results,
+            .subtype = .{
+                .host_function = .{
+                    .func = host_function_pointer,
+                },
+            },
+        });
+
+        try self.@"export"(module[0..], function_name[0..], .Func, funcaddr);
+    }
+
+    pub fn exposeMemory(self: *ArrayListStore, module: []const u8, name: []const u8, min: u32, max: ?u32) !void {
+        const memaddr = try self.addMemory(min, max);
+
+        try self.@"export"(module, name, .Mem, memaddr);
+    }
+
+    pub fn exposeTable(self: *ArrayListStore, module: []const u8, name: []const u8, reftype: RefType, entries: u32, max: ?u32) !void {
+        const tableaddr = try self.addTable(reftype, entries, max);
+
+        try self.@"export"(module, name, .Table, tableaddr);
+    }
+
+    pub fn exposeGlobal(self: *ArrayListStore, module: []const u8, name: []const u8, value: u64, valtype: ValType, mutability: Mutability) !void {
+        const globaladdr = try self.addGlobal(.{
+            .value = value,
+            .valtype = valtype,
+            .mutability = mutability,
+        });
+
+        try self.@"export"(module, name, .Global, globaladdr);
+    }
+
+    pub fn exposeElem(self: *ArrayListStore, module: []const u8, name: []const u8, reftype: RefType, count: u32) !void {
+        const elemaddr = try self.addElem(reftype, count);
+
+        try self.@"export"(module, name, .Elem, elemaddr);
+    }
+
+    pub fn exposeData(self: *ArrayListStore, module: []const u8, name: []const u8, count: u32) !void {
+        const dataaddr = try self.addData(count);
+
+        try self.@"export"(module, name, .Data, dataaddr);
     }
 };
