@@ -5,8 +5,8 @@ pub fn build(b: *Builder) void {
     const optimize = b.standardOptimizeOption(.{});
 
     const exe = b.addExecutable(.{
-        .name = "generate_interface",
-        .root_source_file = .{ .path = "src/generate_interface.zig" },
+        .name = "zware-gen",
+        .root_source_file = .{ .path = "src/zware_gen.zig" },
         .target = target,
         .optimize = optimize,
     });
