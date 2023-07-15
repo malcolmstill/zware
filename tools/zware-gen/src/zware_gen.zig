@@ -68,7 +68,7 @@ pub fn main() !void {
 
         try stdout.print("pub fn {s}(vm: *zware.VirtualMachine) zware.WasmError!void {{\n", .{function_import.name});
 
-        if (function_type.params.len == 0) {
+        if (function_type.params.len == 0 and function_type.results.len == 0 ) {
             try stdout.print("\t_ = vm;\n", .{});
         }
 
@@ -90,6 +90,10 @@ pub fn main() !void {
         }
         try stdout.print("}});\n", .{});
  
+        for (function_type.results) |_| {
+            try stdout.print("\ttry vm.pushOperand(u64, 0);\n", .{});
+        }
+
         try stdout.print("\t@panic(\"Unimplemented: {s}\");\n", .{function_import.name});
         try stdout.print("}}\n\n", .{});
     }
