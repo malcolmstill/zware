@@ -42,7 +42,11 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
-        try stdout.print("\ttry store.exposeHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{function_import.module, function_import.name, function_import.name});
+        if (mem.eql(u8, function_import.module, "wasi_snapshot_preview1")) {
+            try stdout.print("\ttry store.exposeHostFunction(\"{s}\", \"{s}\", zware.wasi.{s}, &[_]zware.ValType{{", .{ function_import.module, function_import.name, function_import.name });
+        } else {
+            try stdout.print("\ttry store.exposeHostFunction(\"{s}\", \"{s}\", {s}, &[_]zware.ValType{{", .{ function_import.module, function_import.name, function_import.name });
+        }
         for (function_type.params, 0..) |param, i| {
             try stdout.print(".{s}", .{@tagName(param)});
 
@@ -53,7 +57,7 @@ pub fn main() !void {
             try stdout.print(".{s}", .{@tagName(result)});
 
             if (i < function_type.results.len - 1) try stdout.print(", ", .{});
-        }        
+        }
         try stdout.print("}});\n", .{});
     }
     try stdout.print("}}\n\n", .{});
@@ -66,14 +70,17 @@ pub fn main() !void {
 
         const function_type = module.types.list.items[function.typeidx];
 
+        // Do not generate a stub for WASI functions
+        if (mem.eql(u8, function_import.module, "wasi_snapshot_preview1")) continue;
+
         try stdout.print("pub fn {s}(vm: *zware.VirtualMachine) zware.WasmError!void {{\n", .{function_import.name});
 
-        if (function_type.params.len == 0 and function_type.results.len == 0 ) {
+        if (function_type.params.len == 0 and function_type.results.len == 0) {
             try stdout.print("\t_ = vm;\n", .{});
         }
 
         for (function_type.params, 0..) |param, i| {
-            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{i, zigType(param)});
+            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{ i, zigType(param) });
         }
 
         try stdout.print("\tstd.debug.print(\"Unimplemented: {s}(", .{function_import.name});
@@ -89,7 +96,7 @@ pub fn main() !void {
             if (i < function_type.params.len - 1) try stdout.print(", ", .{});
         }
         try stdout.print("}});\n", .{});
- 
+
         for (function_type.results) |_| {
             try stdout.print("\ttry vm.pushOperand(u64, 0);\n", .{});
         }
@@ -117,7 +124,7 @@ pub fn main() !void {
 
         // Emit function params
         for (function_type.params, 0..) |param, i| {
-            try stdout.print(", param{}: {s}", .{i, zigType(param)});
+            try stdout.print(", param{}: {s}", .{ i, zigType(param) });
         }
 
         try stdout.print(") !", .{});
@@ -155,12 +162,11 @@ pub fn main() !void {
         }
         try stdout.print("}};\n", .{});
 
-
         try stdout.print("\t\tvar out = [_]u64{{", .{});
         for (function_type.results, 0..) |_, i| {
             try stdout.print("0", .{});
             if (i < function_type.results.len - 1) try stdout.print(", ", .{});
-        }        
+        }
         try stdout.print("}};\n", .{});
 
         try stdout.print("\t\ttry self.instance.invoke(\"{s}\", in[0..], out[0..], .{{}});\n", .{exprt.name});
