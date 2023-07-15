@@ -79,8 +79,12 @@ pub fn main() !void {
             try stdout.print("\t_ = vm;\n", .{});
         }
 
-        for (function_type.params, 0..) |param, i| {
-            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{ i, zigType(param) });
+        // Insert pops. Note our first argument to a function is the _last_ argument that will be popped off
+        // the stack, so we pop the last argument first which is why this is working backwards through params.
+        for (function_type.params, 0..) |_, i| {
+            const j = function_type.params.len - 1 - i;
+            const param = function_type.params[j];
+            try stdout.print("\tconst param{} = vm.popOperand({s});\n", .{ j, zigType(param) });
         }
 
         try stdout.print("\tstd.debug.print(\"Unimplemented: {s}(", .{function_import.name});
