@@ -8,6 +8,12 @@ const wasi = std.os.wasi;
 const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 const WasmError = @import("../instance/vm.zig").WasmError;
 
+// I've largely used the implementations from https://github.com/andrewrk/zig-wasi (shoutout to Andrew and Jacob!).
+//
+// Thought: could we move the wasi implementations into the zig standard library, or are they too specific to a particular
+// WebAssembly implementation? E.g. some of the wasi functions only seem to depend on a slice of memory + the zig std lib
+// functions.
+
 pub fn args_get(vm: *VirtualMachine) WasmError!void {
     const argv_buf_ptr = vm.popOperand(u32);
     const argv_ptr = vm.popOperand(u32);
@@ -373,6 +379,10 @@ pub fn random_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
+// FIXME: figure out complete mapping of errors we expect from
+//        zig std lib and how they map to the complete wasi.errno_t
+//        struct. Such a complete mapping would be useful to add to
+//        the zig std lib?
 fn toWasiError(err: anyerror) wasi.errno_t {
     return switch (err) {
         error.AccessDenied => .ACCES,
@@ -386,10 +396,12 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
-        else => std.debug.panic("unexpected error: {s}", .{@errorName(err)}),
+        else => std.debug.panic("WASI: Unhandled zig stdlib error: {s}", .{@errorName(err)}),
     };
 }
 
+// FIXME: can we write a program that exercises all of the zig file kinds and wasi filetypes?
+//        Again, such a mapping would be useful to add to the zig std lib?
 fn toWasiFileType(kind: fs.File.Kind) wasi.filetype_t {
     return switch (kind) {
         .block_device => .BLOCK_DEVICE,

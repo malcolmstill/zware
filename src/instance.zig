@@ -448,6 +448,13 @@ pub const Instance = struct {
 
     // FIXME: hide any allocation / deinit inside Instance
     // Caller must call std.process.argsFree on returned args
+    //
+    // This forwards all the processes's command line args to the
+    // virtual machine.
+    //
+    // TODO: we probably want to allow consumers of zware more fine-grained
+    //       control of which arguments get exposed to an instance. A similar
+    //       thing would be desirable for env vars.
     pub fn forwardArgs(self: *Instance, alloc: mem.Allocator) ![][:0]u8 {
         const args = try std.process.argsAlloc(alloc);
 
