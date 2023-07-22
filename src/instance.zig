@@ -446,6 +446,7 @@ pub const Instance = struct {
         });
     }
 
+    // FIXME: hide any allocation / deinit inside Instance
     // Caller must call std.process.argsFree on returned args
     pub fn forwardArgs(self: *Instance, alloc: mem.Allocator) ![][:0]u8 {
         const args = try std.process.argsAlloc(alloc);
