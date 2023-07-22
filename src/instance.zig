@@ -1,6 +1,8 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
+const os = std.os;
+const wasi = std.os.wasi;
 const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
@@ -40,6 +42,22 @@ pub const Instance = struct {
     elemaddrs: ArrayList(usize),
     dataaddrs: ArrayList(usize),
 
+    // wasi-specific fields
+    //
+    // They are defined on an instance but only really on an
+    // initial instance that is invoked. When initialising a
+    // VirtualMachine this initial instance will pass its wasi
+    // data to the VirtualMachine (via pointers).
+    //
+    // The wasi implementations can (and must) then lookup this data via
+    // the VirtualMachine, it shouldn't call e.g. `vm.inst...` because
+    // a VirtualMachine swaps out its `inst` (instance) pointer as
+    // it executes; an arbitrary `inst` will not contain the correct
+    // data.
+    wasi_preopens: std.AutoHashMap(wasi.fd_t, WasiPreopen),
+    wasi_args: std.ArrayList([:0]u8),
+    wasi_env: std.StringHashMap([]const u8),
+
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{
             .module = module,
@@ -50,6 +68,10 @@ pub const Instance = struct {
             .globaladdrs = ArrayList(usize).init(alloc),
             .elemaddrs = ArrayList(usize).init(alloc),
             .dataaddrs = ArrayList(usize).init(alloc),
+
+            .wasi_preopens = std.AutoHashMap(os.wasi.fd_t, WasiPreopen).init(alloc),
+            .wasi_args = ArrayList([:0]u8).init(alloc),
+            .wasi_env = std.StringHashMap([]const u8).init(alloc),
         };
     }
 
@@ -60,6 +82,10 @@ pub const Instance = struct {
         self.globaladdrs.deinit();
         self.elemaddrs.deinit();
         self.dataaddrs.deinit();
+
+        self.wasi_preopens.deinit();
+        self.wasi_args.deinit();
+        self.wasi_env.deinit();
     }
 
     pub fn getFunc(self: *Instance, funcidx: usize) !Function {
@@ -411,4 +437,37 @@ pub const Instance = struct {
             else => return vm.popOperand(Result),
         }
     }
+
+    pub fn addWasiPreopen(self: *Instance, wasi_fd: os.wasi.fd_t, name: []const u8, host_fd: os.fd_t) !void {
+        return self.wasi_preopens.put(wasi_fd, .{
+            .wasi_fd = wasi_fd,
+            .name = name,
+            .host_fd = host_fd,
+        });
+    }
+
+    // FIXME: hide any allocation / deinit inside Instance
+    // Caller must call std.process.argsFree on returned args
+    //
+    // This forwards all the processes's command line args to the
+    // virtual machine.
+    //
+    // TODO: we probably want to allow consumers of zware more fine-grained
+    //       control of which arguments get exposed to an instance. A similar
+    //       thing would be desirable for env vars.
+    pub fn forwardArgs(self: *Instance, alloc: mem.Allocator) ![][:0]u8 {
+        const args = try std.process.argsAlloc(alloc);
+
+        for (args) |arg| {
+            try self.wasi_args.append(arg);
+        }
+
+        return args;
+    }
+};
+
+pub const WasiPreopen = struct {
+    wasi_fd: wasi.fd_t,
+    name: []const u8,
+    host_fd: os.fd_t,
 };

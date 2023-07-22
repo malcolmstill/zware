@@ -70,13 +70,13 @@ pub fn main() !void {
 
 - Embed WebAssembly programs in other zig programs
 - Be fast enough to be useful
-- Implement WASI
 
 ## Status
 
 - The project is very much alpha quality
 - WebAssembly 2.0 supported (apart from the vector / SIMD support which is WIP)
-- The WebAssembly official testsuite passes and zware includes a fuzzer
+- The WebAssembly official testsuite passes (not including SIMD tests)
+- Partial WASI support
 
 ## Running the testsuite
 

@@ -1,10 +1,13 @@
 const std = @import("std");
+const os = std.os;
 const mem = std.mem;
 const math = std.math;
+const wasi = std.os.wasi;
 const ArrayList = std.ArrayList;
 const Module = @import("../module.zig").Module;
 const ValType = @import("../module.zig").ValType;
 const Instance = @import("../instance.zig").Instance;
+const WasiPreopen = @import("../instance.zig").WasiPreopen;
 const Rr = @import("../rr.zig").Rr;
 
 // VirtualMachine:
@@ -32,6 +35,15 @@ pub const VirtualMachine = struct {
     inst: *Instance = undefined,
     ip: usize = 0,
 
+    // wasi support
+    //
+    // These fields match the types in Instance but are
+    // instead pointers. These will point to the Instance
+    // that initialises the VirtualMachine
+    wasi_preopens: *std.AutoHashMap(wasi.fd_t, WasiPreopen),
+    wasi_args: *std.ArrayList([:0]u8),
+    wasi_env: *std.StringHashMap([]const u8),
+
     pub const Frame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
         return_arity: usize = 0,
@@ -55,7 +67,20 @@ pub const VirtualMachine = struct {
             .frame_stack = frame_stack,
             .label_stack = label_stack,
             .inst = inst,
+            .wasi_preopens = &inst.wasi_preopens,
+            .wasi_args = &inst.wasi_args,
+            .wasi_env = &inst.wasi_env,
         };
+    }
+
+    pub fn lookupWasiPreopen(self: *VirtualMachine, wasi_fd: os.wasi.fd_t) ?WasiPreopen {
+        return self.wasi_preopens.get(wasi_fd);
+    }
+
+    pub fn getHostFd(self: *VirtualMachine, wasi_fd: wasi.fd_t) os.fd_t {
+        const preopen = self.lookupWasiPreopen(wasi_fd) orelse return wasi_fd;
+
+        return preopen.host_fd;
     }
 
     pub fn invoke(self: *VirtualMachine, ip: usize) !void {
@@ -2306,9 +2331,9 @@ pub const VirtualMachine = struct {
         // FIXME: move initial bounds check into Memory implementation
         const data = memory.memory();
         if (dest <= src) {
-            memory.uncheckedCopy(dest, data[src..src+n]);
+            memory.uncheckedCopy(dest, data[src .. src + n]);
         } else {
-            memory.uncheckedCopyBackwards(dest, data[src..src+n]);
+            memory.uncheckedCopyBackwards(dest, data[src .. src + n]);
         }
 
         return dispatch(self, ip + 1, code);
