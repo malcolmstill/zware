@@ -13,6 +13,7 @@ const RefType = @import("../valtype.zig").RefType;
 const Range = @import("../rr.zig").Range;
 const Rr = @import("../rr.zig").Rr;
 const MiscRr = @import("../rr.zig").MiscRr;
+const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 
 pub const Parsed = struct {
     start: usize,
@@ -59,6 +60,7 @@ pub const Parser = struct {
 
         while (try self.next()) |instr| {
             try self.module.parsed_code.append(instr);
+            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
@@ -66,6 +68,7 @@ pub const Parser = struct {
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
@@ -101,6 +104,7 @@ pub const Parser = struct {
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.module.parsed_code.append(instr);
+            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
@@ -108,6 +112,7 @@ pub const Parser = struct {
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
@@ -300,6 +305,7 @@ pub const Parser = struct {
                                 .else_ip = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                             },
                         };
+                        self.module.instructions.items[parsed_code_offset] = VirtualMachine.@"if";
                     },
                     else => return error.UnexpectedInstruction,
                 }
