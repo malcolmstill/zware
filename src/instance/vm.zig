@@ -86,7 +86,7 @@ pub const VirtualMachine = struct {
     pub fn invoke(self: *VirtualMachine, ip: usize) !void {
         const instr = self.inst.module.instructions.items[ip];
 
-        try @call(.{}, instr, .{ self, ip, self.inst.module.parsed_code.items, @as([]Instruction, @ptrCast(self.inst.module.instructions.items)) });
+        try @call(.auto, instr, .{ self, ip, self.inst.module.parsed_code.items, @as([]Instruction, @ptrCast(self.inst.module.instructions.items)) });
     }
 
     // To avoid a recursive definition, define similar function pointer type we will cast to / from
