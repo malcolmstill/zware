@@ -60,7 +60,7 @@ pub const Parser = struct {
 
         while (try self.next()) |instr| {
             try self.module.parsed_code.append(instr);
-            try self.module.instructions.append(VirtualMachine.lookup[@enumToInt(instr)]);
+            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
@@ -104,7 +104,7 @@ pub const Parser = struct {
                 else => return error.ValidatorConstantExpressionRequired,
             }
             try self.module.parsed_code.append(instr);
-            try self.module.instructions.append(VirtualMachine.lookup[@enumToInt(instr)]);
+            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
