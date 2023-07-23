@@ -92,3 +92,7 @@ zig build --prefix ./
 ```
 sh test/run-generated.sh
 ```
+
+## Does it run doom?
+
+Yes, [yes it does](https://github.com/malcolmstill/zware-doom)
