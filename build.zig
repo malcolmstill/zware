@@ -1,8 +1,14 @@
 const Builder = @import("std").build.Builder;
 
-pub fn build(b: *Builder) void {
+pub fn build(b: *Builder) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+
+    var zware_module = b.createModule(.{
+        .source_file = .{ .path = "src/main.zig" },
+    });
+
+    try b.modules.put(b.dupe("zware"), zware_module);
 
     const lib = b.addStaticLibrary(.{
         .name = "zware",
