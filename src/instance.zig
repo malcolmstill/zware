@@ -13,6 +13,7 @@ const Global = @import("store/global.zig").Global;
 const Elem = @import("store/elem.zig").Elem;
 const Data = @import("store/data.zig").Data;
 const VirtualMachine = @import("instance/vm.zig").VirtualMachine;
+const Instruction = VirtualMachine.Instruction;
 
 const VirtualMachineOptions = struct {
     frame_stack_size: comptime_int = 1024,
@@ -348,7 +349,7 @@ pub const Instance = struct {
                 try vm.pushLabel(VirtualMachine.Label{
                     .return_arity = function.results.len,
                     .op_stack_len = locals_start,
-                    .branch_target = 0,
+                    .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
                 });
 
                 // 8. Execute our function
@@ -397,7 +398,7 @@ pub const Instance = struct {
                 try vm.pushLabel(VirtualMachine.Label{
                     .return_arity = 0,
                     .op_stack_len = locals_start,
-                    .branch_target = 0,
+                    .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
                 });
 
                 try vm.invoke(f.start);
@@ -409,7 +410,7 @@ pub const Instance = struct {
         }
     }
 
-    pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: VirtualMachineOptions) !Result {
+    pub fn invokeExpression(self: *Instance, start: [*]Instruction, comptime Result: type, comptime options: VirtualMachineOptions) !Result {
         var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
         var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
         var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
@@ -428,6 +429,7 @@ pub const Instance = struct {
         try vm.pushLabel(VirtualMachine.Label{
             .return_arity = 1,
             .op_stack_len = locals_start,
+            .branch_target = @as([*]Instruction, @ptrCast(&self.module.instructions.items[0])),
         });
 
         try vm.invoke(start);
