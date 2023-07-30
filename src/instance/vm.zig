@@ -263,6 +263,18 @@ pub const VirtualMachine = struct {
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += f.locals_count;
 
+                // Only patch (for the moment) functions in the same instance
+                if (self.inst == f.instance) {
+                    // Switch call with fast_call
+                    code[ip] = .{ .fast_call = .{
+                        .start = @as(u32, @truncate(f.start)),
+                        .locals = @as(u16, @truncate(f.locals_count)),
+                        .params = @as(u16, @truncate(function.params.len)),
+                        .results = @as(u16, @truncate(function.results.len)),
+                        .required_stack_space = @as(u16, @truncate(f.required_stack_space)),
+                    } };
+                }
+
                 self.inst = f.instance;
 
                 // Consume parameters from the stack
