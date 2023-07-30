@@ -37,6 +37,8 @@ pub const Module = struct {
     element_init_offsets: ArrayList(usize),
     parsed_code: ArrayList(Rr),
     instructions: ArrayList(VirtualMachine.InstructionFunction),
+    immediates_offset: ArrayList(u32),
+    immediates: ArrayList(u32),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     references: ArrayList(u32),
@@ -60,6 +62,8 @@ pub const Module = struct {
             .element_init_offsets = ArrayList(usize).init(alloc),
             .parsed_code = ArrayList(Rr).init(alloc),
             .instructions = ArrayList(VirtualMachine.InstructionFunction).init(alloc),
+            .immediates_offset = ArrayList(u32).init(alloc),
+            .immediates = ArrayList(u32).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .references = ArrayList(u32).init(alloc),
@@ -82,6 +86,8 @@ pub const Module = struct {
         self.element_init_offsets.deinit();
         self.parsed_code.deinit();
         self.instructions.deinit();
+        self.immediates_offset.deinit();
+        self.immediates.deinit();
         self.local_types.deinit();
         self.br_table_indices.deinit();
         self.references.deinit();
