@@ -36,9 +36,7 @@ pub const Module = struct {
     data_count: ?u32 = null,
     element_init_offsets: ArrayList(usize),
     // parsed_code: ArrayList(Rr),
-    instructions: ArrayList(VirtualMachine.InstructionFunction),
-    immediates_offset: ArrayList(u32),
-    immediates: ArrayList(u32),
+    instructions: ArrayList(u64),
     local_types: ArrayList(LocalType),
     br_table_indices: ArrayList(u32),
     references: ArrayList(u32),
@@ -61,9 +59,7 @@ pub const Module = struct {
             .datas = Section(DataSegment).init(alloc),
             .element_init_offsets = ArrayList(usize).init(alloc),
             // .parsed_code = ArrayList(Rr).init(alloc),
-            .instructions = ArrayList(VirtualMachine.InstructionFunction).init(alloc),
-            .immediates_offset = ArrayList(u32).init(alloc),
-            .immediates = ArrayList(u32).init(alloc),
+            .instructions = ArrayList(u64).init(alloc),
             .local_types = ArrayList(LocalType).init(alloc),
             .br_table_indices = ArrayList(u32).init(alloc),
             .references = ArrayList(u32).init(alloc),
@@ -86,8 +82,6 @@ pub const Module = struct {
         self.element_init_offsets.deinit();
         // self.parsed_code.deinit();
         self.instructions.deinit();
-        self.immediates_offset.deinit();
-        self.immediates.deinit();
         self.local_types.deinit();
         self.br_table_indices.deinit();
         self.references.deinit();
@@ -106,8 +100,7 @@ pub const Module = struct {
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
         // See https://github.com/malcolmstill/zware/pull/133
-        try self.instructions.append(VirtualMachine.@"return");
-        try self.immediates_offset.append(0);
+        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
 
         var i: usize = 0;
         while (true) : (i += 1) {
@@ -487,9 +480,9 @@ pub const Module = struct {
 
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.instructions.append(VirtualMachine.@"ref.func");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
                         // try self.parsed_code.append(Rr.@"return");
-                        try self.instructions.append(VirtualMachine.@"return");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -520,9 +513,9 @@ pub const Module = struct {
 
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.instructions.append(VirtualMachine.@"ref.func");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
                         // try self.parsed_code.append(Rr.@"return");
-                        try self.instructions.append(VirtualMachine.@"return");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -555,9 +548,9 @@ pub const Module = struct {
 
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.instructions.append(VirtualMachine.@"ref.func");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
                         // try self.parsed_code.append(Rr.@"return");
-                        try self.instructions.append(VirtualMachine.@"return");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
                     }
 
@@ -587,9 +580,9 @@ pub const Module = struct {
 
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.instructions.append(VirtualMachine.@"ref.func");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
                         // try self.parsed_code.append(Rr.@"return");
-                        try self.instructions.append(VirtualMachine.@"return");
+                        try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
                     }
 

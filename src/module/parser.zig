@@ -70,7 +70,7 @@ pub const Parser = struct {
 
         // FIXME: might setting .block in ControlFrame mean we don't have to replace final end with return?
         // Patch last end so that it is return
-        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = @as(u64, @intFromPtr(&VirtualMachine.@"return"));
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
@@ -113,7 +113,7 @@ pub const Parser = struct {
 
         // FIXME: might setting .block in ControlFrame mean we don't have to replace final end with return?
         // Patch last end so that it is return
-        self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
+        self.module.instructions.items[self.module.instructions.items.len - 1] = @as(u64, @intFromPtr(&VirtualMachine.@"return"));
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
     }
@@ -158,7 +158,7 @@ pub const Parser = struct {
     }
 
     pub fn next(self: *Parser) !?Opcode {
-        defer self.code_ptr += 1;
+        defer self.code_ptr = self.module.instructions.items.len;
         if (self.scope > 0 and self.code.len == 0) return error.CouldntFindEnd;
 
         if (self.code.len == 0) return null;
@@ -168,11 +168,11 @@ pub const Parser = struct {
         const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         self.code = self.code[1..];
 
-        // Record the start of this instruction's immediates
-        const immediates_count = std.math.cast(u32, self.module.immediates.items.len) orelse return error.TooManyImmediates; // FIXME: error or assert
-        try self.module.immediates_offset.append(immediates_count);
-
         // std.debug.print("instr[{}] = {}, immediate offset = {}\n", .{ self.code_ptr, instr, immediates_count });
+
+        // std.debug.print("instr = {}\n", .{instr});
+        // defer std.debug.print("{any}\n\n", .{self.module.instructions.items});
+        try self.module.instructions.append(@as(u64, @intFromPtr(VirtualMachine.lookup[@intFromEnum(instr)])));
 
         // 2. Find the start of the next instruction
         switch (instr) {
@@ -209,9 +209,9 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr, .block);
                 self.scope += 1;
 
-                try self.module.immediates.append(block_params);
-                try self.module.immediates.append(block_returns);
-                try self.module.immediates.append(0);
+                try self.module.instructions.append(block_params);
+                try self.module.instructions.append(block_returns);
+                try self.module.instructions.append(0);
 
                 // Rr{
                 //     .block = .{
@@ -251,9 +251,9 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr, .loop);
                 self.scope += 1;
 
-                try self.module.immediates.append(block_params);
-                try self.module.immediates.append(block_params);
-                try self.module.immediates.append(math.cast(u32, self.code_ptr) orelse return error.FailedCast);
+                try self.module.instructions.append(block_params);
+                try self.module.instructions.append(block_params);
+                try self.module.instructions.append(math.cast(u32, self.code_ptr) orelse return error.FailedCast);
 
                 // rr = Rr{
                 //     .loop = .{
@@ -298,12 +298,12 @@ pub const Parser = struct {
                 try self.pushContinuationStack(self.code_ptr, .@"if");
                 self.scope += 1;
 
-                try self.module.immediates.append(block_params);
-                try self.module.immediates.append(block_returns);
-                try self.module.immediates.append(0);
+                try self.module.instructions.append(block_params);
+                try self.module.instructions.append(block_returns);
+                try self.module.instructions.append(0);
                 // an if with no else only has 3 immediates, but we push a fourth here
                 // so we can exchange the if with an if_with_else
-                try self.module.immediates.append(0);
+                try self.module.instructions.append(0);
 
                 // FIXME: we have found an if, but we were actually pushing an if_no_else
                 //        i.e. we assume we don't have an else until we find one (and if we
@@ -321,12 +321,11 @@ pub const Parser = struct {
             },
             .@"else" => {
                 const pushed_instruction = try self.peekContinuationStack();
-                const immediates_offset = self.module.immediates_offset.items[pushed_instruction.offset];
 
                 switch (pushed_instruction.opcode) {
                     .@"if" => {
-                        self.module.immediates.items[immediates_offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
-                        self.module.instructions.items[pushed_instruction.offset] = VirtualMachine.if_with_else;
+                        // std.debug.print("pushed_instruction.offset = {}\n", .{pushed_instruction.offset});
+                        self.module.instructions.items[pushed_instruction.offset] = @as(u64, @intFromPtr(&VirtualMachine.if_with_else));
                     },
                     else => return error.UnexpectedInstruction,
                 }
@@ -338,22 +337,21 @@ pub const Parser = struct {
                 // If we're not looking at the `end` of a function
                 if (self.scope != 0) {
                     const pushed_instruction = try self.popContinuationStack();
-                    const immediate_offset = self.module.immediates_offset.items[pushed_instruction.offset];
                     // std.debug.print("instr[{}]: end immediate_offset = {}\n", .{ pushed_instruction.offset, immediate_offset });
 
                     switch (pushed_instruction.opcode) {
-                        .block => self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
+                        .block => self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                         .loop => {},
                         .if_with_else => {
-                            self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
                         .@"if" => {
-                            const param_arity = self.module.immediates.items[immediate_offset];
-                            const return_arity = self.module.immediates.items[immediate_offset + 1];
+                            const param_arity = self.module.instructions.items[pushed_instruction.offset + 1];
+                            const return_arity = self.module.instructions.items[pushed_instruction.offset + 2];
                             // We have an if with no else, check that this works arity-wise and replace with fast if
                             if (param_arity -% return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                            self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
                         else => return error.UnexpectedInstruction,
                     }
@@ -365,14 +363,14 @@ pub const Parser = struct {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBr(label);
 
-                try self.module.immediates.append(label);
+                try self.module.instructions.append(label);
                 // rr = Rr{ .br = label };
             },
             .br_if => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBrIf(label);
 
-                try self.module.immediates.append(label);
+                try self.module.instructions.append(label);
                 // rr = Rr{ .br_if = label };
             },
             .br_table => {
@@ -389,9 +387,9 @@ pub const Parser = struct {
 
                 try self.validator.validateBrTable(l_star, ln);
 
-                try self.module.immediates.append(label_start);
-                try self.module.immediates.append(label_count);
-                try self.module.immediates.append(ln);
+                try self.module.instructions.append(label_start);
+                try self.module.instructions.append(label_count);
+                try self.module.instructions.append(ln);
 
                 // rr = Rr{
                 //     .br_table = .{
@@ -408,13 +406,12 @@ pub const Parser = struct {
 
                 try self.validator.validateCall(functype);
 
-                try self.module.immediates.append(funcidx);
+                try self.module.instructions.append(funcidx);
                 // To allow swapping out a .call with a .fast_call we need enough space for all .fast_call immediates:
-                try self.module.immediates.append(0);
-                try self.module.immediates.append(0);
-                try self.module.immediates.append(0);
-                try self.module.immediates.append(0);
-                try self.module.immediates.append(0);
+                try self.module.instructions.append(0);
+                try self.module.instructions.append(0);
+                try self.module.instructions.append(0);
+                try self.module.instructions.append(0);
 
                 // rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
@@ -429,8 +426,8 @@ pub const Parser = struct {
 
                 try self.validator.validateCallIndirect(functype);
 
-                try self.module.immediates.append(typeidx);
-                try self.module.immediates.append(tableidx);
+                try self.module.instructions.append(typeidx);
+                try self.module.instructions.append(tableidx);
 
                 // rr = Rr{
                 //     .call_indirect = .{
@@ -455,7 +452,7 @@ pub const Parser = struct {
 
                 try self.validator.validateGlobalGet(global);
 
-                try self.module.immediates.append(globalidx);
+                try self.module.instructions.append(globalidx);
 
                 // rr = Rr{ .@"global.get" = globalidx };
             },
@@ -465,7 +462,7 @@ pub const Parser = struct {
 
                 try self.validator.validateGlobalSet(global);
 
-                try self.module.immediates.append(globalidx);
+                try self.module.instructions.append(globalidx);
                 // rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
@@ -480,7 +477,7 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
                 _ = try self.validator.pushOperand(Type{ .Known = reftype });
 
-                try self.module.immediates.append(tableidx);
+                try self.module.instructions.append(tableidx);
                 // rr = Rr{ .@"table.get" = tableidx };
             },
             .@"table.set" => {
@@ -495,7 +492,7 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
                 _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
-                try self.module.immediates.append(tableidx);
+                try self.module.instructions.append(tableidx);
                 // rr = Rr{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
@@ -524,7 +521,7 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.module.immediates.append(localidx);
+                try self.module.instructions.append(localidx);
                 // rr = Rr{ .@"local.get" = localidx };
             },
             .@"local.set" => {
@@ -554,7 +551,7 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.module.immediates.append(localidx);
+                try self.module.instructions.append(localidx);
 
                 // rr = Rr{ .@"local.set" = localidx };
             },
@@ -585,7 +582,7 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.module.immediates.append(localidx);
+                try self.module.instructions.append(localidx);
                 // rr = Rr{ .@"local.tee" = localidx };
             },
             .@"memory.size" => {
@@ -593,7 +590,7 @@ pub const Parser = struct {
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                try self.module.immediates.append(memidx);
+                try self.module.instructions.append(memidx);
                 // rr = Rr{ .@"memory.size" = memidx };
             },
             .@"memory.grow" => {
@@ -601,35 +598,33 @@ pub const Parser = struct {
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                try self.module.immediates.append(memidx);
+                try self.module.instructions.append(memidx);
                 // rr = Rr{ .@"memory.grow" = memidx };
             },
             .@"i32.const" => {
                 const i32_const = try self.readILEB128Mem(i32);
 
-                try self.module.immediates.append(@as(u32, @bitCast(i32_const)));
+                try self.module.instructions.append(@as(u32, @bitCast(i32_const)));
                 // rr = Rr{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
                 const i64_const = try self.readILEB128Mem(i64);
                 const u64_const = @as(u64, @bitCast(i64_const));
 
-                try self.module.immediates.append(@as(u32, @truncate(u64_const & 0xFFFFFFFF)));
-                try self.module.immediates.append(@as(u32, @truncate(u64_const >> 32)));
+                try self.module.instructions.append(u64_const);
                 // rr = Rr{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
                 const float_const: f32 = @bitCast(try self.readU32());
 
-                try self.module.immediates.append(@as(u32, @bitCast(float_const)));
+                try self.module.instructions.append(@as(u32, @bitCast(float_const)));
                 // rr = Rr{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
                 const float_const: f64 = @bitCast(try self.readU64());
                 const u64_float = @as(u64, @bitCast(float_const));
 
-                try self.module.immediates.append(@as(u32, @truncate(u64_float & 0xFFFF)));
-                try self.module.immediates.append(@as(u32, @truncate(u64_float >> 32)));
+                try self.module.instructions.append(u64_float);
 
                 // rr = Rr{ .@"f64.const" = float_const };
             },
@@ -641,8 +636,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.load" = .{
                 //         .alignment = alignment,
@@ -657,8 +652,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load" = .{
                 //         .alignment = alignment,
@@ -673,8 +668,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"f32.load" = .{
                 //         .alignment = alignment,
@@ -689,8 +684,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"f64.load" = .{
                 //         .alignment = alignment,
@@ -705,8 +700,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.load8_s" = .{
                 //         .alignment = alignment,
@@ -721,8 +716,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.load8_u" = .{
                 //         .alignment = alignment,
@@ -737,8 +732,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.load16_s" = .{
                 //         .alignment = alignment,
@@ -753,8 +748,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.load16_u" = .{
                 //         .alignment = alignment,
@@ -769,8 +764,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load8_s" = .{
                 //         .alignment = alignment,
@@ -785,8 +780,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load8_u" = .{
                 //         .alignment = alignment,
@@ -801,8 +796,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load16_s" = .{
                 //         .alignment = alignment,
@@ -817,8 +812,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load16_u" = .{
                 //         .alignment = alignment,
@@ -833,8 +828,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load32_s" = .{
                 //         .alignment = alignment,
@@ -849,8 +844,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.load32_u" = .{
                 //         .alignment = alignment,
@@ -865,8 +860,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.store" = .{
                 //         .alignment = alignment,
@@ -881,8 +876,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.store" = .{
                 //         .alignment = alignment,
@@ -897,8 +892,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"f32.store" = .{
                 //         .alignment = alignment,
@@ -913,8 +908,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"f64.store" = .{
                 //         .alignment = alignment,
@@ -929,8 +924,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.store8" = .{
                 //         .alignment = alignment,
@@ -945,8 +940,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i32.store16" = .{
                 //         .alignment = alignment,
@@ -961,8 +956,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.store8" = .{
                 //         .alignment = alignment,
@@ -977,8 +972,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.store16" = .{
                 //         .alignment = alignment,
@@ -992,8 +987,8 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                try self.module.immediates.append(alignment);
-                try self.module.immediates.append(offset);
+                try self.module.instructions.append(alignment);
+                try self.module.instructions.append(offset);
                 // rr = Rr{
                 //     .@"i64.store32" = .{
                 //         .alignment = alignment,
@@ -1135,7 +1130,7 @@ pub const Parser = struct {
 
                 try self.validator.validateRefNull(reftype);
 
-                try self.module.immediates.append(@as(u32, @intFromEnum(reftype)));
+                try self.module.instructions.append(@as(u32, @intFromEnum(reftype)));
                 // rr = Rr{ .@"ref.null" = reftype };
             },
             .@"ref.is_null" => {},
@@ -1158,7 +1153,7 @@ pub const Parser = struct {
                     if (!in_references) return error.ValidatorUnreferencedFunction;
                 }
 
-                try self.module.immediates.append(funcidx);
+                try self.module.instructions.append(funcidx);
                 // rr = Rr{ .@"ref.func" = funcidx };
             },
             .misc => {
@@ -1185,8 +1180,8 @@ pub const Parser = struct {
 
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        try self.module.immediates.append(dataidx);
-                        try self.module.immediates.append(memidx);
+                        try self.module.instructions.append(dataidx);
+                        try self.module.instructions.append(memidx);
                         // rr = Rr{
                         //     .misc = MiscRr{
                         //         .@"memory.init" = .{
@@ -1202,7 +1197,7 @@ pub const Parser = struct {
                         const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
-                        try self.module.immediates.append(dataidx);
+                        try self.module.instructions.append(dataidx);
                         // rr = Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };
                     },
                     .@"memory.copy" => {
@@ -1211,8 +1206,8 @@ pub const Parser = struct {
                         const dst_memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        try self.module.immediates.append(src_memidx);
-                        try self.module.immediates.append(dst_memidx);
+                        try self.module.instructions.append(src_memidx);
+                        try self.module.instructions.append(dst_memidx);
                         // rr = Rr{ .misc = MiscRr{ .@"memory.copy" = .{
                         //     .src_memidx = src_memidx,
                         //     .dest_memidx = dest_memidx,
@@ -1222,7 +1217,7 @@ pub const Parser = struct {
                         const memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        try self.module.immediates.append(memidx);
+                        try self.module.instructions.append(memidx);
                         // rr = Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
@@ -1234,8 +1229,8 @@ pub const Parser = struct {
 
                         if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
 
-                        try self.module.immediates.append(elemidx);
-                        try self.module.immediates.append(tableidx);
+                        try self.module.instructions.append(elemidx);
+                        try self.module.instructions.append(tableidx);
                         // rr = Rr{ .misc = MiscRr{ .@"table.init" = .{
                         //     .elemidx = elemidx,
                         //     .tableidx = tableidx,
@@ -1246,7 +1241,7 @@ pub const Parser = struct {
 
                         if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
 
-                        try self.module.immediates.append(elemidx);
+                        try self.module.instructions.append(elemidx);
                         // rr = Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
@@ -1258,8 +1253,8 @@ pub const Parser = struct {
 
                         if (dst_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
 
-                        try self.module.immediates.append(dst_tableidx);
-                        try self.module.immediates.append(src_tableidx);
+                        try self.module.instructions.append(dst_tableidx);
+                        try self.module.instructions.append(src_tableidx);
                         // rr = Rr{ .misc = MiscRr{ .@"table.copy" = .{
                         //     .dest_tableidx = dest_tableidx,
                         //     .src_tableidx = src_tableidx,
@@ -1278,7 +1273,7 @@ pub const Parser = struct {
                         _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
 
                         try self.validator.pushOperand(Type{ .Known = .I32 });
-                        try self.module.immediates.append(tableidx);
+                        try self.module.instructions.append(tableidx);
                         // rr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
                         //     .tableidx = tableidx,
                         // } } };
@@ -1287,7 +1282,7 @@ pub const Parser = struct {
                         const tableidx = try self.readULEB128Mem(u32);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
-                        try self.module.immediates.append(tableidx);
+                        try self.module.instructions.append(tableidx);
                         // rr = Rr{ .misc = MiscRr{ .@"table.size" = .{
                         //     .tableidx = tableidx,
                         // } } };
@@ -1305,7 +1300,7 @@ pub const Parser = struct {
                         _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
                         _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
-                        try self.module.immediates.append(tableidx);
+                        try self.module.instructions.append(tableidx);
                         // rr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
                         //     .tableidx = tableidx,
                         // } } };
@@ -1316,8 +1311,6 @@ pub const Parser = struct {
 
         // std.debug.print("immediates = {any}\nimmeoffset = {any}\n\n", .{ self.module.immediates.items, self.module.immediates_offset.items });
         try self.validator.validate(instr);
-
-        try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
 
         return instr;
     }
