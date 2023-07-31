@@ -2198,7 +2198,6 @@ pub const VirtualMachine = struct {
     };
 
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
-        // const next_instr = code[next_ip].misc;
         const next_instr = immediates[imm];
         const next_offset = self.inst.module.immediates_offset.items[next_instr];
 
