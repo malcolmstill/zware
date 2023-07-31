@@ -219,7 +219,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn br(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        const next_ip = self.branch(instructions[ip]);
+        const next_ip = self.branch(instructions[ip + 1]);
 
         return dispatch(self, next_ip, instructions);
     }
@@ -227,7 +227,7 @@ pub const VirtualMachine = struct {
     pub fn br_if(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         const condition = self.popOperand(u32);
 
-        const next_ip = if (condition == 0) ip + 1 else self.branch(instructions[ip]);
+        const next_ip = if (condition == 0) ip + 1 else self.branch(instructions[ip + 1]);
 
         return dispatch(self, next_ip, instructions);
     }
