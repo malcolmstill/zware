@@ -291,6 +291,17 @@ pub const VirtualMachine = struct {
                 // Make space for locals (again, params already on stack)
                 self.op_ptr += f.locals_count;
 
+                if (self.inst == f.instance) {
+                    // Switch call with fast_call
+                    self.inst.module.instructions.items[ip] = VirtualMachine.fast_call;
+                    immediates[imm + 0] = @as(u32, @truncate(f.start));
+                    immediates[imm + 1] = @as(u32, @truncate(f.locals_count));
+                    immediates[imm + 2] = @as(u32, @truncate(function.params.len));
+                    immediates[imm + 3] = @as(u32, @truncate(function.results.len));
+                    immediates[imm + 4] = @as(u32, @truncate(f.required_stack_space));
+                    immediates[imm + 5] = self.inst.module.immediates_offset.items[f.start];
+                }
+
                 self.inst = f.instance;
 
                 // Consume parameters from the stack
@@ -314,7 +325,7 @@ pub const VirtualMachine = struct {
             .host_function => |hf| {
                 try hf.func(self);
                 next_ip = ip + 1;
-                next_imm = imm + 1;
+                next_imm = imm + 6;
             },
         }
 
@@ -387,6 +398,7 @@ pub const VirtualMachine = struct {
         const params = immediates[imm + 2];
         const results = immediates[imm + 3];
         const required_stack_space = immediates[imm + 4];
+        const next_imm = immediates[imm + 5];
 
         // Check we have enough stack space
         try self.checkStackSpace(required_stack_space + locals);
@@ -409,7 +421,7 @@ pub const VirtualMachine = struct {
             .branch_target = ip + 1,
         });
 
-        return dispatch(self, start, imm + 5, instructions, immediates);
+        return dispatch(self, start, next_imm, instructions, immediates);
     }
 
     pub fn drop(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {

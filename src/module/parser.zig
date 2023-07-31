@@ -409,6 +409,12 @@ pub const Parser = struct {
                 try self.validator.validateCall(functype);
 
                 try self.module.immediates.append(funcidx);
+                // To allow swapping out a .call with a .fast_call we need enough space for all .fast_call immediates:
+                try self.module.immediates.append(0);
+                try self.module.immediates.append(0);
+                try self.module.immediates.append(0);
+                try self.module.immediates.append(0);
+                try self.module.immediates.append(0);
 
                 // rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
