@@ -11,7 +11,7 @@ const Type = @import("validator.zig").Type;
 const ValType = @import("../valtype.zig").ValType;
 const RefType = @import("../valtype.zig").RefType;
 const Range = @import("../rr.zig").Range;
-const Rr = @import("../rr.zig").Rr;
+const RrOpcode = @import("../rr.zig").RrOpcode;
 const MiscRr = @import("../rr.zig").MiscRr;
 const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 
@@ -19,6 +19,8 @@ pub const Parsed = struct {
     start: usize,
     max_depth: usize,
 };
+
+const ContinuationStackEntry = struct { offset: usize, opcode: RrOpcode };
 
 pub const Parser = struct {
     function: []const u8 = undefined,
@@ -28,14 +30,14 @@ pub const Parser = struct {
     validator: Validator = undefined,
     params: ?[]const ValType,
     locals: ?[]LocalType,
-    continuation_stack: [1024]usize = [_]usize{0} ** 1024,
+    continuation_stack: [1024]ContinuationStackEntry = undefined,
     continuation_stack_ptr: usize,
     is_constant: bool = false,
     scope: usize,
 
     pub fn init(module: *Module) Parser {
         return Parser{
-            .code_ptr = module.parsed_code.items.len,
+            .code_ptr = module.instructions.items.len,
             .module = module,
             .params = null,
             .locals = null,
@@ -54,20 +56,20 @@ pub const Parser = struct {
 
         self.function = code;
         self.code = code;
-        const code_start = self.module.parsed_code.items.len;
+        const code_start = self.module.instructions.items.len;
 
         try self.pushFunction(locals, funcidx);
 
         while (try self.next()) |instr| {
-            try self.module.parsed_code.append(instr);
-            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
+            _ = instr;
+            // try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
         _ = try self.module.readSlice(bytes_read);
 
+        // FIXME: might setting .block in ControlFrame mean we don't have to replace final end with return?
         // Patch last end so that it is return
-        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
         self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
@@ -79,7 +81,7 @@ pub const Parser = struct {
 
         self.function = code;
         self.code = code;
-        const code_start = self.module.parsed_code.items.len;
+        const code_start = self.module.instructions.items.len;
 
         const in: [0]ValType = [_]ValType{} ** 0;
         const out: [1]ValType = [_]ValType{valtype} ** 1;
@@ -103,15 +105,14 @@ pub const Parser = struct {
                 => {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
-            try self.module.parsed_code.append(instr);
-            try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
+            // try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
         _ = try self.module.readSlice(bytes_read);
 
+        // FIXME: might setting .block in ControlFrame mean we don't have to replace final end with return?
         // Patch last end so that it is return
-        self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
         self.module.instructions.items[self.module.instructions.items.len - 1] = VirtualMachine.@"return";
 
         return Parsed{ .start = code_start, .max_depth = self.validator.max_depth };
@@ -126,25 +127,26 @@ pub const Parser = struct {
         self.locals = locals;
 
         try self.validator.pushControlFrame(
+            // FIXME: might setting this as block mean we don't have to replace final end with return?
             .nop, // block?
             functype.params[0..0],
             functype.results,
         );
     }
 
-    fn pushContinuationStack(self: *Parser, offset: usize) !void {
+    fn pushContinuationStack(self: *Parser, offset: usize, opcode: RrOpcode) !void {
         defer self.continuation_stack_ptr += 1;
         if (self.continuation_stack_ptr >= self.continuation_stack.len) return error.ContinuationStackOverflow;
 
-        self.continuation_stack[self.continuation_stack_ptr] = offset;
+        self.continuation_stack[self.continuation_stack_ptr] = .{ .offset = offset, .opcode = opcode };
     }
 
-    fn peekContinuationStack(self: *Parser) !usize {
+    fn peekContinuationStack(self: *Parser) !ContinuationStackEntry {
         if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow; // No test covering this
         return self.continuation_stack[self.continuation_stack_ptr - 1];
     }
 
-    fn popContinuationStack(self: *Parser) !usize {
+    fn popContinuationStack(self: *Parser) !ContinuationStackEntry {
         if (self.continuation_stack_ptr <= 0) return error.ContinuationStackUnderflow;
         self.continuation_stack_ptr -= 1;
 
@@ -155,7 +157,7 @@ pub const Parser = struct {
         return self.function.len - self.code.len;
     }
 
-    pub fn next(self: *Parser) !?Rr {
+    pub fn next(self: *Parser) !?Opcode {
         defer self.code_ptr += 1;
         if (self.scope > 0 and self.code.len == 0) return error.CouldntFindEnd;
 
@@ -166,12 +168,16 @@ pub const Parser = struct {
         const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         self.code = self.code[1..];
 
-        var rr: Rr = undefined;
+        // Record the start of this instruction's immediates
+        const immediates_count = std.math.cast(u32, self.module.immediates.items.len) orelse return error.TooManyImmediates; // FIXME: error or assert
+        try self.module.immediates_offset.append(immediates_count);
+
+        // std.debug.print("instr[{}] = {}, immediate offset = {}\n", .{ self.code_ptr, instr, immediates_count });
 
         // 2. Find the start of the next instruction
         switch (instr) {
-            .@"unreachable" => rr = Rr.@"unreachable",
-            .nop => rr = Rr.nop,
+            .@"unreachable" => {},
+            .nop => {},
             .block => {
                 const block_type = try self.readILEB128Mem(i32);
 
@@ -200,16 +206,20 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                try self.pushContinuationStack(self.code_ptr, .block);
                 self.scope += 1;
 
-                rr = Rr{
-                    .block = .{
-                        .param_arity = block_params,
-                        .return_arity = block_returns,
-                        .branch_target = 0,
-                    },
-                };
+                try self.module.immediates.append(block_params);
+                try self.module.immediates.append(block_returns);
+                try self.module.immediates.append(0);
+
+                // Rr{
+                //     .block = .{
+                //         .param_arity = block_params,
+                //         .return_arity = block_returns,
+                //         .branch_target = 0,
+                //     },
+                // };
             },
             .loop => {
                 const block_type = try self.readILEB128Mem(i32);
@@ -238,16 +248,20 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                try self.pushContinuationStack(self.code_ptr, .loop);
                 self.scope += 1;
 
-                rr = Rr{
-                    .loop = .{
-                        .param_arity = block_params,
-                        .return_arity = block_params,
-                        .branch_target = math.cast(u32, self.code_ptr) orelse return error.FailedCast,
-                    },
-                };
+                try self.module.immediates.append(block_params);
+                try self.module.immediates.append(block_params);
+                try self.module.immediates.append(math.cast(u32, self.code_ptr) orelse return error.FailedCast);
+
+                // rr = Rr{
+                //     .loop = .{
+                //         .param_arity = block_params,
+                //         .return_arity = block_params,
+                //         .branch_target = math.cast(u32, self.code_ptr) orelse return error.FailedCast,
+                //     },
+                // };
             },
             .@"if" => {
                 const block_type = try self.readILEB128Mem(i32);
@@ -281,73 +295,88 @@ pub const Parser = struct {
                     }
                 }
 
-                try self.pushContinuationStack(self.code_ptr);
+                try self.pushContinuationStack(self.code_ptr, .@"if");
                 self.scope += 1;
 
-                rr = Rr{
-                    .if_no_else = .{
-                        .param_arity = block_params,
-                        .return_arity = block_returns,
-                        .branch_target = 0,
-                    },
-                };
+                try self.module.immediates.append(block_params);
+                try self.module.immediates.append(block_returns);
+                try self.module.immediates.append(0);
+                // an if with no else only has 3 immediates, but we push a fourth here
+                // so we can exchange the if with an if_with_else
+                try self.module.immediates.append(0);
+
+                // FIXME: we have found an if, but we were actually pushing an if_no_else
+                //        i.e. we assume we don't have an else until we find one (and if we
+                //        do we replace the if_no_else with a plain if). We could turn this
+                //        around, so that e.g. if means if-no-else and then have a if-with-else
+                //        instruction
+                //
+                // rr = Rr{
+                //     .if_no_else = .{
+                //         .param_arity = block_params,
+                //         .return_arity = block_returns,
+                //         .branch_target = 0,
+                //     },
+                // };
             },
             .@"else" => {
-                const parsed_code_offset = try self.peekContinuationStack();
+                const pushed_instruction = try self.peekContinuationStack();
+                const immediates_offset = self.module.immediates_offset.items[pushed_instruction.offset];
 
-                switch (self.module.parsed_code.items[parsed_code_offset]) {
-                    .if_no_else => |*b| {
-                        self.module.parsed_code.items[parsed_code_offset] = Rr{
-                            .@"if" = .{
-                                .param_arity = b.param_arity,
-                                .return_arity = b.return_arity,
-                                .branch_target = 0,
-                                .else_ip = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
-                            },
-                        };
-                        self.module.instructions.items[parsed_code_offset] = VirtualMachine.@"if";
+                switch (pushed_instruction.opcode) {
+                    .@"if" => {
+                        self.module.immediates.items[immediates_offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                        self.module.instructions.items[pushed_instruction.offset] = VirtualMachine.if_with_else;
                     },
                     else => return error.UnexpectedInstruction,
                 }
 
-                rr = Rr.@"else";
+                // rr = Rr.@"else";
             },
             .end => {
                 self.scope -= 1;
                 // If we're not looking at the `end` of a function
                 if (self.scope != 0) {
-                    const parsed_code_offset = try self.popContinuationStack();
+                    const pushed_instruction = try self.popContinuationStack();
+                    const immediate_offset = self.module.immediates_offset.items[pushed_instruction.offset];
+                    // std.debug.print("instr[{}]: end immediate_offset = {}\n", .{ pushed_instruction.offset, immediate_offset });
 
-                    switch (self.module.parsed_code.items[parsed_code_offset]) {
-                        .block => |*b| b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
+                    switch (pushed_instruction.opcode) {
+                        .block => self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
                         .loop => {},
-                        .@"if" => |*b| {
-                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                        .if_with_else => {
+                            self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
-                        .if_no_else => |*b| {
+                        .@"if" => {
+                            const param_arity = self.module.immediates.items[immediate_offset];
+                            const return_arity = self.module.immediates.items[immediate_offset + 1];
                             // We have an if with no else, check that this works arity-wise and replace with fast if
-                            if (b.param_arity -% b.return_arity != 0) return error.ValidatorElseBranchExpected;
+                            if (param_arity -% return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                            b.branch_target = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            self.module.immediates.items[immediate_offset + 2] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
                         },
                         else => return error.UnexpectedInstruction,
                     }
                 }
 
-                rr = Rr.end;
+                // rr = Rr.end;
             },
             .br => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBr(label);
-                rr = Rr{ .br = label };
+
+                try self.module.immediates.append(label);
+                // rr = Rr{ .br = label };
             },
             .br_if => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBrIf(label);
-                rr = Rr{ .br_if = label };
+
+                try self.module.immediates.append(label);
+                // rr = Rr{ .br_if = label };
             },
             .br_table => {
-                const label_start = self.module.br_table_indices.items.len;
+                const label_start = math.cast(u32, self.module.br_table_indices.items.len) orelse return error.TooManyBrTableIndices;
                 const label_count = try self.readULEB128Mem(u32);
 
                 var j: usize = 0;
@@ -360,14 +389,18 @@ pub const Parser = struct {
 
                 try self.validator.validateBrTable(l_star, ln);
 
-                rr = Rr{
-                    .br_table = .{
-                        .ls = Range{ .offset = label_start, .count = label_count },
-                        .ln = ln,
-                    },
-                };
+                try self.module.immediates.append(label_start);
+                try self.module.immediates.append(label_count);
+                try self.module.immediates.append(ln);
+
+                // rr = Rr{
+                //     .br_table = .{
+                //         .ls = Range{ .offset = label_start, .count = label_count },
+                //         .ln = ln,
+                //     },
+                // };
             },
-            .@"return" => rr = Rr.@"return",
+            .@"return" => {},
             .call => {
                 const funcidx = try self.readULEB128Mem(u32);
                 const func = try self.module.functions.lookup(funcidx);
@@ -375,7 +408,9 @@ pub const Parser = struct {
 
                 try self.validator.validateCall(functype);
 
-                rr = Rr{ .call = funcidx };
+                try self.module.immediates.append(funcidx);
+
+                // rr = Rr{ .call = funcidx };
                 // TODO: do the replacement at instantiate-time for a fastcall if in same module?
                 // rr =  Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
@@ -388,15 +423,18 @@ pub const Parser = struct {
 
                 try self.validator.validateCallIndirect(functype);
 
-                rr = Rr{
-                    .call_indirect = .{
-                        .typeidx = typeidx,
-                        .tableidx = tableidx,
-                    },
-                };
+                try self.module.immediates.append(typeidx);
+                try self.module.immediates.append(tableidx);
+
+                // rr = Rr{
+                //     .call_indirect = .{
+                //         .typeidx = typeidx,
+                //         .tableidx = tableidx,
+                //     },
+                // };
             },
-            .drop => rr = Rr.drop,
-            .select => rr = Rr.select,
+            .drop => {},
+            .select => {},
             .select_t => {
                 const type_count = try self.readULEB128Mem(u32);
                 if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
@@ -404,8 +442,6 @@ pub const Parser = struct {
                 const valuetype = try std.meta.intToEnum(ValType, valuetype_raw);
 
                 try self.validator.validateSelectT(valuetype);
-
-                rr = Rr.select;
             },
             .@"global.get" => {
                 const globalidx = try self.readULEB128Mem(u32);
@@ -413,7 +449,9 @@ pub const Parser = struct {
 
                 try self.validator.validateGlobalGet(global);
 
-                rr = Rr{ .@"global.get" = globalidx };
+                try self.module.immediates.append(globalidx);
+
+                // rr = Rr{ .@"global.get" = globalidx };
             },
             .@"global.set" => {
                 const globalidx = try self.readULEB128Mem(u32);
@@ -421,7 +459,8 @@ pub const Parser = struct {
 
                 try self.validator.validateGlobalSet(global);
 
-                rr = Rr{ .@"global.set" = globalidx };
+                try self.module.immediates.append(globalidx);
+                // rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
                 const tableidx = try self.readULEB128Mem(u32);
@@ -435,7 +474,8 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
                 _ = try self.validator.pushOperand(Type{ .Known = reftype });
 
-                rr = Rr{ .@"table.get" = tableidx };
+                try self.module.immediates.append(tableidx);
+                // rr = Rr{ .@"table.get" = tableidx };
             },
             .@"table.set" => {
                 const tableidx = try self.readULEB128Mem(u32);
@@ -449,7 +489,8 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
                 _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
-                rr = Rr{ .@"table.set" = tableidx };
+                try self.module.immediates.append(tableidx);
+                // rr = Rr{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -477,7 +518,8 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.get" = localidx };
+                try self.module.immediates.append(localidx);
+                // rr = Rr{ .@"local.get" = localidx };
             },
             .@"local.set" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -506,7 +548,9 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.set" = localidx };
+                try self.module.immediates.append(localidx);
+
+                // rr = Rr{ .@"local.set" = localidx };
             },
             .@"local.tee" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -535,37 +579,53 @@ pub const Parser = struct {
                     }
                 }
 
-                rr = Rr{ .@"local.tee" = localidx };
+                try self.module.immediates.append(localidx);
+                // rr = Rr{ .@"local.tee" = localidx };
             },
             .@"memory.size" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                rr = Rr{ .@"memory.size" = memidx };
+                try self.module.immediates.append(memidx);
+                // rr = Rr{ .@"memory.size" = memidx };
             },
             .@"memory.grow" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
                 const memidx = try self.readByte();
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
-                rr = Rr{ .@"memory.grow" = memidx };
+                try self.module.immediates.append(memidx);
+                // rr = Rr{ .@"memory.grow" = memidx };
             },
             .@"i32.const" => {
                 const i32_const = try self.readILEB128Mem(i32);
-                rr = Rr{ .@"i32.const" = i32_const };
+
+                try self.module.immediates.append(@as(u32, @bitCast(i32_const)));
+                // rr = Rr{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
                 const i64_const = try self.readILEB128Mem(i64);
-                rr = Rr{ .@"i64.const" = i64_const };
+                const u64_const = @as(u64, @bitCast(i64_const));
+
+                try self.module.immediates.append(@as(u32, @truncate(u64_const & 0xFFFFFFFF)));
+                try self.module.immediates.append(@as(u32, @truncate(u64_const >> 32)));
+                // rr = Rr{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
                 const float_const: f32 = @bitCast(try self.readU32());
-                rr = Rr{ .@"f32.const" = float_const };
+
+                try self.module.immediates.append(@as(u32, @bitCast(float_const)));
+                // rr = Rr{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
                 const float_const: f64 = @bitCast(try self.readU64());
-                rr = Rr{ .@"f64.const" = float_const };
+                const u64_float = @as(u64, @bitCast(float_const));
+
+                try self.module.immediates.append(@as(u32, @truncate(u64_float & 0xFFFF)));
+                try self.module.immediates.append(@as(u32, @truncate(u64_float >> 32)));
+
+                // rr = Rr{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -575,12 +635,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.load" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.load" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -589,12 +651,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"f32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -603,12 +667,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"f32.load" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"f32.load" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"f64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -617,12 +683,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"f64.load" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"f64.load" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -631,12 +699,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.load8_s" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.load8_s" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -645,12 +715,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.load8_u" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.load8_u" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -659,12 +731,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.load16_s" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.load16_s" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -673,12 +747,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.load16_u" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.load16_u" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -687,12 +763,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load8_s" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load8_s" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -701,12 +779,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load8_u" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load8_u" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -715,12 +795,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load16_s" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load16_s" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -729,12 +811,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load16_u" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load16_u" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load32_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -743,12 +827,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load32_s" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load32_s" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.load32_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -757,12 +843,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.load32_u" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.load32_u" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -771,12 +859,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.store" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.store" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -785,12 +875,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.store" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.store" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"f32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -799,12 +891,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"f32.store" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"f32.store" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"f64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -813,12 +907,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"f64.store" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"f64.store" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -827,12 +923,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.store8" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.store8" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i32.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -841,12 +939,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i32.store16" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i32.store16" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -855,12 +955,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.store8" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.store8" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -869,12 +971,14 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.store16" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.store16" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
             .@"i64.store32" => {
                 const alignment = try self.readULEB128Mem(u32);
@@ -882,149 +986,153 @@ pub const Parser = struct {
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
-                rr = Rr{
-                    .@"i64.store32" = .{
-                        .alignment = alignment,
-                        .offset = offset,
-                    },
-                };
+                try self.module.immediates.append(alignment);
+                try self.module.immediates.append(offset);
+                // rr = Rr{
+                //     .@"i64.store32" = .{
+                //         .alignment = alignment,
+                //         .offset = offset,
+                //     },
+                // };
             },
-            .@"i32.eqz" => rr = Rr.@"i32.eqz",
-            .@"i32.eq" => rr = Rr.@"i32.eq",
-            .@"i32.ne" => rr = Rr.@"i32.ne",
-            .@"i32.lt_s" => rr = Rr.@"i32.lt_s",
-            .@"i32.lt_u" => rr = Rr.@"i32.lt_u",
-            .@"i32.gt_s" => rr = Rr.@"i32.gt_s",
-            .@"i32.gt_u" => rr = Rr.@"i32.gt_u",
-            .@"i32.le_s" => rr = Rr.@"i32.le_s",
-            .@"i32.le_u" => rr = Rr.@"i32.le_u",
-            .@"i32.ge_s" => rr = Rr.@"i32.ge_s",
-            .@"i32.ge_u" => rr = Rr.@"i32.ge_u",
-            .@"i64.eqz" => rr = Rr.@"i64.eqz",
-            .@"i64.eq" => rr = Rr.@"i64.eq",
-            .@"i64.ne" => rr = Rr.@"i64.ne",
-            .@"i64.lt_s" => rr = Rr.@"i64.lt_s",
-            .@"i64.lt_u" => rr = Rr.@"i64.lt_u",
-            .@"i64.gt_s" => rr = Rr.@"i64.gt_s",
-            .@"i64.gt_u" => rr = Rr.@"i64.gt_u",
-            .@"i64.le_s" => rr = Rr.@"i64.le_s",
-            .@"i64.le_u" => rr = Rr.@"i64.le_u",
-            .@"i64.ge_s" => rr = Rr.@"i64.ge_s",
-            .@"i64.ge_u" => rr = Rr.@"i64.ge_u",
-            .@"f32.eq" => rr = Rr.@"f32.eq",
-            .@"f32.ne" => rr = Rr.@"f32.ne",
-            .@"f32.lt" => rr = Rr.@"f32.lt",
-            .@"f32.gt" => rr = Rr.@"f32.gt",
-            .@"f32.le" => rr = Rr.@"f32.le",
-            .@"f32.ge" => rr = Rr.@"f32.ge",
-            .@"f64.eq" => rr = Rr.@"f64.eq",
-            .@"f64.ne" => rr = Rr.@"f64.ne",
-            .@"f64.lt" => rr = Rr.@"f64.lt",
-            .@"f64.gt" => rr = Rr.@"f64.gt",
-            .@"f64.le" => rr = Rr.@"f64.le",
-            .@"f64.ge" => rr = Rr.@"f64.ge",
-            .@"i32.clz" => rr = Rr.@"i32.clz",
-            .@"i32.ctz" => rr = Rr.@"i32.ctz",
-            .@"i32.popcnt" => rr = Rr.@"i32.popcnt",
-            .@"i32.add" => rr = Rr.@"i32.add",
-            .@"i32.sub" => rr = Rr.@"i32.sub",
-            .@"i32.mul" => rr = Rr.@"i32.mul",
-            .@"i32.div_s" => rr = Rr.@"i32.div_s",
-            .@"i32.div_u" => rr = Rr.@"i32.div_u",
-            .@"i32.rem_s" => rr = Rr.@"i32.rem_s",
-            .@"i32.rem_u" => rr = Rr.@"i32.rem_u",
-            .@"i32.and" => rr = Rr.@"i32.and",
-            .@"i32.or" => rr = Rr.@"i32.or",
-            .@"i32.xor" => rr = Rr.@"i32.xor",
-            .@"i32.shl" => rr = Rr.@"i32.shl",
-            .@"i32.shr_s" => rr = Rr.@"i32.shr_s",
-            .@"i32.shr_u" => rr = Rr.@"i32.shr_u",
-            .@"i32.rotl" => rr = Rr.@"i32.rotl",
-            .@"i32.rotr" => rr = Rr.@"i32.rotr",
-            .@"i64.clz" => rr = Rr.@"i64.clz",
-            .@"i64.ctz" => rr = Rr.@"i64.ctz",
-            .@"i64.popcnt" => rr = Rr.@"i64.popcnt",
-            .@"i64.add" => rr = Rr.@"i64.add",
-            .@"i64.sub" => rr = Rr.@"i64.sub",
-            .@"i64.mul" => rr = Rr.@"i64.mul",
-            .@"i64.div_s" => rr = Rr.@"i64.div_s",
-            .@"i64.div_u" => rr = Rr.@"i64.div_u",
-            .@"i64.rem_s" => rr = Rr.@"i64.rem_s",
-            .@"i64.rem_u" => rr = Rr.@"i64.rem_u",
-            .@"i64.and" => rr = Rr.@"i64.and",
-            .@"i64.or" => rr = Rr.@"i64.or",
-            .@"i64.xor" => rr = Rr.@"i64.xor",
-            .@"i64.shl" => rr = Rr.@"i64.shl",
-            .@"i64.shr_s" => rr = Rr.@"i64.shr_s",
-            .@"i64.shr_u" => rr = Rr.@"i64.shr_u",
-            .@"i64.rotl" => rr = Rr.@"i64.rotl",
-            .@"i64.rotr" => rr = Rr.@"i64.rotr",
-            .@"f32.abs" => rr = Rr.@"f32.abs",
-            .@"f32.neg" => rr = Rr.@"f32.neg",
-            .@"f32.ceil" => rr = Rr.@"f32.ceil",
-            .@"f32.floor" => rr = Rr.@"f32.floor",
-            .@"f32.trunc" => rr = Rr.@"f32.trunc",
-            .@"f32.nearest" => rr = Rr.@"f32.nearest",
-            .@"f32.sqrt" => rr = Rr.@"f32.sqrt",
-            .@"f32.add" => rr = Rr.@"f32.add",
-            .@"f32.sub" => rr = Rr.@"f32.sub",
-            .@"f32.mul" => rr = Rr.@"f32.mul",
-            .@"f32.div" => rr = Rr.@"f32.div",
-            .@"f32.min" => rr = Rr.@"f32.min",
-            .@"f32.max" => rr = Rr.@"f32.max",
-            .@"f32.copysign" => rr = Rr.@"f32.copysign",
-            .@"f64.abs" => rr = Rr.@"f64.abs",
-            .@"f64.neg" => rr = Rr.@"f64.neg",
-            .@"f64.ceil" => rr = Rr.@"f64.ceil",
-            .@"f64.floor" => rr = Rr.@"f64.floor",
-            .@"f64.trunc" => rr = Rr.@"f64.trunc",
-            .@"f64.nearest" => rr = Rr.@"f64.nearest",
-            .@"f64.sqrt" => rr = Rr.@"f64.sqrt",
-            .@"f64.add" => rr = Rr.@"f64.add",
-            .@"f64.sub" => rr = Rr.@"f64.sub",
-            .@"f64.mul" => rr = Rr.@"f64.mul",
-            .@"f64.div" => rr = Rr.@"f64.div",
-            .@"f64.min" => rr = Rr.@"f64.min",
-            .@"f64.max" => rr = Rr.@"f64.max",
-            .@"f64.copysign" => rr = Rr.@"f64.copysign",
-            .@"i32.wrap_i64" => rr = Rr.@"i32.wrap_i64",
-            .@"i32.trunc_f32_s" => rr = Rr.@"i32.trunc_f32_s",
-            .@"i32.trunc_f32_u" => rr = Rr.@"i32.trunc_f32_u",
-            .@"i32.trunc_f64_s" => rr = Rr.@"i32.trunc_f64_s",
-            .@"i32.trunc_f64_u" => rr = Rr.@"i32.trunc_f64_u",
-            .@"i64.extend_i32_s" => rr = Rr.@"i64.extend_i32_s",
-            .@"i64.extend_i32_u" => rr = Rr.@"i64.extend_i32_u",
-            .@"i64.trunc_f32_s" => rr = Rr.@"i64.trunc_f32_s",
-            .@"i64.trunc_f32_u" => rr = Rr.@"i64.trunc_f32_u",
-            .@"i64.trunc_f64_s" => rr = Rr.@"i64.trunc_f64_s",
-            .@"i64.trunc_f64_u" => rr = Rr.@"i64.trunc_f64_u",
-            .@"f32.convert_i32_s" => rr = Rr.@"f32.convert_i32_s",
-            .@"f32.convert_i32_u" => rr = Rr.@"f32.convert_i32_u",
-            .@"f32.convert_i64_s" => rr = Rr.@"f32.convert_i64_s",
-            .@"f32.convert_i64_u" => rr = Rr.@"f32.convert_i64_u",
-            .@"f32.demote_f64" => rr = Rr.@"f32.demote_f64",
-            .@"f64.convert_i32_s" => rr = Rr.@"f64.convert_i32_s",
-            .@"f64.convert_i32_u" => rr = Rr.@"f64.convert_i32_u",
-            .@"f64.convert_i64_s" => rr = Rr.@"f64.convert_i64_s",
-            .@"f64.convert_i64_u" => rr = Rr.@"f64.convert_i64_u",
-            .@"f64.promote_f32" => rr = Rr.@"f64.promote_f32",
-            .@"i32.reinterpret_f32" => rr = Rr.@"i32.reinterpret_f32",
-            .@"i64.reinterpret_f64" => rr = Rr.@"i64.reinterpret_f64",
-            .@"f32.reinterpret_i32" => rr = Rr.@"f32.reinterpret_i32",
-            .@"f64.reinterpret_i64" => rr = Rr.@"f64.reinterpret_i64",
-            .@"i32.extend8_s" => rr = Rr.@"i32.extend8_s",
-            .@"i32.extend16_s" => rr = Rr.@"i32.extend16_s",
-            .@"i64.extend8_s" => rr = Rr.@"i64.extend8_s",
-            .@"i64.extend16_s" => rr = Rr.@"i64.extend16_s",
-            .@"i64.extend32_s" => rr = Rr.@"i64.extend32_s",
+            .@"i32.eqz" => {},
+            .@"i32.eq" => {},
+            .@"i32.ne" => {},
+            .@"i32.lt_s" => {},
+            .@"i32.lt_u" => {},
+            .@"i32.gt_s" => {},
+            .@"i32.gt_u" => {},
+            .@"i32.le_s" => {},
+            .@"i32.le_u" => {},
+            .@"i32.ge_s" => {},
+            .@"i32.ge_u" => {},
+            .@"i64.eqz" => {},
+            .@"i64.eq" => {},
+            .@"i64.ne" => {},
+            .@"i64.lt_s" => {},
+            .@"i64.lt_u" => {},
+            .@"i64.gt_s" => {},
+            .@"i64.gt_u" => {},
+            .@"i64.le_s" => {},
+            .@"i64.le_u" => {},
+            .@"i64.ge_s" => {},
+            .@"i64.ge_u" => {},
+            .@"f32.eq" => {},
+            .@"f32.ne" => {},
+            .@"f32.lt" => {},
+            .@"f32.gt" => {},
+            .@"f32.le" => {},
+            .@"f32.ge" => {},
+            .@"f64.eq" => {},
+            .@"f64.ne" => {},
+            .@"f64.lt" => {},
+            .@"f64.gt" => {},
+            .@"f64.le" => {},
+            .@"f64.ge" => {},
+            .@"i32.clz" => {},
+            .@"i32.ctz" => {},
+            .@"i32.popcnt" => {},
+            .@"i32.add" => {},
+            .@"i32.sub" => {},
+            .@"i32.mul" => {},
+            .@"i32.div_s" => {},
+            .@"i32.div_u" => {},
+            .@"i32.rem_s" => {},
+            .@"i32.rem_u" => {},
+            .@"i32.and" => {},
+            .@"i32.or" => {},
+            .@"i32.xor" => {},
+            .@"i32.shl" => {},
+            .@"i32.shr_s" => {},
+            .@"i32.shr_u" => {},
+            .@"i32.rotl" => {},
+            .@"i32.rotr" => {},
+            .@"i64.clz" => {},
+            .@"i64.ctz" => {},
+            .@"i64.popcnt" => {},
+            .@"i64.add" => {},
+            .@"i64.sub" => {},
+            .@"i64.mul" => {},
+            .@"i64.div_s" => {},
+            .@"i64.div_u" => {},
+            .@"i64.rem_s" => {},
+            .@"i64.rem_u" => {},
+            .@"i64.and" => {},
+            .@"i64.or" => {},
+            .@"i64.xor" => {},
+            .@"i64.shl" => {},
+            .@"i64.shr_s" => {},
+            .@"i64.shr_u" => {},
+            .@"i64.rotl" => {},
+            .@"i64.rotr" => {},
+            .@"f32.abs" => {},
+            .@"f32.neg" => {},
+            .@"f32.ceil" => {},
+            .@"f32.floor" => {},
+            .@"f32.trunc" => {},
+            .@"f32.nearest" => {},
+            .@"f32.sqrt" => {},
+            .@"f32.add" => {},
+            .@"f32.sub" => {},
+            .@"f32.mul" => {},
+            .@"f32.div" => {},
+            .@"f32.min" => {},
+            .@"f32.max" => {},
+            .@"f32.copysign" => {},
+            .@"f64.abs" => {},
+            .@"f64.neg" => {},
+            .@"f64.ceil" => {},
+            .@"f64.floor" => {},
+            .@"f64.trunc" => {},
+            .@"f64.nearest" => {},
+            .@"f64.sqrt" => {},
+            .@"f64.add" => {},
+            .@"f64.sub" => {},
+            .@"f64.mul" => {},
+            .@"f64.div" => {},
+            .@"f64.min" => {},
+            .@"f64.max" => {},
+            .@"f64.copysign" => {},
+            .@"i32.wrap_i64" => {},
+            .@"i32.trunc_f32_s" => {},
+            .@"i32.trunc_f32_u" => {},
+            .@"i32.trunc_f64_s" => {},
+            .@"i32.trunc_f64_u" => {},
+            .@"i64.extend_i32_s" => {},
+            .@"i64.extend_i32_u" => {},
+            .@"i64.trunc_f32_s" => {},
+            .@"i64.trunc_f32_u" => {},
+            .@"i64.trunc_f64_s" => {},
+            .@"i64.trunc_f64_u" => {},
+            .@"f32.convert_i32_s" => {},
+            .@"f32.convert_i32_u" => {},
+            .@"f32.convert_i64_s" => {},
+            .@"f32.convert_i64_u" => {},
+            .@"f32.demote_f64" => {},
+            .@"f64.convert_i32_s" => {},
+            .@"f64.convert_i32_u" => {},
+            .@"f64.convert_i64_s" => {},
+            .@"f64.convert_i64_u" => {},
+            .@"f64.promote_f32" => {},
+            .@"i32.reinterpret_f32" => {},
+            .@"i64.reinterpret_f64" => {},
+            .@"f32.reinterpret_i32" => {},
+            .@"f64.reinterpret_i64" => {},
+            .@"i32.extend8_s" => {},
+            .@"i32.extend16_s" => {},
+            .@"i64.extend8_s" => {},
+            .@"i64.extend16_s" => {},
+            .@"i64.extend32_s" => {},
             .@"ref.null" => {
                 const rtype = try self.readULEB128Mem(i32);
                 const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
 
                 try self.validator.validateRefNull(reftype);
-                rr = Rr{ .@"ref.null" = reftype };
+
+                try self.module.immediates.append(@as(u32, @intFromEnum(reftype)));
+                // rr = Rr{ .@"ref.null" = reftype };
             },
-            .@"ref.is_null" => rr = Rr.@"ref.is_null",
+            .@"ref.is_null" => {},
             .@"ref.func" => {
                 const funcidx = try self.readULEB128Mem(u32);
                 if (funcidx >= self.module.functions.list.items.len) return error.ValidatorInvalidFunction;
@@ -1044,7 +1152,8 @@ pub const Parser = struct {
                     if (!in_references) return error.ValidatorUnreferencedFunction;
                 }
 
-                rr = Rr{ .@"ref.func" = funcidx };
+                try self.module.immediates.append(funcidx);
+                // rr = Rr{ .@"ref.func" = funcidx };
             },
             .misc => {
                 const version = try self.readULEB128Mem(u32);
@@ -1052,14 +1161,15 @@ pub const Parser = struct {
                 try self.validator.validateMisc(misc_opcode);
 
                 switch (misc_opcode) {
-                    .@"i32.trunc_sat_f32_s" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_s" },
-                    .@"i32.trunc_sat_f32_u" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f32_u" },
-                    .@"i32.trunc_sat_f64_s" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_s" },
-                    .@"i32.trunc_sat_f64_u" => rr = Rr{ .misc = MiscRr.@"i32.trunc_sat_f64_u" },
-                    .@"i64.trunc_sat_f32_s" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_s" },
-                    .@"i64.trunc_sat_f32_u" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f32_u" },
-                    .@"i64.trunc_sat_f64_s" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_s" },
-                    .@"i64.trunc_sat_f64_u" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_u" },
+                    // FIXME: do I need to handle misc separately
+                    .@"i32.trunc_sat_f32_s" => {},
+                    .@"i32.trunc_sat_f32_u" => {},
+                    .@"i32.trunc_sat_f64_s" => {},
+                    .@"i32.trunc_sat_f64_u" => {},
+                    .@"i64.trunc_sat_f32_s" => {},
+                    .@"i64.trunc_sat_f32_u" => {},
+                    .@"i64.trunc_sat_f64_s" => {},
+                    .@"i64.trunc_sat_f64_u" => {},
                     .@"memory.init" => {
                         const dataidx = try self.readULEB128Mem(u32);
                         const memidx = try self.readByte();
@@ -1068,14 +1178,17 @@ pub const Parser = struct {
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                        rr = Rr{
-                            .misc = MiscRr{
-                                .@"memory.init" = .{
-                                    .dataidx = dataidx,
-                                    .memidx = memidx,
-                                },
-                            },
-                        };
+
+                        try self.module.immediates.append(dataidx);
+                        try self.module.immediates.append(memidx);
+                        // rr = Rr{
+                        //     .misc = MiscRr{
+                        //         .@"memory.init" = .{
+                        //             .dataidx = dataidx,
+                        //             .memidx = memidx,
+                        //         },
+                        //     },
+                        // };
                     },
                     .@"data.drop" => {
                         const dataidx = try self.readULEB128Mem(u32);
@@ -1083,24 +1196,28 @@ pub const Parser = struct {
                         const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
 
-                        rr = Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };
+                        try self.module.immediates.append(dataidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"data.drop" = dataidx } };
                     },
                     .@"memory.copy" => {
                         const src_memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                        const dest_memidx = try self.readByte();
+                        const dst_memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        rr = Rr{ .misc = MiscRr{ .@"memory.copy" = .{
-                            .src_memidx = src_memidx,
-                            .dest_memidx = dest_memidx,
-                        } } };
+                        try self.module.immediates.append(src_memidx);
+                        try self.module.immediates.append(dst_memidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"memory.copy" = .{
+                        //     .src_memidx = src_memidx,
+                        //     .dest_memidx = dest_memidx,
+                        // } } };
                     },
                     .@"memory.fill" => {
                         const memidx = try self.readByte();
                         if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                        rr = Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
+                        try self.module.immediates.append(memidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
                         const elemidx = try self.readULEB128Mem(u32);
@@ -1111,31 +1228,36 @@ pub const Parser = struct {
 
                         if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
 
-                        rr = Rr{ .misc = MiscRr{ .@"table.init" = .{
-                            .elemidx = elemidx,
-                            .tableidx = tableidx,
-                        } } };
+                        try self.module.immediates.append(elemidx);
+                        try self.module.immediates.append(tableidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"table.init" = .{
+                        //     .elemidx = elemidx,
+                        //     .tableidx = tableidx,
+                        // } } };
                     },
                     .@"elem.drop" => {
                         const elemidx = try self.readULEB128Mem(u32);
 
                         if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
 
-                        rr = Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
+                        try self.module.immediates.append(elemidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
-                        const dest_tableidx = try self.readULEB128Mem(u32);
-                        const dest_tabletype = try self.module.tables.lookup(dest_tableidx);
+                        const dst_tableidx = try self.readULEB128Mem(u32);
+                        const dst_tabletype = try self.module.tables.lookup(dst_tableidx);
 
                         const src_tableidx = try self.readULEB128Mem(u32);
                         const src_tabletype = try self.module.tables.lookup(src_tableidx);
 
-                        if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
+                        if (dst_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
 
-                        rr = Rr{ .misc = MiscRr{ .@"table.copy" = .{
-                            .dest_tableidx = dest_tableidx,
-                            .src_tableidx = src_tableidx,
-                        } } };
+                        try self.module.immediates.append(dst_tableidx);
+                        try self.module.immediates.append(src_tableidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"table.copy" = .{
+                        //     .dest_tableidx = dest_tableidx,
+                        //     .src_tableidx = src_tableidx,
+                        // } } };
                     },
                     .@"table.grow" => {
                         const tableidx = try self.readULEB128Mem(u32);
@@ -1150,18 +1272,19 @@ pub const Parser = struct {
                         _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
 
                         try self.validator.pushOperand(Type{ .Known = .I32 });
-
-                        rr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
-                            .tableidx = tableidx,
-                        } } };
+                        try self.module.immediates.append(tableidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"table.grow" = .{
+                        //     .tableidx = tableidx,
+                        // } } };
                     },
                     .@"table.size" => {
                         const tableidx = try self.readULEB128Mem(u32);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
-                        rr = Rr{ .misc = MiscRr{ .@"table.size" = .{
-                            .tableidx = tableidx,
-                        } } };
+                        try self.module.immediates.append(tableidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"table.size" = .{
+                        //     .tableidx = tableidx,
+                        // } } };
                     },
                     .@"table.fill" => {
                         const tableidx = try self.readULEB128Mem(u32);
@@ -1176,16 +1299,21 @@ pub const Parser = struct {
                         _ = try self.validator.popOperandExpecting(Type{ .Known = reftype });
                         _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
-                        rr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
-                            .tableidx = tableidx,
-                        } } };
+                        try self.module.immediates.append(tableidx);
+                        // rr = Rr{ .misc = MiscRr{ .@"table.fill" = .{
+                        //     .tableidx = tableidx,
+                        // } } };
                     },
                 }
             },
         }
 
+        // std.debug.print("immediates = {any}\nimmeoffset = {any}\n\n", .{ self.module.immediates.items, self.module.immediates_offset.items });
         try self.validator.validate(instr);
-        return rr;
+
+        try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
+
+        return instr;
     }
 
     pub fn readULEB128Mem(self: *Parser, comptime T: type) !T {

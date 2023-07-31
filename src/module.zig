@@ -35,7 +35,7 @@ pub const Module = struct {
     function_index_start: ?usize = null,
     data_count: ?u32 = null,
     element_init_offsets: ArrayList(usize),
-    parsed_code: ArrayList(Rr),
+    // parsed_code: ArrayList(Rr),
     instructions: ArrayList(VirtualMachine.InstructionFunction),
     immediates_offset: ArrayList(u32),
     immediates: ArrayList(u32),
@@ -60,7 +60,7 @@ pub const Module = struct {
             .codes = Section(Code).init(alloc),
             .datas = Section(DataSegment).init(alloc),
             .element_init_offsets = ArrayList(usize).init(alloc),
-            .parsed_code = ArrayList(Rr).init(alloc),
+            // .parsed_code = ArrayList(Rr).init(alloc),
             .instructions = ArrayList(VirtualMachine.InstructionFunction).init(alloc),
             .immediates_offset = ArrayList(u32).init(alloc),
             .immediates = ArrayList(u32).init(alloc),
@@ -84,7 +84,7 @@ pub const Module = struct {
         self.datas.deinit();
 
         self.element_init_offsets.deinit();
-        self.parsed_code.deinit();
+        // self.parsed_code.deinit();
         self.instructions.deinit();
         self.immediates_offset.deinit();
         self.immediates.deinit();
@@ -106,8 +106,8 @@ pub const Module = struct {
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
         // See https://github.com/malcolmstill/zware/pull/133
-        try self.parsed_code.append(.@"return");
         try self.instructions.append(VirtualMachine.@"return");
+        try self.immediates_offset.append(0);
 
         var i: usize = 0;
         while (true) : (i += 1) {
@@ -485,10 +485,10 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
+                        // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
+                        // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -518,10 +518,10 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
+                        // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
+                        // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -553,10 +553,10 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
+                        // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
+                        // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -585,10 +585,10 @@ pub const Module = struct {
 
                         try self.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        const init_offset = self.instructions.items.len;
+                        // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(VirtualMachine.@"ref.func");
-                        try self.parsed_code.append(Rr.@"return");
+                        // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(VirtualMachine.@"return");
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -634,7 +634,7 @@ pub const Module = struct {
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
-                        const init_offset = self.parsed_code.items.len;
+                        const init_offset = self.instructions.items.len;
                         _ = try self.readConstantExpression(.FuncRef);
                         try self.element_init_offsets.append(init_offset);
                     }
@@ -681,7 +681,8 @@ pub const Module = struct {
         const count = try self.readULEB128(u32);
         self.codes.count = count;
 
-        try self.parsed_code.ensureTotalCapacity(count * 32);
+        // FIXME: better heuristic + also ensure immediates_offset + immediates
+        try self.instructions.ensureTotalCapacity(count * 32);
 
         if (count == 0) return;
 

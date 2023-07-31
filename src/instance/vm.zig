@@ -95,7 +95,7 @@ pub const VirtualMachine = struct {
     pub const InstructionFunction = *const fn (*VirtualMachine, usize, usize, []Instruction, []u32) WasmError!void;
 
     pub const lookup = [256]InstructionFunction{
-        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_no_else,        impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
+        @"unreachable",     nop,                block,                loop,                 @"if",                @"else",              if_with_else,      impl_ni,              impl_ni,              impl_ni,              impl_ni,              end,                br,                     br_if,                  br_table,               @"return",
         call,               call_indirect,      fast_call,            impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              drop,                 select,             select,                 impl_ni,                impl_ni,                impl_ni,
         @"local.get",       @"local.set",       @"local.tee",         @"global.get",        @"global.set",        @"table.get",         @"table.set",      impl_ni,              @"i32.load",          @"i64.load",          @"f32.load",          @"f64.load",        @"i32.load8_s",         @"i32.load8_u",         @"i32.load16_s",        @"i32.load16_u",
         @"i64.load8_s",     @"i64.load8_u",     @"i64.load16_s",      @"i64.load16_u",      @"i64.load32_s",      @"i64.load32_u",      @"i32.store",      @"i64.store",         @"f32.store",         @"f64.store",         @"i32.store8",        @"i32.store16",     @"i64.store8",          @"i64.store16",         @"i64.store32",         @"memory.size",
@@ -164,7 +164,7 @@ pub const VirtualMachine = struct {
         return dispatch(self, ip + 1, imm + 3, instructions, immediates);
     }
 
-    pub fn @"if"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
+    pub fn if_with_else(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         const param_arity = immediates[imm];
         const return_arity = immediates[imm + 1];
         const branch_target = immediates[imm + 2];
@@ -187,16 +187,19 @@ pub const VirtualMachine = struct {
         return dispatch(self, label.branch_target, @panic("lookup offset array"), instructions, immediates);
     }
 
-    pub fn if_no_else(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
+    // if_no_else
+    pub fn @"if"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         // const meta = code[ip].if_no_else;
         const param_arity = immediates[imm];
         const return_arity = immediates[imm + 1];
         const branch_target = immediates[imm + 2];
+        _ = immediates[imm + 3];
 
         const condition = self.popOperand(u32);
 
         if (condition == 0) {
-            return dispatch(self, branch_target, @panic("Lookup offset array"), instructions, immediates);
+            const next_imm = self.inst.module.immediates_offset.items[branch_target];
+            return dispatch(self, branch_target, next_imm, instructions, immediates);
         } else {
             // We are inside the if branch
             try self.pushLabel(Label{
@@ -205,7 +208,7 @@ pub const VirtualMachine = struct {
                 .branch_target = branch_target,
             });
 
-            return dispatch(self, ip + 1, imm + 3, instructions, immediates);
+            return dispatch(self, ip + 1, imm + 4, instructions, immediates);
         }
     }
 
@@ -268,7 +271,8 @@ pub const VirtualMachine = struct {
         self.inst = previous_frame.inst;
 
         // FIXME: probably reference previous frame
-        return dispatch(self, label.branch_target, label.branch_target_immediate, @as([]Instruction, @ptrCast(previous_frame.inst.module.instructions.items)), immediates);
+        const branch_target_immediate_offset = self.inst.module.immediates_offset.items[label.branch_target];
+        return dispatch(self, label.branch_target, branch_target_immediate_offset, @as([]Instruction, @ptrCast(previous_frame.inst.module.instructions.items)), immediates);
     }
 
     pub fn call(self: *VirtualMachine, ip: usize, imm: usize, _: []Instruction, immediates: []u32) WasmError!void {
@@ -305,7 +309,7 @@ pub const VirtualMachine = struct {
                 });
 
                 next_ip = f.start;
-                next_imm = @panic("FIXME");
+                next_imm = self.inst.module.immediates_offset.items[f.start];
             },
             .host_function => |hf| {
                 try hf.func(self);
@@ -858,7 +862,7 @@ pub const VirtualMachine = struct {
     pub fn @"i64.const"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         const lower = immediates[imm];
         const upper = immediates[imm + 1];
-        const literal: u64 = upper << @as(u6, 32) + lower;
+        const literal = @as(i64, @intCast((@as(u64, upper) << 32) + lower));
 
         self.pushOperandNoCheck(i64, literal);
 
@@ -876,11 +880,11 @@ pub const VirtualMachine = struct {
     pub fn @"f64.const"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         const lower = immediates[imm];
         const upper = immediates[imm + 1];
-        const literal: u64 = upper << @as(u6, 32) + lower;
+        const literal = @as(f64, @floatFromInt((@as(u64, upper) << 32) + lower));
 
         self.pushOperandNoCheck(f64, literal);
 
-        return dispatch(self, ip + 1, imm, instructions, immediates);
+        return dispatch(self, ip + 1, imm + 2, instructions, immediates);
     }
 
     pub fn @"i32.eqz"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
