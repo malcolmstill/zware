@@ -840,7 +840,7 @@ pub const VirtualMachine = struct {
 
         self.pushOperandNoCheck(u32, @as(u32, @intCast(memory.size())));
 
-        return dispatch(self, ip + 1, instructions);
+        return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"memory.grow"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
@@ -853,39 +853,26 @@ pub const VirtualMachine = struct {
             self.pushOperandNoCheck(i32, @as(i32, -1));
         }
 
-        return dispatch(self, ip + 1, instructions);
+        return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"i32.const"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        const literal = @as(i32, @intCast(instructions[ip + 1]));
-        // std.debug.print("{}: i32.const[{}]\n", .{ ip, literal });
-
-        self.pushOperandNoCheck(i32, literal);
-
+        self.pushOperandNoCheck(u64, instructions[ip + 1]);
         return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"i64.const"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        const literal = @as(i64, @intCast(instructions[ip + 1]));
-
-        self.pushOperandNoCheck(i64, literal);
-
+        self.pushOperandNoCheck(u64, instructions[ip + 1]);
         return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"f32.const"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        const literal = @as(f32, @floatFromInt(instructions[ip + 1]));
-
-        self.pushOperandNoCheck(f32, literal);
-
+        self.pushOperandNoCheck(u64, instructions[ip + 1]);
         return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"f64.const"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        const literal = @as(f64, @floatFromInt(instructions[ip + 1]));
-
-        self.pushOperandNoCheck(f64, literal);
-
+        self.pushOperandNoCheck(u64, instructions[ip + 1]);
         return dispatch(self, ip + 2, instructions);
     }
 
@@ -2153,7 +2140,7 @@ pub const VirtualMachine = struct {
     pub fn @"ref.null"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         self.pushOperandNoCheck(u64, REF_NULL);
 
-        return dispatch(self, ip + 1, instructions);
+        return dispatch(self, ip + 2, instructions);
     }
 
     pub fn @"ref.is_null"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {

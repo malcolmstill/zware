@@ -323,10 +323,7 @@ pub const Parser = struct {
                 const pushed_instruction = try self.peekContinuationStack();
 
                 switch (pushed_instruction.opcode) {
-                    .@"if" => {
-                        // std.debug.print("pushed_instruction.offset = {}\n", .{pushed_instruction.offset});
-                        self.module.instructions.items[pushed_instruction.offset] = @as(u64, @intFromPtr(&VirtualMachine.if_with_else));
-                    },
+                    .@"if" => self.module.instructions.items[pushed_instruction.offset] = @as(u64, @intFromPtr(&VirtualMachine.if_with_else)),
                     else => return error.UnexpectedInstruction,
                 }
 
@@ -337,21 +334,21 @@ pub const Parser = struct {
                 // If we're not looking at the `end` of a function
                 if (self.scope != 0) {
                     const pushed_instruction = try self.popContinuationStack();
-                    // std.debug.print("instr[{}]: end immediate_offset = {}\n", .{ pushed_instruction.offset, immediate_offset });
+                    // Instruction after `end`:
+                    const next_instr = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
 
                     switch (pushed_instruction.opcode) {
-                        .block => self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast,
+                        .block => self.module.instructions.items[pushed_instruction.offset + 3] = next_instr,
                         .loop => {},
-                        .if_with_else => {
-                            self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
-                        },
+                        .if_with_else => self.module.instructions.items[pushed_instruction.offset + 3] = next_instr,
                         .@"if" => {
                             const param_arity = self.module.instructions.items[pushed_instruction.offset + 1];
                             const return_arity = self.module.instructions.items[pushed_instruction.offset + 2];
+
                             // We have an if with no else, check that this works arity-wise and replace with fast if
                             if (param_arity -% return_arity != 0) return error.ValidatorElseBranchExpected;
 
-                            self.module.instructions.items[pushed_instruction.offset + 3] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                            self.module.instructions.items[pushed_instruction.offset + 3] = next_instr;
                         },
                         else => return error.UnexpectedInstruction,
                     }
