@@ -184,7 +184,8 @@ pub const VirtualMachine = struct {
     pub fn @"else"(self: *VirtualMachine, _: usize, _: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         const label = self.popLabel();
 
-        return dispatch(self, label.branch_target, @panic("lookup offset array"), instructions, immediates);
+        const next_imm = self.inst.module.immediates_offset.items[label.branch_target];
+        return dispatch(self, label.branch_target, next_imm, instructions, immediates);
     }
 
     // if_no_else
@@ -228,7 +229,7 @@ pub const VirtualMachine = struct {
         const condition = self.popOperand(u32);
 
         const next_ip = if (condition == 0) ip + 1 else self.branch(immediates[imm]);
-        const next_offset = if (condition == 0) imm + 1 else self.branch(@panic("Lookup offset for new instruction"));
+        const next_offset = self.inst.module.immediates_offset.items[next_ip];
 
         return dispatch(self, next_ip, next_offset, instructions, immediates);
     }
@@ -242,7 +243,7 @@ pub const VirtualMachine = struct {
         const ls = self.inst.module.br_table_indices.items[ls_ptr .. ls_ptr + ls_len];
 
         const next_ip = if (i >= ls.len) self.branch(ln) else self.branch(ls[i]);
-        const next_imm = if (true) @panic("Lookup correct offset");
+        const next_imm = self.inst.module.immediates_offset.items[next_ip];
 
         return dispatch(self, next_ip, next_imm, instructions, immediates);
     }
@@ -2199,7 +2200,7 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
         // const next_instr = code[next_ip].misc;
         const next_instr = immediates[imm];
-        const next_offset = if (true) @panic("FIXME");
+        const next_offset = self.inst.module.immediates_offset.items[next_instr];
 
         return try @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, next_offset, instructions, immediates });
     }
