@@ -2202,7 +2202,7 @@ pub const VirtualMachine = struct {
         const next_instr = immediates[imm];
         const next_offset = self.inst.module.immediates_offset.items[next_instr];
 
-        return try @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, next_offset, instructions, immediates });
+        return try @call(.always_tail, misc_lookup[next_instr], .{ self, next_ip, next_offset, instructions, immediates });
     }
 
     pub fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, imm: usize, instructions: []Instruction, immediates: []u32) WasmError!void {
