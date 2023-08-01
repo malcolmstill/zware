@@ -8,7 +8,7 @@ pub const RrOpcode = enum(u8) {
     loop = 0x03,
     @"if" = 0x04,
     @"else" = 0x05,
-    if_no_else = 0x06,
+    if_with_else = 0x06,
     end = 0x0b,
     br = 0x0c,
     br_if = 0x0d,
@@ -206,13 +206,13 @@ pub const Rr = union(RrOpcode) {
         param_arity: u16,
         return_arity: u16,
         branch_target: u32,
-        else_ip: u32,
     },
     @"else": void,
-    if_no_else: struct {
+    if_with_else: struct {
         param_arity: u16,
         return_arity: u16,
         branch_target: u32,
+        else_ip: u32,
     },
     end: void,
     br: u32,
@@ -222,7 +222,7 @@ pub const Rr = union(RrOpcode) {
         ln: u32,
     },
     @"return": void,
-    call: usize, // u32?
+    call: u32, // u32?
     call_indirect: struct {
         typeidx: u32,
         tableidx: u32,
