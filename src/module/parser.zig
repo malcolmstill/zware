@@ -62,7 +62,6 @@ pub const Parser = struct {
 
         while (try self.next()) |instr| {
             _ = instr;
-            // try self.module.instructions.append(VirtualMachine.lookup[@intFromEnum(instr)]);
         }
 
         const bytes_read = self.bytesRead();
@@ -168,10 +167,6 @@ pub const Parser = struct {
         const instr = std.meta.intToEnum(Opcode, self.code[0]) catch return error.IllegalOpcode;
         self.code = self.code[1..];
 
-        // std.debug.print("instr[{}] = {}, immediate offset = {}\n", .{ self.code_ptr, instr, immediates_count });
-
-        // std.debug.print("instr = {}\n", .{instr});
-        // defer std.debug.print("{any}\n\n", .{self.module.instructions.items});
         try self.module.instructions.append(@as(u64, @intFromPtr(VirtualMachine.lookup[@intFromEnum(instr)])));
 
         // 2. Find the start of the next instruction
@@ -300,10 +295,10 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(block_params);
                 try self.module.instructions.append(block_returns);
-                try self.module.instructions.append(0);
+                try self.module.instructions.append(0); // branch_target
                 // an if with no else only has 3 immediates, but we push a fourth here
                 // so we can exchange the if with an if_with_else
-                try self.module.instructions.append(0);
+                try self.module.instructions.append(0); // else_ip
 
                 // FIXME: we have found an if, but we were actually pushing an if_no_else
                 //        i.e. we assume we don't have an else until we find one (and if we
@@ -323,7 +318,14 @@ pub const Parser = struct {
                 const pushed_instruction = try self.peekContinuationStack();
 
                 switch (pushed_instruction.opcode) {
-                    .@"if" => self.module.instructions.items[pushed_instruction.offset] = @as(u64, @intFromPtr(&VirtualMachine.if_with_else)),
+                    .@"if" => {
+                        self.module.instructions.items[pushed_instruction.offset] = @as(u64, @intFromPtr(&VirtualMachine.if_with_else));
+                        self.module.instructions.items[pushed_instruction.offset + 4] = math.cast(u32, self.code_ptr + 1) orelse return error.FailedCast;
+                        // Replace top of continuation stack with .if_with_else
+                        _ = try self.popContinuationStack();
+                        try self.pushContinuationStack(pushed_instruction.offset, .if_with_else);
+                    },
+
                     else => return error.UnexpectedInstruction,
                 }
 
@@ -1157,6 +1159,9 @@ pub const Parser = struct {
                 const version = try self.readULEB128Mem(u32);
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
+
+                // Replace misc with particular function
+                self.module.instructions.items[self.module.instructions.items.len - 1] = @as(u64, @intFromPtr(VirtualMachine.misc_lookup[@intFromEnum(misc_opcode)]));
 
                 switch (misc_opcode) {
                     // FIXME: do I need to handle misc separately

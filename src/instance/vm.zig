@@ -109,7 +109,7 @@ pub const VirtualMachine = struct {
         @"i32.extend8_s",   @"i32.extend16_s",  @"i64.extend8_s",     @"i64.extend16_s",    @"i64.extend32_s",    impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         @"ref.null",        @"ref.is_null",     @"ref.func",          impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
         impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
-        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            misc,                   impl_ni,                impl_ni,                impl_ni,
+        impl_ni,            impl_ni,            impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,           impl_ni,              impl_ni,              impl_ni,              impl_ni,              impl_ni,            impl_ni,                impl_ni,                impl_ni,                impl_ni,
     };
 
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, instructions: []u64) WasmError!void {
@@ -227,7 +227,7 @@ pub const VirtualMachine = struct {
     pub fn br_if(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         const condition = self.popOperand(u32);
 
-        const next_ip = if (condition == 0) ip + 1 else self.branch(instructions[ip + 1]);
+        const next_ip = if (condition == 0) ip + 2 else self.branch(instructions[ip + 1]);
 
         return dispatch(self, next_ip, instructions);
     }
@@ -291,7 +291,7 @@ pub const VirtualMachine = struct {
 
                 if (self.inst == f.instance) {
                     // Switch call with fast_call
-                    self.inst.module.instructions.items[ip] = @as(u64, @intFromPtr(&VirtualMachine.fast_call));
+                    instructions[ip] = @as(u64, @intFromPtr(&VirtualMachine.fast_call));
                     instructions[ip + 1] = f.start;
                     instructions[ip + 2] = f.locals_count;
                     instructions[ip + 3] = function.params.len;
@@ -836,6 +836,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"memory.size"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
+        _ = instructions[ip + 1];
         const memory = try self.inst.getMemory(0);
 
         self.pushOperandNoCheck(u32, @as(u32, @intCast(memory.size())));
@@ -844,6 +845,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"memory.grow"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
+        _ = instructions[ip + 1];
         const memory = try self.inst.getMemory(0);
 
         const num_pages = self.popOperand(u32);
@@ -2138,6 +2140,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"ref.null"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
+        _ = instructions[ip + 1];
         self.pushOperandNoCheck(u64, REF_NULL);
 
         return dispatch(self, ip + 2, instructions);
@@ -2165,20 +2168,10 @@ pub const VirtualMachine = struct {
         return dispatch(self, ip + 2, instructions);
     }
 
-    pub fn misc(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        return miscDispatch(self, ip, instructions);
-    }
-
-    const misc_lookup = [18]InstructionFunction{
+    pub const misc_lookup = [18]InstructionFunction{
         @"i32.trunc_sat_f32_s", @"i32.trunc_sat_f32_u", @"i32.trunc_sat_f64_s", @"i32.trunc_sat_f64_u", @"i64.trunc_sat_f32_s", @"i64.trunc_sat_f32_u", @"i64.trunc_sat_f64_s", @"i64.trunc_sat_f64_u", @"memory.init", @"data.drop", @"memory.copy", @"memory.fill", @"table.init", @"elem.drop", @"table.copy", @"table.grow",
         @"table.size",          @"table.fill",
     };
-
-    inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, instructions: []u64) WasmError!void {
-        const next_instr = instructions[next_ip + 1];
-
-        return try @call(.always_tail, misc_lookup[next_instr], .{ self, next_ip, instructions });
-    }
 
     pub fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         const c1 = self.popOperand(f32);
@@ -2358,8 +2351,8 @@ pub const VirtualMachine = struct {
 
     pub fn @"memory.init"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         // const meta = code[ip].misc.@"memory.init";
-        const memidx = instructions[ip + 1];
-        const dataidx = instructions[ip + 2];
+        const dataidx = instructions[ip + 1];
+        const memidx = instructions[ip + 2];
 
         const n = self.popOperand(u32);
         const src = self.popOperand(u32);
@@ -2448,8 +2441,8 @@ pub const VirtualMachine = struct {
 
     pub fn @"table.init"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         // const meta = code[ip].misc.@"table.init";
-        const tableidx = instructions[ip + 1];
-        const elemidx = instructions[ip + 2];
+        const elemidx = instructions[ip + 1];
+        const tableidx = instructions[ip + 2];
 
         const table = try self.inst.getTable(tableidx);
         const elem = try self.inst.getElem(elemidx);

@@ -481,6 +481,7 @@ pub const Module = struct {
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
+                        try self.instructions.append(funcidx);
                         // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
@@ -514,6 +515,7 @@ pub const Module = struct {
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
+                        try self.instructions.append(funcidx);
                         // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
@@ -549,6 +551,7 @@ pub const Module = struct {
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
+                        try self.instructions.append(funcidx);
                         // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
@@ -581,6 +584,7 @@ pub const Module = struct {
                         const init_offset = self.instructions.items.len;
                         // try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"ref.func")));
+                        try self.instructions.append(funcidx);
                         // try self.parsed_code.append(Rr.@"return");
                         try self.instructions.append(@as(u64, @intFromPtr(&VirtualMachine.@"return")));
                         try self.element_init_offsets.append(init_offset);
