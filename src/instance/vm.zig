@@ -89,8 +89,6 @@ pub const VirtualMachine = struct {
         try @call(.auto, @as(InstructionFunction, @ptrFromInt(instr)), .{ self, ip, self.inst.module.instructions.items });
     }
 
-    // To avoid a recursive definition, define similar function pointer type we will cast to / from
-    // pub const Instruction = *const fn (*VirtualMachine, usize, []u64) WasmError!void;
     pub const InstructionFunction = *const fn (*VirtualMachine, usize, []u64) WasmError!void;
 
     pub const lookup = [256]InstructionFunction{
@@ -133,7 +131,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn block(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].block;
         const param_arity = instructions[ip + 1];
         const return_arity = instructions[ip + 2];
         const branch_target = instructions[ip + 3];
@@ -186,15 +183,12 @@ pub const VirtualMachine = struct {
         return dispatch(self, label.branch_target, instructions);
     }
 
-    // if_no_else
     pub fn @"if"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].if_no_else;
         const param_arity = instructions[ip + 1];
         const return_arity = instructions[ip + 2];
         const branch_target = instructions[ip + 3];
         const else_ip = instructions[ip + 4];
         _ = else_ip;
-        // std.debug.print("{}: if[{}, {}, {}, {}]\n", .{ ip, param_arity, return_arity, branch_target, else_ip });
 
         const condition = self.popOperand(u32);
 
@@ -247,7 +241,7 @@ pub const VirtualMachine = struct {
 
     pub fn @"return"(self: *VirtualMachine, ip: usize, _: []u64) WasmError!void {
         _ = ip;
-        // std.debug.print("{}: return[]\n", .{ip});
+
         const frame = self.peekFrame();
         const n = frame.return_arity;
 
@@ -275,7 +269,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn call(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const funcidx = code[ip].call;
         const funcidx = instructions[ip + 1];
 
         const function = try self.inst.getFunc(funcidx);
@@ -329,7 +322,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn call_indirect(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const call_indirect_instruction = code[ip].call_indirect;
         var module = self.inst.module;
 
         const typeidx = instructions[ip + 1];
@@ -385,7 +377,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn fast_call(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const f = code[ip].fast_call;
         const start = instructions[ip + 1];
         const locals = instructions[ip + 2];
         const params = instructions[ip + 3];
@@ -437,7 +428,6 @@ pub const VirtualMachine = struct {
 
     pub fn @"local.get"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
         const localidx = instructions[ip + 1];
-        // std.debug.print("{}: local.get[{}]\n", .{ ip, localidx });
 
         const frame = self.peekFrame();
 
@@ -2350,7 +2340,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"memory.init"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].misc.@"memory.init";
         const dataidx = instructions[ip + 1];
         const memidx = instructions[ip + 2];
 
@@ -2379,7 +2368,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"data.drop"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const dataidx = code[ip].misc.@"data.drop";
         const dataidx = instructions[ip + 1];
         const data = try self.inst.getData(dataidx);
         data.dropped = true;
@@ -2440,7 +2428,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"table.init"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].misc.@"table.init";
         const elemidx = instructions[ip + 1];
         const tableidx = instructions[ip + 2];
 
@@ -2469,7 +2456,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"elem.drop"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].misc.@"elem.drop";
         const elemidx = instructions[ip + 1];
         const elem = try self.inst.getElem(elemidx);
         elem.dropped = true;
@@ -2478,9 +2464,6 @@ pub const VirtualMachine = struct {
     }
 
     pub fn @"table.copy"(self: *VirtualMachine, ip: usize, instructions: []u64) WasmError!void {
-        // const meta = code[ip].misc.@"table.copy";
-        // const dest_tableidx = meta.dest_tableidx;
-        // const src_tableidx = meta.src_tableidx;
         const dst_tableidx = instructions[ip + 1];
         const src_tableidx = instructions[ip + 2];
 

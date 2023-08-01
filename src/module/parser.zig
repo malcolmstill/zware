@@ -207,14 +207,6 @@ pub const Parser = struct {
                 try self.module.instructions.append(block_params);
                 try self.module.instructions.append(block_returns);
                 try self.module.instructions.append(0);
-
-                // Rr{
-                //     .block = .{
-                //         .param_arity = block_params,
-                //         .return_arity = block_returns,
-                //         .branch_target = 0,
-                //     },
-                // };
             },
             .loop => {
                 const block_type = try self.readILEB128Mem(i32);
@@ -249,14 +241,6 @@ pub const Parser = struct {
                 try self.module.instructions.append(block_params);
                 try self.module.instructions.append(block_params);
                 try self.module.instructions.append(math.cast(u32, self.code_ptr) orelse return error.FailedCast);
-
-                // rr = Rr{
-                //     .loop = .{
-                //         .param_arity = block_params,
-                //         .return_arity = block_params,
-                //         .branch_target = math.cast(u32, self.code_ptr) orelse return error.FailedCast,
-                //     },
-                // };
             },
             .@"if" => {
                 const block_type = try self.readILEB128Mem(i32);
@@ -299,20 +283,6 @@ pub const Parser = struct {
                 // an if with no else only has 3 immediates, but we push a fourth here
                 // so we can exchange the if with an if_with_else
                 try self.module.instructions.append(0); // else_ip
-
-                // FIXME: we have found an if, but we were actually pushing an if_no_else
-                //        i.e. we assume we don't have an else until we find one (and if we
-                //        do we replace the if_no_else with a plain if). We could turn this
-                //        around, so that e.g. if means if-no-else and then have a if-with-else
-                //        instruction
-                //
-                // rr = Rr{
-                //     .if_no_else = .{
-                //         .param_arity = block_params,
-                //         .return_arity = block_returns,
-                //         .branch_target = 0,
-                //     },
-                // };
             },
             .@"else" => {
                 const pushed_instruction = try self.peekContinuationStack();
@@ -328,8 +298,6 @@ pub const Parser = struct {
 
                     else => return error.UnexpectedInstruction,
                 }
-
-                // rr = Rr.@"else";
             },
             .end => {
                 self.scope -= 1;
@@ -355,22 +323,18 @@ pub const Parser = struct {
                         else => return error.UnexpectedInstruction,
                     }
                 }
-
-                // rr = Rr.end;
             },
             .br => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBr(label);
 
                 try self.module.instructions.append(label);
-                // rr = Rr{ .br = label };
             },
             .br_if => {
                 const label = try self.readULEB128Mem(u32);
                 try self.validator.validateBrIf(label);
 
                 try self.module.instructions.append(label);
-                // rr = Rr{ .br_if = label };
             },
             .br_table => {
                 const label_start = math.cast(u32, self.module.br_table_indices.items.len) orelse return error.TooManyBrTableIndices;
@@ -389,13 +353,6 @@ pub const Parser = struct {
                 try self.module.instructions.append(label_start);
                 try self.module.instructions.append(label_count);
                 try self.module.instructions.append(ln);
-
-                // rr = Rr{
-                //     .br_table = .{
-                //         .ls = Range{ .offset = label_start, .count = label_count },
-                //         .ln = ln,
-                //     },
-                // };
             },
             .@"return" => {},
             .call => {
@@ -411,10 +368,6 @@ pub const Parser = struct {
                 try self.module.instructions.append(0);
                 try self.module.instructions.append(0);
                 try self.module.instructions.append(0);
-
-                // rr = Rr{ .call = funcidx };
-                // TODO: do the replacement at instantiate-time for a fastcall if in same module?
-                // rr =  Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
             .call_indirect => {
                 const typeidx = try self.readULEB128Mem(u32);
@@ -427,13 +380,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(typeidx);
                 try self.module.instructions.append(tableidx);
-
-                // rr = Rr{
-                //     .call_indirect = .{
-                //         .typeidx = typeidx,
-                //         .tableidx = tableidx,
-                //     },
-                // };
             },
             .drop => {},
             .select => {},
@@ -452,8 +398,6 @@ pub const Parser = struct {
                 try self.validator.validateGlobalGet(global);
 
                 try self.module.instructions.append(globalidx);
-
-                // rr = Rr{ .@"global.get" = globalidx };
             },
             .@"global.set" => {
                 const globalidx = try self.readULEB128Mem(u32);
@@ -462,7 +406,6 @@ pub const Parser = struct {
                 try self.validator.validateGlobalSet(global);
 
                 try self.module.instructions.append(globalidx);
-                // rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
                 const tableidx = try self.readULEB128Mem(u32);
@@ -477,7 +420,6 @@ pub const Parser = struct {
                 _ = try self.validator.pushOperand(Type{ .Known = reftype });
 
                 try self.module.instructions.append(tableidx);
-                // rr = Rr{ .@"table.get" = tableidx };
             },
             .@"table.set" => {
                 const tableidx = try self.readULEB128Mem(u32);
@@ -492,7 +434,6 @@ pub const Parser = struct {
                 _ = try self.validator.popOperandExpecting(Type{ .Known = .I32 });
 
                 try self.module.instructions.append(tableidx);
-                // rr = Rr{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -521,7 +462,6 @@ pub const Parser = struct {
                 }
 
                 try self.module.instructions.append(localidx);
-                // rr = Rr{ .@"local.get" = localidx };
             },
             .@"local.set" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -551,8 +491,6 @@ pub const Parser = struct {
                 }
 
                 try self.module.instructions.append(localidx);
-
-                // rr = Rr{ .@"local.set" = localidx };
             },
             .@"local.tee" => {
                 const localidx = try self.readULEB128Mem(u32);
@@ -582,7 +520,6 @@ pub const Parser = struct {
                 }
 
                 try self.module.instructions.append(localidx);
-                // rr = Rr{ .@"local.tee" = localidx };
             },
             .@"memory.size" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -590,7 +527,6 @@ pub const Parser = struct {
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
                 try self.module.instructions.append(memidx);
-                // rr = Rr{ .@"memory.size" = memidx };
             },
             .@"memory.grow" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -598,34 +534,28 @@ pub const Parser = struct {
                 if (memidx != 0) return error.MalformedMemoryReserved;
 
                 try self.module.instructions.append(memidx);
-                // rr = Rr{ .@"memory.grow" = memidx };
             },
             .@"i32.const" => {
                 const i32_const = try self.readILEB128Mem(i32);
 
                 try self.module.instructions.append(@as(u32, @bitCast(i32_const)));
-                // rr = Rr{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
                 const i64_const = try self.readILEB128Mem(i64);
                 const u64_const = @as(u64, @bitCast(i64_const));
 
                 try self.module.instructions.append(u64_const);
-                // rr = Rr{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
                 const float_const: f32 = @bitCast(try self.readU32());
 
                 try self.module.instructions.append(@as(u32, @bitCast(float_const)));
-                // rr = Rr{ .@"f32.const" = float_const };
             },
             .@"f64.const" => {
                 const float_const: f64 = @bitCast(try self.readU64());
                 const u64_float = @as(u64, @bitCast(float_const));
 
                 try self.module.instructions.append(u64_float);
-
-                // rr = Rr{ .@"f64.const" = float_const };
             },
             .@"i32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -637,12 +567,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.load" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -653,12 +577,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"f32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -669,12 +587,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"f32.load" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"f64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -685,12 +597,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"f64.load" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -701,12 +607,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.load8_s" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -717,12 +617,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.load8_u" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -733,12 +627,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.load16_s" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -749,12 +637,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.load16_u" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -765,12 +647,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load8_s" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -781,12 +657,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load8_u" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -797,12 +667,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load16_s" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -813,12 +677,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load16_u" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load32_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -829,12 +687,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load32_s" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.load32_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -845,12 +697,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.load32_u" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -861,12 +707,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.store" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -877,12 +717,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.store" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"f32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -893,12 +727,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"f32.store" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"f64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -909,12 +737,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"f64.store" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -925,12 +747,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.store8" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -941,12 +757,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i32.store16" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -957,12 +767,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.store8" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
@@ -973,12 +777,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.store16" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i64.store32" => {
                 const alignment = try self.readULEB128Mem(u32);
@@ -988,12 +786,6 @@ pub const Parser = struct {
 
                 try self.module.instructions.append(alignment);
                 try self.module.instructions.append(offset);
-                // rr = Rr{
-                //     .@"i64.store32" = .{
-                //         .alignment = alignment,
-                //         .offset = offset,
-                //     },
-                // };
             },
             .@"i32.eqz" => {},
             .@"i32.eq" => {},
@@ -1130,7 +922,6 @@ pub const Parser = struct {
                 try self.validator.validateRefNull(reftype);
 
                 try self.module.instructions.append(@as(u32, @intFromEnum(reftype)));
-                // rr = Rr{ .@"ref.null" = reftype };
             },
             .@"ref.is_null" => {},
             .@"ref.func" => {
@@ -1153,7 +944,6 @@ pub const Parser = struct {
                 }
 
                 try self.module.instructions.append(funcidx);
-                // rr = Rr{ .@"ref.func" = funcidx };
             },
             .misc => {
                 const version = try self.readULEB128Mem(u32);
