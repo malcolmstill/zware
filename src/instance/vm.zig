@@ -10,6 +10,17 @@ const Instance = @import("../instance.zig").Instance;
 const WasiPreopen = @import("../instance.zig").WasiPreopen;
 const Rr = @import("../rr.zig").Rr;
 
+const nan_f32 =
+    if (@hasDecl(math, "nan"))
+        math.nan(f32)
+    else
+        math.nan_f32;
+const nan_f64 =
+    if (@hasDecl(math, "nan"))
+        math.nan(f64)
+    else
+        math.nan_f64;
+
 // VirtualMachine:
 //
 // The VirtualMachine interprets WebAssembly bytecode, i.e. it
@@ -1544,11 +1555,11 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) {
-            self.pushOperandNoCheck(f32, math.nan_f32);
+            self.pushOperandNoCheck(f32, nan_f32);
             return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
-            self.pushOperandNoCheck(f32, math.nan_f32);
+            self.pushOperandNoCheck(f32, nan_f32);
             return dispatch(self, ip + 1, code);
         }
 
@@ -1570,11 +1581,11 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f32);
 
         if (math.isNan(c1)) {
-            self.pushOperandNoCheck(f32, math.nan_f32);
+            self.pushOperandNoCheck(f32, nan_f32);
             return dispatch(self, ip + 1, code);
         }
         if (math.isNan(c2)) {
-            self.pushOperandNoCheck(f32, math.nan_f32);
+            self.pushOperandNoCheck(f32, nan_f32);
             return dispatch(self, ip + 1, code);
         }
 
@@ -1711,7 +1722,7 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1) or math.isNan(c2)) {
-            self.pushOperandNoCheck(f64, math.nan_f64);
+            self.pushOperandNoCheck(f64, nan_f64);
             return dispatch(self, ip + 1, code);
         }
 
@@ -1733,7 +1744,7 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f64);
 
         if (math.isNan(c1) or math.isNan(c2)) {
-            self.pushOperandNoCheck(f64, math.nan_f64);
+            self.pushOperandNoCheck(f64, nan_f64);
             return dispatch(self, ip + 1, code);
         }
 
