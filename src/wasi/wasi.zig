@@ -108,13 +108,30 @@ pub fn fd_fdstat_set_flags(vm: *VirtualMachine) WasmError!void {
     @panic("Unimplemented: fd_fdstat_set_flags");
 }
 
-// FIXME: implement
 pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
-    const param0 = vm.popOperand(i32);
-    const param1 = vm.popOperand(i32);
-    std.debug.print("Unimplemented: fd_filestat_get({}, {})\n", .{ param0, param1 });
-    try vm.pushOperand(u64, 0);
-    @panic("Unimplemented: fd_filestat_get");
+    const stat_ptr = vm.popOperand(u32);
+    const fd = vm.popOperand(i32);
+
+    const memory = try vm.inst.getMemory(0);
+
+    const host_fd = vm.getHostFd(fd);
+    const file = std.fs.File{ .handle = host_fd };
+    const stat = file.stat() catch |err|
+    {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+
+    try memory.write(u64, stat_ptr, 0, 0); // device id
+    try memory.write(u64, stat_ptr, 8, stat.inode); // inode
+    try memory.write(u64, stat_ptr, 16, @intFromEnum(toWasiFileType(stat.kind))); // filetype
+    try memory.write(u64, stat_ptr, 24, 1); // nlink - hard links refering to this file count
+    try memory.write(u64, stat_ptr, 32, stat.size); // size in bytes
+    try memory.write(u64, stat_ptr, 40, @as(u64, @intCast(stat.atime))); // atime - last access time
+    try memory.write(u64, stat_ptr, 48, @as(u64, @intCast(stat.mtime))); // mtime - last modified time
+    try memory.write(u64, stat_ptr, 56, @as(u64, @intCast(stat.ctime))); // ctime - last status change time
+
+    try vm.pushOperand(u64, @intFromEnum(std.os.wasi.errno_t.SUCCESS));
 }
 
 pub fn fd_prestat_get(vm: *VirtualMachine) WasmError!void {
@@ -360,11 +377,10 @@ pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
     @panic("Unimplemented: poll_oneoff");
 }
 
-// FIXME: implement
 pub fn proc_exit(vm: *VirtualMachine) WasmError!void {
     const param0 = vm.popOperand(i32);
-    std.debug.print("Unimplemented: proc_exit({})\n", .{param0});
-    @panic("Unimplemented: proc_exit");
+    const code: u32 = std.math.absCast(param0);
+    std.os.exit(@truncate(code));
 }
 
 pub fn random_get(vm: *VirtualMachine) WasmError!void {
