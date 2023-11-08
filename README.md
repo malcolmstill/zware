@@ -78,19 +78,15 @@ pub fn main() !void {
 - The WebAssembly official testsuite passes (not including SIMD tests)
 - Partial WASI support
 
-## Running the testsuite
+## Running tests
 
-1. Build the test runner
+Use `zig build --help` to see all the test targets, here's a summary of the important ones:
 
-```
-cd test/testrunner
-zig build --prefix ./
-```
-
-2. Run
-
-```
-sh test/run-generated.sh
+```sh
+zig build test      # Run all the tests (includes unittest and testsuite)
+zig build unittest  # Run the library unittests
+zig build testsuite # Run all the testsuite tests
+zig build test-NAME # Run the NAME testsuite test, i.e. test-type
 ```
 
 ## Does it run doom?
