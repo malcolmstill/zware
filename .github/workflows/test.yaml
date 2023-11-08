@@ -16,27 +16,24 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
-      - run: zig build test
+          version: 0.11.0
+      - run: zig build unittest
   testsuite:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
-      - name: Build test runner
-        working-directory: ./test/testrunner
-        run: zig build --prefix ./
+          version: 0.11.0
       - name: Run testsuite
-        run: bash test/run-generated.sh
+        run: zig build testsuite
   parsecheck:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
+          version: 0.11.0
       - name: Build parsecheck
         working-directory: ./test/parsecheck
         run: zig build --prefix ./
@@ -48,7 +45,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
+          version: 0.11.0
       - name: Build interface
         working-directory: ./test/interface
         run: zig build
@@ -58,7 +55,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
+          version: 0.11.0
       - name: Build zware-gen
         working-directory: ./tools/zware-gen
         run: zig build
@@ -68,7 +65,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
+          version: 0.11.0
       - run: zig fmt --check src/*.zig
   fib:
     runs-on: ubuntu-latest
@@ -76,7 +73,7 @@ jobs:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
         with:
-          version: master
+          version: 0.11.0
       - name: Build fib
         working-directory: ./examples/fib
         run: zig build
