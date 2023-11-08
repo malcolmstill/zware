@@ -12,12 +12,13 @@ const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
 
 pub fn main() !void {
-    var args = process.args();
-    _ = args.skip();
-    const filename = args.next() orelse return error.NoFilename;
-
     defer _ = gpa.deinit();
     var alloc = gpa.allocator();
+
+    var args = try process.argsWithAllocator(alloc);
+    defer args.deinit();
+    _ = args.skip();
+    const filename = args.next() orelse return error.NoFilename;
 
     const program = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
     defer alloc.free(program);

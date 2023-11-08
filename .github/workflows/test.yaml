@@ -10,7 +10,7 @@ jobs:
   source-code-tests:
     strategy:
       matrix:
-        os: [ubuntu-latest]
+        os: [ubuntu-latest, macos-latest, windows-latest]
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
@@ -19,7 +19,10 @@ jobs:
           version: 0.11.0
       - run: zig build unittest
   testsuite:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
@@ -40,7 +43,10 @@ jobs:
       - name: Run parse check
         run: test/parsecheck/bin/parsecheck test/testsuite-generated
   build_interface:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
@@ -50,7 +56,10 @@ jobs:
         working-directory: ./test/interface
         run: zig build
   build-zware-gen:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
@@ -68,7 +77,10 @@ jobs:
           version: 0.11.0
       - run: zig fmt --check src/*.zig
   fib:
-    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
       - uses: goto-bus-stop/setup-zig@v1
