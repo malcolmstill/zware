@@ -74,7 +74,8 @@ pub fn main() anyerror!void {
     defer _ = gpa.deinit();
 
     // 1. Get .json file from command line
-    var args = process.args();
+    var args = try process.argsWithAllocator(gpa.allocator());
+    defer args.deinit();
     _ = args.skip();
     const filename = args.next() orelse return error.NoFilename;
     std.log.info("testing: {s}", .{filename});
