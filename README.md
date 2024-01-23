@@ -92,3 +92,5 @@ zig build test-NAME # Run the NAME testsuite test, i.e. test-type
 ## Does it run doom?
 
 Yes, [yes it does](https://github.com/malcolmstill/zware-doom)
+
+https://github.com/malcolmstill/zware/assets/2567177/c9acdcb2-69e7-495f-b3f1-89cf6b807a43
