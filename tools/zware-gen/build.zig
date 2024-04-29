@@ -1,6 +1,6 @@
-const Builder = @import("std").build.Builder;
+const Build = @import("std").Build;
 
-pub fn build(b: *Builder) void {
+pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
@@ -10,8 +10,8 @@ pub fn build(b: *Builder) void {
         .target = target,
         .optimize = optimize,
     });
-    exe.addAnonymousModule("zware", .{
-        .source_file = .{ .path = "../../src/main.zig" },
+    exe.root_module.addAnonymousImport("zware", .{
+        .root_source_file = .{ .path = "../../src/main.zig" },
     });
     b.installArtifact(exe);
 
