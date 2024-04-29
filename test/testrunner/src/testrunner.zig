@@ -165,7 +165,7 @@ pub fn main() anyerror!void {
 
                         // Allocate input parameters and output results
                         var in = try alloc.alloc(u64, action.invoke.args.len);
-                        var out = try alloc.alloc(u64, expected.len);
+                        const out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args, 0..) |value, i| {
@@ -297,7 +297,7 @@ pub fn main() anyerror!void {
 
                         // Allocate input parameters and output results
                         var in = try alloc.alloc(u64, action.invoke.args.len);
-                        var out = try alloc.alloc(u64, expected.len);
+                        const out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args, 0..) |value, i| {
@@ -642,7 +642,7 @@ pub fn main() anyerror!void {
 
                         // Allocate input parameters and output results
                         var in = try alloc.alloc(u64, action.invoke.args.len);
-                        var out = try alloc.alloc(u64, expected.len);
+                        const out = try alloc.alloc(u64, expected.len);
 
                         // Initialise input parameters
                         for (action.invoke.args, 0..) |value, i| {

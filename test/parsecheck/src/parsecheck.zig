@@ -12,17 +12,27 @@ const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 var gpa = GeneralPurposeAllocator(.{}){};
 
+const native_os = @import("builtin").os.tag;
+
 pub fn main() !void {
-    var args = process.args();
+    defer _ = gpa.deinit();
+    
+    var args = switch (native_os) {
+        .windows, .wasi => try process.ArgIterator.initWithAllocator(gpa.allocator()),
+        else => process.ArgIterator.init(),
+    };
+    defer args.deinit();
+    
     _ = args.skip();
     const directory = args.next() orelse return error.NoFilename;
-
-    defer _ = gpa.deinit();
 
     var wasm_files = ArrayList([]const u8).init(gpa.allocator());
     defer wasm_files.deinit();
 
-    var dir = try std.fs.cwd().openIterableDir(directory, .{});
+    var dir = try std.fs.cwd().openDir(directory, .{
+        .no_follow = true,
+        .iterate = true,
+    });
     defer dir.close();
 
     var it = dir.iterate();
@@ -36,7 +46,7 @@ pub fn main() !void {
             defer _ = arena.deinit();
             const alloc = arena.allocator();
 
-            const program = try dir.dir.readFileAlloc(alloc, entry.name, 0xFFFFFFF);
+            const program = try dir.readFileAlloc(alloc, entry.name, 0xFFFFFFF);
             if (program.len == 0) continue;
 
             var store: Store = Store.init(alloc);

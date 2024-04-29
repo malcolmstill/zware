@@ -89,7 +89,7 @@ pub const Module = struct {
         const magic = try rd.readBytesNoEof(4);
         if (!mem.eql(u8, magic[0..], "\x00asm")) return error.MagicNumberNotFound;
 
-        const version = try rd.readIntLittle(u32);
+        const version = try rd.readInt(u32, .little);
         if (version != 1) return error.UnknownBinaryVersion;
 
         // FIXME: in hindsight I don't like this:
@@ -196,8 +196,8 @@ pub const Module = struct {
             }
             const results_end = self.pos();
 
-            var params = self.module[params_start..params_end];
-            var results = self.module[results_start..results_end];
+            const params = self.module[params_start..params_end];
+            const results = self.module[results_start..results_end];
 
             var params_valtype: []const ValType = undefined;
             params_valtype.ptr = @ptrCast(params.ptr);
@@ -825,7 +825,7 @@ pub const Module = struct {
     fn readEnum(self: *Module, comptime T: type) !T {
         const rd = self.buf.reader();
 
-        return rd.readEnum(T, .Little);
+        return rd.readEnum(T, .little);
     }
 
     fn readULEB128(self: *Module, comptime T: type) !T {

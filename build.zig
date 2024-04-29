@@ -1,11 +1,11 @@
-const Builder = @import("std").build.Builder;
+const Build = @import("std").Build;
 
-pub fn build(b: *Builder) !void {
+pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
 
-    var zware_module = b.createModule(.{
-        .source_file = .{ .path = "src/main.zig" },
+    const zware_module = b.createModule(.{
+        .root_source_file = .{ .path = "src/main.zig" },
     });
 
     try b.modules.put(b.dupe("zware"), zware_module);
@@ -33,13 +33,13 @@ pub fn build(b: *Builder) !void {
         .target = target,
         .optimize = optimize,
     });
-    testrunner.addModule("zware", zware_module);
+    testrunner.root_module.addImport("zware", zware_module);
 
     const testsuite_step = b.step("testsuite", "Run all the testsuite tests");
     for (test_names) |test_name| {
         const run_test = b.addRunArtifact(testrunner);
-        run_test.addFileSourceArg(.{ .path = b.fmt("test/testsuite-generated/{s}.json", .{test_name}) });
-        run_test.cwd = b.pathFromRoot("test/testsuite-generated");
+        run_test.addFileArg(.{ .path = b.fmt("test/testsuite-generated/{s}.json", .{test_name}) });
+        run_test.cwd = .{ .path = b.pathFromRoot("test/testsuite-generated") };
         const step = b.step(b.fmt("test-{s}", .{test_name}), b.fmt("Run the '{s}' test", .{test_name}));
         step.dependOn(&run_test.step);
         testsuite_step.dependOn(&run_test.step);

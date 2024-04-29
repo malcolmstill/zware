@@ -1213,7 +1213,7 @@ pub const Parser = struct {
     pub fn readU32(self: *Parser) !u32 {
         var buf = std.io.fixedBufferStream(self.code);
         const rd = buf.reader();
-        const value = try rd.readIntLittle(u32);
+        const value = try rd.readInt(u32, .little);
 
         self.code.ptr += buf.pos;
         self.code.len -= buf.pos;
@@ -1223,7 +1223,7 @@ pub const Parser = struct {
     pub fn readU64(self: *Parser) !u64 {
         var buf = std.io.fixedBufferStream(self.code);
         const rd = buf.reader();
-        const value = try rd.readIntLittle(u64);
+        const value = try rd.readInt(u64, .little);
 
         self.code.ptr += buf.pos;
         self.code.len -= buf.pos;
