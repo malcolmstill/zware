@@ -40,7 +40,7 @@ pub const ArrayListStore = struct {
     imports: ArrayList(ImportExport),
 
     pub fn init(alloc: mem.Allocator) ArrayListStore {
-        var store = ArrayListStore{
+        const store = ArrayListStore{
             .alloc = alloc,
             .functions = ArrayList(Function).init(alloc),
             .memories = ArrayList(Memory).init(alloc),

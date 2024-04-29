@@ -52,7 +52,7 @@ pub const Memory = struct {
     pub fn copy(self: *Memory, address: u32, data: []const u8) !void {
         if (address + data.len > self.data.items.len) return error.OutOfBoundsMemoryAccess;
 
-        mem.copy(u8, self.data.items[address .. address + data.len], data);
+        mem.copyForwards(u8, self.data.items[address .. address + data.len], data);
     }
 
    pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
@@ -60,7 +60,7 @@ pub const Memory = struct {
     }
 
     pub fn uncheckedCopy(self: *Memory, dst_address: u32, data: []const u8) void {
-        mem.copy(u8, self.data.items[dst_address .. dst_address + data.len], data);
+        mem.copyForwards(u8, self.data.items[dst_address .. dst_address + data.len], data);
     }
 
     pub fn uncheckedCopyBackwards(self: *Memory, dst_address: u32, data: []const u8) void {
@@ -86,13 +86,13 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => return mem.readInt(T, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little),
+            => return mem.readInt(T, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .little),
             f32 => {
-                const x = mem.readInt(u32, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little);
+                const x = mem.readInt(u32, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .little);
                 return @bitCast(x);
             },
             f64 => {
-                const x = mem.readInt(u64, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .Little);
+                const x = mem.readInt(u64, @as(*const [@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), .little);
                 return @bitCast(x);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
@@ -112,14 +112,14 @@ pub const Memory = struct {
             i16,
             i32,
             i64,
-            => std.mem.writeInt(T, @as(*[@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), value, .Little),
+            => std.mem.writeInt(T, @as(*[@sizeOf(T)]u8, @ptrCast(&self.data.items[effective_address])), value, .little),
             f32 => {
                 const x: u32 = @bitCast(value);
-                std.mem.writeInt(u32, @as(*[@sizeOf(u32)]u8, @ptrCast(&self.data.items[effective_address])), x, .Little);
+                std.mem.writeInt(u32, @as(*[@sizeOf(u32)]u8, @ptrCast(&self.data.items[effective_address])), x, .little);
             },
             f64 => {
                 const x: u64 = @bitCast(value);
-                std.mem.writeInt(u64, @as(*[@sizeOf(u64)]u8, @ptrCast(&self.data.items[effective_address])), x, .Little);
+                std.mem.writeInt(u64, @as(*[@sizeOf(u64)]u8, @ptrCast(&self.data.items[effective_address])), x, .little);
             },
             else => @compileError("Memory.read unsupported type (not int/float): " ++ @typeName(T)),
         }

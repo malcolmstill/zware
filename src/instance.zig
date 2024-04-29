@@ -469,5 +469,5 @@ pub const Instance = struct {
 pub const WasiPreopen = struct {
     wasi_fd: wasi.fd_t,
     name: []const u8,
-    host_fd: os.fd_t,
+    host_fd: std.posix.fd_t,
 };

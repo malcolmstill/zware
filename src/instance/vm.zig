@@ -242,9 +242,9 @@ pub const VirtualMachine = struct {
 
         // The mem copy is equivalent of popping n operands, doing everything
         // up to and including popFrame and then repushing the n operands
-        var dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
+        const dst = self.op_stack[label.op_stack_len .. label.op_stack_len + n];
         const src = self.op_stack[self.op_ptr - n .. self.op_ptr];
-        mem.copy(u64, dst, src);
+        mem.copyForwards(u64, dst, src);
 
         self.op_ptr = label.op_stack_len + n;
         self.label_ptr = frame.label_stack_len;
@@ -304,7 +304,7 @@ pub const VirtualMachine = struct {
 
     fn call_indirect(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const call_indirect_instruction = code[ip].call_indirect;
-        var module = self.inst.module;
+        const module = self.inst.module;
 
         const typeidx = call_indirect_instruction.typeidx;
         const tableidx = call_indirect_instruction.tableidx;
@@ -1188,7 +1188,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
-        const abs = try math.absInt(c2);
+        const abs = if(c2 == math.minInt(i32)) return error.Overflow else @as(i32, @intCast(@abs(c2)));
         const rem = try math.rem(i32, c1, abs);
 
         self.pushOperandNoCheck(i32, rem);
@@ -1355,7 +1355,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
-        const abs = try math.absInt(c2);
+        const abs = if(c2 == math.minInt(i64)) return error.Overflow else @as(i64, @intCast(@abs(c2)));
         const rem = try math.rem(i64, c1, abs);
 
         self.pushOperandNoCheck(i64, rem);
@@ -1451,7 +1451,7 @@ pub const VirtualMachine = struct {
     fn @"f32.abs"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f32);
 
-        self.pushOperandNoCheck(f32, math.fabs(c1));
+        self.pushOperandNoCheck(f32, @abs(c1));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1607,9 +1607,9 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f32);
 
         if (math.signbit(c2)) {
-            self.pushOperandNoCheck(f32, -math.fabs(c1));
+            self.pushOperandNoCheck(f32, -@abs(c1));
         } else {
-            self.pushOperandNoCheck(f32, math.fabs(c1));
+            self.pushOperandNoCheck(f32, @abs(c1));
         }
 
         return dispatch(self, ip + 1, code);
@@ -1618,7 +1618,7 @@ pub const VirtualMachine = struct {
     fn @"f64.abs"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
         const c1 = self.popOperand(f64);
 
-        self.pushOperandNoCheck(f64, math.fabs(c1));
+        self.pushOperandNoCheck(f64, @abs(c1));
 
         return dispatch(self, ip + 1, code);
     }
@@ -1766,9 +1766,9 @@ pub const VirtualMachine = struct {
         const c1 = self.popOperand(f64);
 
         if (math.signbit(c2)) {
-            self.pushOperandNoCheck(f64, -math.fabs(c1));
+            self.pushOperandNoCheck(f64, -@abs(c1));
         } else {
-            self.pushOperandNoCheck(f64, math.fabs(c1));
+            self.pushOperandNoCheck(f64, @abs(c1));
         }
 
         return dispatch(self, ip + 1, code);
