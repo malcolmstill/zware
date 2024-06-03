@@ -1,7 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const fs = std.fs;
-const os = std.os;
+const posix = std.posix;
 const math = std.math;
 const wasi = std.os.wasi;
 
@@ -26,7 +26,7 @@ pub fn args_get(vm: *VirtualMachine) WasmError!void {
         const argv_i_ptr = argv_buf_ptr + argv_buf_i;
         const arg_len = arg.len + 1;
 
-        mem.copy(u8, data[argv_i_ptr .. argv_i_ptr + arg_len], arg[0..arg_len]);
+        @memcpy(data[argv_i_ptr .. argv_i_ptr + arg_len], arg[0..arg_len]);
         argv_buf_i += arg_len;
 
         try memory.write(u32, argv_ptr, 4 * @as(u32, @intCast(i)), @as(u32, @intCast(argv_i_ptr)));
@@ -73,7 +73,7 @@ pub fn fd_close(vm: *VirtualMachine) WasmError!void {
     const fd = vm.popOperand(i32);
 
     const host_fd = vm.getHostFd(fd);
-    os.close(host_fd);
+    posix.close(host_fd);
 
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
@@ -117,7 +117,7 @@ pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
     const host_fd = vm.getHostFd(fd);
     const file = std.fs.File{ .handle = host_fd };
     const stat = file.stat() catch |err|
-    {
+        {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
     };
@@ -131,7 +131,7 @@ pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
     try memory.write(u64, stat_ptr, 48, @as(u64, @intCast(stat.mtime))); // mtime - last modified time
     try memory.write(u64, stat_ptr, 56, @as(u64, @intCast(stat.ctime))); // ctime - last status change time
 
-    try vm.pushOperand(u64, @intFromEnum(std.os.wasi.errno_t.SUCCESS));
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
 pub fn fd_prestat_get(vm: *VirtualMachine) WasmError!void {
@@ -187,7 +187,7 @@ pub fn fd_read(vm: *VirtualMachine) WasmError!void {
         const buf = data[iov_i_ptr .. iov_i_ptr + iov_i_len];
 
         // read data from fd into buffer defined by iov
-        const read = os.read(host_fd, buf) catch |err| {
+        const read = posix.read(host_fd, buf) catch |err| {
             try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
             return;
         };
@@ -209,26 +209,26 @@ pub fn fd_seek(vm: *VirtualMachine) WasmError!void {
 
     switch (relative_to) {
         wasi.whence_t.CUR => {
-            os.lseek_CUR(fd, offset) catch |err| {
+            posix.lseek_CUR(fd, offset) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
         wasi.whence_t.END => {
-            os.lseek_END(fd, offset) catch |err| {
+            posix.lseek_END(fd, offset) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
         wasi.whence_t.SET => {
-            os.lseek_SET(fd, @intCast(offset)) catch |err| {
+            posix.lseek_SET(fd, @intCast(offset)) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
     }
 
-    const new_offset = os.lseek_CUR_get(fd) catch |err| {
+    const new_offset = posix.lseek_CUR_get(fd) catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
     };
@@ -259,7 +259,7 @@ pub fn fd_write(vm: *VirtualMachine) WasmError!void {
 
         const bytes = data[iov_i_ptr .. iov_i_ptr + iov_i_len];
 
-        const written = os.write(host_fd, bytes) catch |err| {
+        const written = posix.write(host_fd, bytes) catch |err| {
             try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
             return;
         };
@@ -318,11 +318,16 @@ pub fn path_filestat_get(vm: *VirtualMachine) WasmError!void {
 
 pub fn path_open(vm: *VirtualMachine) WasmError!void {
     const fd_ptr = vm.popOperand(u32);
-    const fs_flags = vm.popOperand(u32);
+
+    const fs_flags: wasi.fdflags_t = @bitCast(@as(u16, @truncate(vm.popOperand(u32))));
+
     const fs_rights_inheriting = vm.popOperand(u64); // FIXME: we should probably be using this
     _ = fs_rights_inheriting;
-    const fs_rights_base = vm.popOperand(u64);
-    const oflags = vm.popOperand(u32);
+
+    const fs_rights_base: wasi.rights_t = @bitCast(vm.popOperand(u64));
+
+    const oflags: wasi.oflags_t = @bitCast(@as(u16, @truncate(vm.popOperand(u32))));
+
     const path_len = vm.popOperand(u32);
     const path_ptr = vm.popOperand(u32);
     const dir_flags = vm.popOperand(u32); // FIXME: we should probably be using this
@@ -336,27 +341,28 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
 
     const host_fd = vm.getHostFd(dir_fd);
 
-    var flags: u32 = @as(u32, if (oflags & wasi.O.CREAT != 0) os.O.CREAT else 0) |
-        @as(u32, if (oflags & wasi.O.DIRECTORY != 0) os.O.DIRECTORY else 0) |
-        @as(u32, if (oflags & wasi.O.EXCL != 0) os.O.EXCL else 0) |
-        @as(u32, if (oflags & wasi.O.TRUNC != 0) os.O.TRUNC else 0) |
-        @as(u32, if (fs_flags & wasi.FDFLAG.APPEND != 0) os.O.APPEND else 0) |
-        @as(u32, if (fs_flags & wasi.FDFLAG.DSYNC != 0) os.O.DSYNC else 0) |
-        @as(u32, if (fs_flags & wasi.FDFLAG.NONBLOCK != 0) os.O.NONBLOCK else 0) |
-        @as(u32, if (fs_flags & wasi.FDFLAG.SYNC != 0) os.O.SYNC else 0);
+    const flags = posix.O{
+        .CREAT = oflags.CREAT,
+        .DIRECTORY = oflags.DIRECTORY,
+        .EXCL = oflags.EXCL,
+        .TRUNC = oflags.TRUNC,
 
-    if ((fs_rights_base & wasi.RIGHT.FD_READ != 0) and
-        (fs_rights_base & wasi.RIGHT.FD_WRITE != 0))
-    {
-        flags |= os.O.RDWR;
-    } else if (fs_rights_base & wasi.RIGHT.FD_WRITE != 0) {
-        flags |= os.O.WRONLY;
-    } else if (fs_rights_base & wasi.RIGHT.FD_READ != 0) {
-        flags |= os.O.RDONLY;
-    }
+        .APPEND = fs_flags.APPEND,
+        .DSYNC = fs_flags.DSYNC,
+        .NONBLOCK = fs_flags.NONBLOCK,
+        .SYNC = fs_flags.SYNC,
+
+        .ACCMODE = if (fs_rights_base.FD_READ and fs_rights_base.FD_WRITE) blk: {
+            break :blk .RDWR;
+        } else if (fs_rights_base.FD_WRITE) blk: {
+            break :blk .WRONLY;
+        } else if (fs_rights_base.FD_READ) blk: {
+            break :blk .RDONLY;
+        } else unreachable,
+    };
 
     const mode = 0o644;
-    const opened_fd = os.openat(host_fd, sub_path, flags, mode) catch |err| {
+    const opened_fd = posix.openat(host_fd, sub_path, flags, mode) catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
     };
@@ -379,8 +385,8 @@ pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
 
 pub fn proc_exit(vm: *VirtualMachine) WasmError!void {
     const param0 = vm.popOperand(i32);
-    const code: u32 = std.math.absCast(param0);
-    std.os.exit(@truncate(code));
+    const code: u32 = @abs(param0);
+    posix.exit(@truncate(code));
 }
 
 pub fn random_get(vm: *VirtualMachine) WasmError!void {
@@ -439,3 +445,5 @@ fn toWasiFileType(kind: fs.File.Kind) wasi.filetype_t {
 fn toWasiTimestamp(ns: i128) u64 {
     return @as(u64, @intCast(ns));
 }
+
+const _ = std.testing.refAllDecls();

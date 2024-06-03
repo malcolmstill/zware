@@ -1,5 +1,6 @@
 const std = @import("std");
 const os = std.os;
+const posix = std.posix;
 const mem = std.mem;
 const math = std.math;
 const wasi = std.os.wasi;
@@ -12,14 +13,14 @@ const Rr = @import("../rr.zig").Rr;
 
 const nan_f32 =
     if (@hasDecl(math, "nan"))
-        math.nan(f32)
-    else
-        math.nan_f32;
+    math.nan(f32)
+else
+    math.nan_f32;
 const nan_f64 =
     if (@hasDecl(math, "nan"))
-        math.nan(f64)
-    else
-        math.nan_f64;
+    math.nan(f64)
+else
+    math.nan_f64;
 
 // VirtualMachine:
 //
@@ -84,11 +85,11 @@ pub const VirtualMachine = struct {
         };
     }
 
-    pub fn lookupWasiPreopen(self: *VirtualMachine, wasi_fd: os.wasi.fd_t) ?WasiPreopen {
+    pub fn lookupWasiPreopen(self: *VirtualMachine, wasi_fd: wasi.fd_t) ?WasiPreopen {
         return self.wasi_preopens.get(wasi_fd);
     }
 
-    pub fn getHostFd(self: *VirtualMachine, wasi_fd: wasi.fd_t) os.fd_t {
+    pub fn getHostFd(self: *VirtualMachine, wasi_fd: wasi.fd_t) posix.fd_t {
         const preopen = self.lookupWasiPreopen(wasi_fd) orelse return wasi_fd;
 
         return preopen.host_fd;
@@ -1188,7 +1189,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(i32);
         const c1 = self.popOperand(i32);
 
-        const abs = if(c2 == math.minInt(i32)) return error.Overflow else @as(i32, @intCast(@abs(c2)));
+        const abs = if (c2 == math.minInt(i32)) return error.Overflow else @as(i32, @intCast(@abs(c2)));
         const rem = try math.rem(i32, c1, abs);
 
         self.pushOperandNoCheck(i32, rem);
@@ -1355,7 +1356,7 @@ pub const VirtualMachine = struct {
         const c2 = self.popOperand(i64);
         const c1 = self.popOperand(i64);
 
-        const abs = if(c2 == math.minInt(i64)) return error.Overflow else @as(i64, @intCast(@abs(c2)));
+        const abs = if (c2 == math.minInt(i64)) return error.Overflow else @as(i64, @intCast(@abs(c2)));
         const rem = try math.rem(i64, c1, abs);
 
         self.pushOperandNoCheck(i64, rem);
