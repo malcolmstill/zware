@@ -1,7 +1,7 @@
 const std = @import("std");
 const mem = std.mem;
 const math = std.math;
-const os = std.os;
+const posix = std.posix;
 const wasi = std.os.wasi;
 const ArrayList = std.ArrayList;
 const Module = @import("module.zig").Module;
@@ -69,7 +69,7 @@ pub const Instance = struct {
             .elemaddrs = ArrayList(usize).init(alloc),
             .dataaddrs = ArrayList(usize).init(alloc),
 
-            .wasi_preopens = std.AutoHashMap(os.wasi.fd_t, WasiPreopen).init(alloc),
+            .wasi_preopens = std.AutoHashMap(wasi.fd_t, WasiPreopen).init(alloc),
             .wasi_args = ArrayList([:0]u8).init(alloc),
             .wasi_env = std.StringHashMap([]const u8).init(alloc),
         };
@@ -438,7 +438,7 @@ pub const Instance = struct {
         }
     }
 
-    pub fn addWasiPreopen(self: *Instance, wasi_fd: os.wasi.fd_t, name: []const u8, host_fd: os.fd_t) !void {
+    pub fn addWasiPreopen(self: *Instance, wasi_fd: wasi.fd_t, name: []const u8, host_fd: posix.fd_t) !void {
         return self.wasi_preopens.put(wasi_fd, .{
             .wasi_fd = wasi_fd,
             .name = name,
@@ -471,3 +471,5 @@ pub const WasiPreopen = struct {
     name: []const u8,
     host_fd: std.posix.fd_t,
 };
+
+const _ = std.testing.refAllDecls();
