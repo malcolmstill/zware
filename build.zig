@@ -5,21 +5,21 @@ pub fn build(b: *Build) !void {
     const optimize = b.standardOptimizeOption(.{});
 
     const zware_module = b.createModule(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
     });
 
     try b.modules.put(b.dupe("zware"), zware_module);
 
     const lib = b.addStaticLibrary(.{
         .name = "zware",
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
     b.installArtifact(lib);
 
     const main_tests = b.addTest(.{
-        .root_source_file = .{ .path = "src/main.zig" },
+        .root_source_file = b.path("src/main.zig"),
         .optimize = optimize,
     });
 
@@ -29,7 +29,7 @@ pub fn build(b: *Build) !void {
 
     const testrunner = b.addExecutable(.{
         .name = "testrunner",
-        .root_source_file = .{ .path = "test/testrunner/src/testrunner.zig" },
+        .root_source_file = b.path("test/testrunner/src/testrunner.zig"),
         .target = target,
         .optimize = optimize,
     });
@@ -38,8 +38,8 @@ pub fn build(b: *Build) !void {
     const testsuite_step = b.step("testsuite", "Run all the testsuite tests");
     for (test_names) |test_name| {
         const run_test = b.addRunArtifact(testrunner);
-        run_test.addFileArg(.{ .path = b.fmt("test/testsuite-generated/{s}.json", .{test_name}) });
-        run_test.cwd = .{ .path = b.pathFromRoot("test/testsuite-generated") };
+        run_test.addFileArg(b.path(b.fmt("test/testsuite-generated/{s}.json", .{test_name})));
+        run_test.cwd = b.path("test/testsuite-generated");
         const step = b.step(b.fmt("test-{s}", .{test_name}), b.fmt("Run the '{s}' test", .{test_name}));
         step.dependOn(&run_test.step);
         testsuite_step.dependOn(&run_test.step);
