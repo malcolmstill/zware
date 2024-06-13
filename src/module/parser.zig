@@ -3,6 +3,7 @@ const math = std.math;
 const leb = std.leb;
 const ArrayList = std.ArrayList;
 const Module = @import("../module.zig").Module;
+const Decoder = @import("../module.zig").Decoder;
 const LocalType = @import("../module.zig").LocalType;
 const Opcode = @import("../opcode.zig").Opcode;
 const MiscOpcode = @import("../opcode.zig").MiscOpcode;
@@ -24,6 +25,7 @@ pub const Parser = struct {
     code: []const u8 = undefined,
     code_ptr: usize,
     module: *Module,
+    decoder: *Decoder,
     validator: Validator = undefined,
     params: ?[]const ValType,
     locals: ?[]LocalType,
@@ -32,10 +34,11 @@ pub const Parser = struct {
     is_constant: bool = false,
     scope: usize,
 
-    pub fn init(module: *Module) Parser {
+    pub fn init(module: *Module, decoder: *Decoder) Parser {
         return Parser{
             .code_ptr = module.parsed_code.items.len,
             .module = module,
+            .decoder = decoder,
             .params = null,
             .locals = null,
             .continuation_stack_ptr = 0,
@@ -62,7 +65,7 @@ pub const Parser = struct {
         }
 
         const bytes_read = self.bytesRead();
-        _ = try self.module.readSlice(bytes_read);
+        _ = try self.decoder.readSlice(bytes_read);
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";
@@ -104,7 +107,7 @@ pub const Parser = struct {
         }
 
         const bytes_read = self.bytesRead();
-        _ = try self.module.readSlice(bytes_read);
+        _ = try self.decoder.readSlice(bytes_read);
 
         // Patch last end so that it is return
         self.module.parsed_code.items[self.module.parsed_code.items.len - 1] = .@"return";

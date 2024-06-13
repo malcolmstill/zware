@@ -16,9 +16,7 @@ const RefType = @import("valtype.zig").RefType;
 pub const Module = struct {
     decoded: bool = false,
     alloc: mem.Allocator,
-    module: []const u8 = undefined,
-    buf: std.io.FixedBufferStream([]const u8) = undefined,
-    version: u32 = 0,
+    wasm_bin: []const u8,
     customs: Section(Custom),
     types: Section(FuncType),
     imports: Section(Import),
@@ -39,11 +37,10 @@ pub const Module = struct {
     br_table_indices: ArrayList(u32),
     references: ArrayList(u32),
 
-    pub fn init(alloc: mem.Allocator, module: []const u8) Module {
+    pub fn init(alloc: mem.Allocator, wasm_bin: []const u8) Module {
         return Module{
             .alloc = alloc,
-            .module = module,
-            .buf = std.io.fixedBufferStream(module),
+            .wasm_bin = wasm_bin,
             .customs = Section(Custom).init(alloc),
             .types = Section(FuncType).init(alloc),
             .imports = Section(Import).init(alloc),
@@ -84,7 +81,11 @@ pub const Module = struct {
     }
 
     pub fn decode(self: *Module) !void {
-        const rd = self.buf.reader();
+        if (self.decoded) return error.AlreadyDecoded;
+        var decoder = Decoder{
+            .fbs = .{ .pos = 0, .buffer = self.wasm_bin },
+        };
+        const rd = decoder.fbs.reader();
 
         const magic = try rd.readBytesNoEof(4);
         if (!mem.eql(u8, magic[0..], "\x00asm")) return error.MagicNumberNotFound;
@@ -100,7 +101,7 @@ pub const Module = struct {
 
         var i: usize = 0;
         while (true) : (i += 1) {
-            self.decodeSection() catch |err| switch (err) {
+            decoder.decodeSection(self) catch |err| switch (err) {
                 error.WasmFileEnd => break,
                 else => return err,
             };
@@ -137,7 +138,19 @@ pub const Module = struct {
         return count;
     }
 
-    pub fn decodeSection(self: *Module) !void {
+    pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
+        for (self.exports.list.items) |exported| {
+            if (tag == exported.tag and mem.eql(u8, name, exported.name)) return exported.index;
+        }
+
+        return error.ExportNotFound;
+    }
+};
+
+pub const Decoder = struct {
+    fbs: std.io.FixedBufferStream([]const u8),
+
+    pub fn decodeSection(self: *Decoder, module: *Module) !void {
         const id: SectionType = self.readEnum(SectionType) catch |err| switch (err) {
             error.EndOfStream => return error.WasmFileEnd,
             else => return err,
@@ -145,31 +158,31 @@ pub const Module = struct {
 
         const size = try self.readULEB128(u32);
 
-        const section_start = self.pos();
+        const section_start = self.fbs.pos;
 
         switch (id) {
-            .Custom => try self.decodeCustomSection(size),
-            .Type => try self.decodeTypeSection(),
-            .Import => try self.decodeImportSection(),
-            .Function => try self.decodeFunctionSection(),
-            .Table => try self.decodeTableSection(),
-            .Memory => try self.decodeMemorySection(),
-            .Global => try self.decodeGlobalSection(),
-            .Export => try self.decodeExportSection(),
-            .Start => try self.decodeStartSection(),
-            .Element => try self.decodeElementSection(),
-            .Code => try self.decodeCodeSection(),
-            .Data => try self.decodeDataSection(),
-            .DataCount => try self.decodeDataCountSection(size),
+            .Custom => try self.decodeCustomSection(module, size),
+            .Type => try self.decodeTypeSection(module),
+            .Import => try self.decodeImportSection(module),
+            .Function => try self.decodeFunctionSection(module),
+            .Table => try self.decodeTableSection(module),
+            .Memory => try self.decodeMemorySection(module),
+            .Global => try self.decodeGlobalSection(module),
+            .Export => try self.decodeExportSection(module),
+            .Start => try self.decodeStartSection(module),
+            .Element => try self.decodeElementSection(module),
+            .Code => try self.decodeCodeSection(module),
+            .Data => try self.decodeDataSection(module),
+            .DataCount => try self.decodeDataCountSection(module, size),
         }
 
-        const section_end = self.pos();
+        const section_end = self.fbs.pos;
         if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
     }
 
-    fn decodeTypeSection(self: *Module) !void {
+    fn decodeTypeSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.types.count = count;
+        module.types.count = count;
 
         var f: usize = 0;
         while (f < count) : (f += 1) {
@@ -177,27 +190,27 @@ pub const Module = struct {
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
             const param_count = try self.readULEB128(u32);
-            const params_start = self.pos();
+            const params_start = self.fbs.pos;
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
                     _ = try self.readEnum(ValType);
                 }
             }
-            const params_end = self.pos();
+            const params_end = self.fbs.pos;
 
             const results_count = try self.readULEB128(u32);
-            const results_start = self.pos();
+            const results_start = self.fbs.pos;
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
                     _ = try self.readEnum(ValType);
                 }
             }
-            const results_end = self.pos();
+            const results_end = self.fbs.pos;
 
-            const params = self.module[params_start..params_end];
-            const results = self.module[results_start..results_end];
+            const params = module.wasm_bin[params_start..params_end];
+            const results = module.wasm_bin[results_start..results_end];
 
             var params_valtype: []const ValType = undefined;
             params_valtype.ptr = @ptrCast(params.ptr);
@@ -207,16 +220,16 @@ pub const Module = struct {
             results_valtype.ptr = @ptrCast(results.ptr);
             results_valtype.len = results.len;
 
-            try self.types.list.append(FuncType{
+            try module.types.list.append(FuncType{
                 .params = params_valtype,
                 .results = results_valtype,
             });
         }
     }
 
-    fn decodeImportSection(self: *Module) !void {
+    fn decodeImportSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.imports.count = count;
+        module.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -235,13 +248,13 @@ pub const Module = struct {
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
             const import_index: u32 = @truncate(i);
             _ = switch (tag) {
-                .Func => try self.decodeFunction(import_index),
-                .Table => try self.decodeTable(import_index),
-                .Mem => try self.decodeMemory(import_index),
-                .Global => try self.decodeGlobal(import_index),
+                .Func => try self.decodeFunction(module, import_index),
+                .Table => try self.decodeTable(module, import_index),
+                .Mem => try self.decodeMemory(module, import_index),
+                .Global => try self.decodeGlobal(module, import_index),
             };
 
-            try self.imports.list.append(Import{
+            try module.imports.list.append(Import{
                 .module = module_name,
                 .name = name,
                 .desc_tag = tag,
@@ -249,134 +262,112 @@ pub const Module = struct {
         }
     }
 
-    fn decodeFunctionSection(self: *Module) !void {
+    fn decodeFunctionSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.functions.count = count;
+        module.functions.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            try self.decodeFunction(null);
+            try self.decodeFunction(module, null);
         }
     }
 
-    fn decodeFunction(self: *Module, import: ?u32) !void {
+    fn decodeFunction(self: *Decoder, module: *Module, import: ?u32) !void {
         const typeidx = try self.readULEB128(u32);
 
-        if (typeidx >= self.types.list.items.len) return error.ValidatorInvalidTypeIndex;
+        if (typeidx >= module.types.list.items.len) return error.ValidatorInvalidTypeIndex;
 
-        if (import == null and self.function_index_start == null) {
-            self.function_index_start = self.functions.list.items.len;
+        if (import == null and module.function_index_start == null) {
+            module.function_index_start = module.functions.list.items.len;
         }
 
-        try self.functions.list.append(Function{
+        try module.functions.list.append(Function{
             .typeidx = typeidx,
             .import = import,
         });
     }
 
-    fn decodeTableSection(self: *Module) !void {
+    fn decodeTableSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.tables.count = count;
+        module.tables.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            try self.decodeTable(null);
+            try self.decodeTable(module, null);
         }
     }
 
-    fn decodeTable(self: *Module, import: ?u32) !void {
+    fn decodeTable(self: *Decoder, module: *Module, import: ?u32) !void {
         const reftype = try self.readEnum(RefType);
         const limit_type = try self.readEnum(LimitType);
-
-        switch (limit_type) {
-            .Min => {
-                const min = try self.readULEB128(u32);
-
-                try self.tables.list.append(TableType{
-                    .import = import,
-                    .reftype = reftype,
-                    .limits = Limit{
-                        .min = min,
-                        .max = null,
-                    },
-                });
+        const min = try self.readULEB128(u32);
+        const max: ?u32 = blk: {
+            switch (limit_type) {
+                .Min => break :blk null,
+                .MinMax => {
+                    const max = try self.readULEB128(u32);
+                    if (min > max) return error.ValidatorTableMinGreaterThanMax;
+                    break :blk max;
+                },
+            }
+        };
+        try module.tables.list.append(TableType{
+            .import = import,
+            .reftype = reftype,
+            .limits = Limit{
+                .min = min,
+                .max = max,
             },
-            .MinMax => {
-                const min = try self.readULEB128(u32);
-                const max = try self.readULEB128(u32);
-
-                if (min > max) return error.ValidatorTableMinGreaterThanMax;
-
-                try self.tables.list.append(TableType{
-                    .import = import,
-                    .reftype = reftype,
-                    .limits = Limit{
-                        .min = min,
-                        .max = max,
-                    },
-                });
-            },
-        }
+        });
     }
 
-    fn decodeMemorySection(self: *Module) !void {
+    fn decodeMemorySection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.memories.count = count;
+        module.memories.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            try self.decodeMemory(null);
+            try self.decodeMemory(module, null);
         }
     }
 
-    fn decodeMemory(self: *Module, import: ?u32) !void {
-        if (self.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
+    fn decodeMemory(self: *Decoder, module: *Module, import: ?u32) !void {
+        if (module.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
 
         const limit_type = try self.readEnum(LimitType);
-        switch (limit_type) {
-            .Min => {
-                const min = try self.readULEB128(u32);
-
-                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
-
-                try self.memories.list.append(MemType{
-                    .import = import,
-                    .limits = Limit{
-                        .min = min,
-                        .max = null,
-                    },
-                });
+        const min = try self.readULEB128(u32);
+        if (min > 65536) return error.ValidatorMemoryMinTooLarge;
+        const max: ?u32 = blk: {
+            switch (limit_type) {
+                .Min => break :blk null,
+                .MinMax => {
+                    const max = try self.readULEB128(u32);
+                    if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
+                    if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
+                    break :blk max;
+                },
+            }
+        };
+        try module.memories.list.append(MemType{
+            .import = import,
+            .limits = Limit{
+                .min = min,
+                .max = max,
             },
-            .MinMax => {
-                const min = try self.readULEB128(u32);
-                const max = try self.readULEB128(u32);
-
-                if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
-                if (min > 65536) return error.ValidatorMemoryMinTooLarge;
-                if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
-
-                try self.memories.list.append(MemType{
-                    .import = import,
-                    .limits = Limit{
-                        .min = min,
-                        .max = max,
-                    },
-                });
-            },
-        }
+        });
     }
 
-    fn decodeGlobalSection(self: *Module) !void {
+    fn decodeGlobalSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.globals.count = count;
+        module.globals.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            try self.decodeGlobal(null);
+            try self.decodeGlobal(module, null);
         }
     }
 
-    fn decodeGlobal(self: *Module, import: ?u32) !void {
+    fn decodeGlobal(self: *Decoder, module: *Module, import: ?u32) !void {
         const global_type = try self.readEnum(ValType);
         const mutability = try self.readEnum(Mutability);
 
@@ -385,13 +376,13 @@ pub const Module = struct {
         // If we're not importing the global we will expect
         // an expression
         if (import == null) {
-            parsed_code = try self.readConstantExpression(global_type);
+            parsed_code = try self.readConstantExpression(module, global_type);
         }
 
         if (parsed_code == null and import == null) return error.ExpectedOneOrTheOther;
         if (parsed_code != null and import != null) return error.ExpectedOneOrTheOther;
 
-        try self.globals.list.append(GlobalType{
+        try module.globals.list.append(GlobalType{
             .valtype = global_type,
             .mutability = mutability,
             .start = if (parsed_code) |pc| pc.start else null,
@@ -399,9 +390,9 @@ pub const Module = struct {
         });
     }
 
-    fn decodeExportSection(self: *Module) !void {
+    fn decodeExportSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.exports.count = count;
+        module.exports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -410,7 +401,7 @@ pub const Module = struct {
 
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-            for (self.exports.list.items) |exprt| {
+            for (module.exports.list.items) |exprt| {
                 if (mem.eql(u8, name, exprt.name)) return error.ValidatorDuplicateExportName;
             }
 
@@ -419,15 +410,15 @@ pub const Module = struct {
 
             switch (tag) {
                 .Func => {
-                    if (index >= self.functions.list.items.len) return error.ValidatorExportUnknownFunction;
-                    try self.references.append(index);
+                    if (index >= module.functions.list.items.len) return error.ValidatorExportUnknownFunction;
+                    try module.references.append(index);
                 },
-                .Table => if (index >= self.tables.list.items.len) return error.ValidatorExportUnknownTable,
-                .Mem => if (index >= self.memories.list.items.len) return error.ValidatorExportUnknownMemory,
-                .Global => if (index >= self.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
+                .Table => if (index >= module.tables.list.items.len) return error.ValidatorExportUnknownTable,
+                .Mem => if (index >= module.memories.list.items.len) return error.ValidatorExportUnknownMemory,
+                .Global => if (index >= module.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
             }
 
-            try self.exports.list.append(Export{
+            try module.exports.list.append(Export{
                 .name = name,
                 .tag = tag,
                 .index = index,
@@ -435,21 +426,21 @@ pub const Module = struct {
         }
     }
 
-    fn decodeStartSection(self: *Module) !void {
-        if (self.start != null) return error.MultipleStartSections;
+    fn decodeStartSection(self: *Decoder, module: *Module) !void {
+        if (module.start != null) return error.MultipleStartSections;
 
         const funcidx = try self.readULEB128(u32);
-        const func = try self.functions.lookup(funcidx);
-        const functype = try self.types.lookup(func.typeidx);
+        const func = try module.functions.lookup(funcidx);
+        const functype = try module.types.lookup(func.typeidx);
 
         if (functype.params.len != 0 or functype.results.len != 0) return error.ValidatorNotStartFunctionType;
 
-        self.start = funcidx;
+        module.start = funcidx;
     }
 
-    fn decodeElementSection(self: *Module) !void {
+    fn decodeElementSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.elements.count = count;
+        module.elements.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -458,29 +449,29 @@ pub const Module = struct {
             switch (elem_type) {
                 0 => {
                     const tableidx = 0;
-                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    if (tableidx >= module.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-                    const parsed_offset_code = try self.readConstantExpression(.I32);
+                    const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
                     const data_length = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
                         const funcidx = try self.readULEB128(u32);
 
-                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try self.references.append(funcidx);
+                        try module.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Rr.@"return");
-                        try self.element_init_offsets.append(init_offset);
+                        const init_offset = module.parsed_code.items.len;
+                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(Rr.@"return");
+                        try module.element_init_offsets.append(init_offset);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -495,23 +486,23 @@ pub const Module = struct {
 
                     const data_length = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
                         const funcidx = try self.readULEB128(u32);
 
-                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try self.references.append(funcidx);
+                        try module.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Rr.@"return");
-                        try self.element_init_offsets.append(init_offset);
+                        const init_offset = module.parsed_code.items.len;
+                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(Rr.@"return");
+                        try module.element_init_offsets.append(init_offset);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -521,30 +512,30 @@ pub const Module = struct {
                 2 => {
                     const tableidx = try self.readULEB128(u32);
 
-                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    if (tableidx >= module.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-                    const parsed_offset_code = try self.readConstantExpression(.I32);
+                    const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
                     _ = try self.readEnum(ElemKind);
                     const data_length = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
                         const funcidx = try self.readULEB128(u32);
 
-                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try self.references.append(funcidx);
+                        try module.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Rr.@"return");
-                        try self.element_init_offsets.append(init_offset);
+                        const init_offset = module.parsed_code.items.len;
+                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(Rr.@"return");
+                        try module.element_init_offsets.append(init_offset);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -558,23 +549,23 @@ pub const Module = struct {
                     _ = try self.readEnum(ElemKind);
                     const data_length = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
                         const funcidx = try self.readULEB128(u32);
 
-                        if (funcidx >= self.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
+                        if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try self.references.append(funcidx);
+                        try module.references.append(funcidx);
 
-                        const init_offset = self.parsed_code.items.len;
-                        try self.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try self.parsed_code.append(Rr.@"return");
-                        try self.element_init_offsets.append(init_offset);
+                        const init_offset = module.parsed_code.items.len;
+                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(Rr.@"return");
+                        try module.element_init_offsets.append(init_offset);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -583,21 +574,21 @@ pub const Module = struct {
                 },
                 4 => {
                     const tableidx = 0;
-                    if (tableidx >= self.tables.list.items.len) return error.ValidatorElemUnknownTable;
+                    if (tableidx >= module.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
-                    const parsed_offset_code = try self.readConstantExpression(.I32);
+                    const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
                     const init_expression_count = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < init_expression_count) : (j += 1) {
-                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
-                        try self.element_init_offsets.append(parsed_init_code.start);
+                        const parsed_init_code = try self.readConstantExpression(module, .FuncRef);
+                        try module.element_init_offsets.append(parsed_init_code.start);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = init_expression_count,
@@ -611,16 +602,16 @@ pub const Module = struct {
                     const reftype = try self.readEnum(RefType);
                     const expr_count = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
-                        const init_offset = self.parsed_code.items.len;
-                        _ = try self.readConstantExpression(.FuncRef);
-                        try self.element_init_offsets.append(init_offset);
+                        const init_offset = module.parsed_code.items.len;
+                        _ = try self.readConstantExpression(module, .FuncRef);
+                        try module.element_init_offsets.append(init_offset);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = reftype,
                         .init = first_init_offset,
                         .count = expr_count,
@@ -631,15 +622,15 @@ pub const Module = struct {
                     const reftype = try self.readEnum(RefType);
                     const expr_count = try self.readULEB128(u32);
 
-                    const first_init_offset = self.element_init_offsets.items.len;
+                    const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
-                        const parsed_init_code = try self.readConstantExpression(.FuncRef);
-                        try self.element_init_offsets.append(parsed_init_code.start);
+                        const parsed_init_code = try self.readConstantExpression(module, .FuncRef);
+                        try module.element_init_offsets.append(parsed_init_code.start);
                     }
 
-                    try self.elements.list.append(ElementSegment{
+                    try module.elements.list.append(ElementSegment{
                         .reftype = reftype,
                         .init = first_init_offset,
                         .count = expr_count,
@@ -653,20 +644,20 @@ pub const Module = struct {
         }
     }
 
-    fn decodeDataCountSection(self: *Module, size: u32) !void {
+    fn decodeDataCountSection(self: *Decoder, module: *Module, size: u32) !void {
         if (size == 0) return;
-        self.data_count = try self.readULEB128(u32);
+        module.data_count = try self.readULEB128(u32);
     }
 
-    fn decodeCodeSection(self: *Module) !void {
+    fn decodeCodeSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
-        self.codes.count = count;
+        module.codes.count = count;
 
-        try self.parsed_code.ensureTotalCapacity(count * 32);
+        try module.parsed_code.ensureTotalCapacity(count * 32);
 
         if (count == 0) return;
 
-        const function_index_start = self.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
+        const function_index_start = module.function_index_start orelse return error.FunctionCodeSectionsInconsistent;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -675,7 +666,7 @@ pub const Module = struct {
 
             const locals_definitions_count = try self.readULEB128(u32);
 
-            const locals_start = self.local_types.items.len;
+            const locals_start = module.local_types.items.len;
 
             // Iterate over local definitions counting them
             var j: usize = 0;
@@ -685,16 +676,16 @@ pub const Module = struct {
                 const local_type = try self.readEnum(ValType);
                 locals_count += type_count;
 
-                try self.local_types.append(.{ .count = type_count, .valtype = local_type });
+                try module.local_types.append(.{ .count = type_count, .valtype = local_type });
             }
             if (locals_count >= 0x100000000) return error.TooManyLocals;
 
-            const locals = self.local_types.items[locals_start .. locals_start + locals_definitions_count];
+            const locals = module.local_types.items[locals_start .. locals_start + locals_definitions_count];
 
-            if (function_index_start + i >= self.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
-            const parsed_code = try self.readFunction(locals, function_index_start + i);
+            if (function_index_start + i >= module.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
+            const parsed_code = try self.readFunction(module, locals, function_index_start + i);
 
-            try self.codes.list.append(Code{
+            try module.codes.list.append(Code{
                 .locals_count = locals_count,
                 .start = parsed_code.start,
                 .required_stack_space = parsed_code.max_depth,
@@ -702,14 +693,14 @@ pub const Module = struct {
         }
     }
 
-    fn decodeDataSection(self: *Module) !void {
+    fn decodeDataSection(self: *Decoder, module: *Module) !void {
         const count = try self.readULEB128(u32);
 
-        if (self.data_count) |data_count| {
+        if (module.data_count) |data_count| {
             if (count != data_count) return error.DataCountSectionDataSectionCountMismatch;
         }
 
-        self.datas.count = count;
+        module.datas.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
@@ -719,14 +710,14 @@ pub const Module = struct {
                 0 => {
                     const memidx = 0;
 
-                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+                    if (memidx >= module.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-                    const parsed_code = try self.readConstantExpression(.I32);
+                    const parsed_code = try self.readConstantExpression(module, .I32);
 
                     const data_length = try self.readULEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try self.datas.list.append(DataSegment{
+                    try module.datas.list.append(DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = DataSegmentMode{ .Active = .{
@@ -739,7 +730,7 @@ pub const Module = struct {
                     const data_length = try self.readULEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try self.datas.list.append(DataSegment{
+                    try module.datas.list.append(DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = .Passive,
@@ -748,14 +739,14 @@ pub const Module = struct {
                 2 => {
                     const memidx = try self.readULEB128(u32);
 
-                    if (memidx >= self.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
+                    if (memidx >= module.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
-                    const parsed_code = try self.readConstantExpression(.I32);
+                    const parsed_code = try self.readConstantExpression(module, .I32);
 
                     const data_length = try self.readULEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try self.datas.list.append(DataSegment{
+                    try module.datas.list.append(DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = DataSegmentMode{ .Active = .{
@@ -771,82 +762,61 @@ pub const Module = struct {
         }
     }
 
-    fn decodeCustomSection(self: *Module, size: u32) !void {
-        const offset = self.pos();
+    fn decodeCustomSection(self: *Decoder, module: *Module, size: u32) !void {
+        const offset = self.fbs.pos;
 
         const name_length = try self.readULEB128(u32);
         const name = try self.readSlice(name_length);
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-        const data_length = try math.sub(usize, size, (self.pos() - offset));
+        const data_length = try math.sub(usize, size, (self.fbs.pos - offset));
         const data = try self.readSlice(data_length);
 
-        try self.customs.list.append(Custom{
+        try module.customs.list.append(Custom{
             .name = name,
             .data = data,
         });
     }
 
-    pub fn readConstantExpression(self: *Module, valtype: ValType) !Parsed {
-        const rd = self.buf.reader();
-        const code = self.module[rd.context.pos..];
+    pub fn readConstantExpression(self: *Decoder, module: *Module, valtype: ValType) !Parsed {
+        const rd = self.fbs.reader();
+        const code = module.wasm_bin[rd.context.pos..];
 
-        var parser = Parser.init(self);
+        var parser = Parser.init(module, self);
         defer parser.deinit();
 
         return parser.parseConstantExpression(valtype, code);
     }
 
-    pub fn readFunction(self: *Module, locals: []LocalType, funcidx: usize) !Parsed {
-        const rd = self.buf.reader();
-        const code = self.module[rd.context.pos..];
+    pub fn readFunction(self: *Decoder, module: *Module, locals: []LocalType, funcidx: usize) !Parsed {
+        const code = module.wasm_bin[self.fbs.pos..];
 
-        var parser = Parser.init(self);
+        var parser = Parser.init(module, self);
         defer parser.deinit();
 
         return parser.parseFunction(funcidx, locals, code);
     }
 
-    pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
-        for (self.exports.list.items) |exported| {
-            if (tag == exported.tag and mem.eql(u8, name, exported.name)) return exported.index;
-        }
-
-        return error.ExportNotFound;
+    fn readByte(self: *Decoder) !u8 {
+        return self.fbs.reader().readByte();
     }
 
-    fn readByte(self: *Module) !u8 {
-        const rd = self.buf.reader();
-
-        return rd.readByte();
+    fn readEnum(self: *Decoder, comptime T: type) !T {
+        return self.fbs.reader().readEnum(T, .little);
     }
 
-    fn readEnum(self: *Module, comptime T: type) !T {
-        const rd = self.buf.reader();
-
-        return rd.readEnum(T, .little);
+    fn readULEB128(self: *Decoder, comptime T: type) !T {
+        return leb.readULEB128(T, self.fbs.reader());
     }
 
-    fn readULEB128(self: *Module, comptime T: type) !T {
-        const rd = self.buf.reader();
-
-        return leb.readULEB128(T, rd);
-    }
-
-    pub fn readSlice(self: *Module, count: usize) ![]const u8 {
-        const rd = self.buf.reader();
-        const s = rd.context.pos;
-
-        _ = try rd.skipBytes(count, .{});
-
-        const e = rd.context.pos;
-
-        return self.module[s..e];
-    }
-
-    fn pos(self: *Module) usize {
-        return self.buf.reader().context.pos;
+    pub fn readSlice(self: *Decoder, count: usize) ![]const u8 {
+        const start = self.fbs.pos;
+        const end = self.fbs.pos + count;
+        if (end > self.fbs.buffer.len)
+            return error.EndOfStream;
+        self.fbs.pos = end;
+        return self.fbs.buffer[start..self.fbs.pos];
     }
 };
 
