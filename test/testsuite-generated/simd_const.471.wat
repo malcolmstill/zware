@@ -1,1 +1,0 @@
-(global v128 (v128.const f64x2 0xff__ffff 0xff__ffff))

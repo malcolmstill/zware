@@ -1,1 +1,0 @@
-(func $i64x2.extract_lane-arg-empty (result i64)  (i64x2.extract_lane))

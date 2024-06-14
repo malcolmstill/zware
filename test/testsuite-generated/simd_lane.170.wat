@@ -1,1 +1,0 @@
-(func $f32x4.extract_lane-arg-empty (result f32)  (f32x4.extract_lane))

@@ -27,6 +27,8 @@ pub fn build(b: *Build) !void {
     const unittest_step = b.step("unittest", "Run the library unittests");
     unittest_step.dependOn(&run_main_tests.step);
 
+    const wast2json = addWast2Json(b);
+
     const testrunner = b.addExecutable(.{
         .name = "testrunner",
         .root_source_file = b.path("test/testrunner/src/testrunner.zig"),
@@ -37,9 +39,14 @@ pub fn build(b: *Build) !void {
 
     const testsuite_step = b.step("testsuite", "Run all the testsuite tests");
     for (test_names) |test_name| {
+        const run_wast2json = b.addRunArtifact(wast2json);
+        run_wast2json.addFileArg(b.path(b.fmt("test/testsuite/{s}.wast", .{test_name})));
+        run_wast2json.addArg("-o");
+        const json_file = run_wast2json.addOutputFileArg(b.fmt("{s}.json", .{test_name}));
+
         const run_test = b.addRunArtifact(testrunner);
-        run_test.addFileArg(b.path(b.fmt("test/testsuite-generated/{s}.json", .{test_name})));
-        run_test.cwd = b.path("test/testsuite-generated");
+        run_test.addFileArg(json_file);
+        run_test.cwd = json_file.dirname();
         const step = b.step(b.fmt("test-{s}", .{test_name}), b.fmt("Run the '{s}' test", .{test_name}));
         step.dependOn(&run_test.step);
         testsuite_step.dependOn(&run_test.step);
@@ -48,6 +55,48 @@ pub fn build(b: *Build) !void {
     const test_step = b.step("test", "Run all the tests");
     test_step.dependOn(unittest_step);
     test_step.dependOn(testsuite_step);
+}
+
+fn addWast2Json(b: *Build) *Build.Step.Compile {
+    const wabt_dep = b.dependency("wabt", .{});
+
+    const wabt_config_h = b.addConfigHeader(.{
+        .style = .{ .cmake = wabt_dep.path("src/config.h.in") },
+        .include_path = "wabt/config.h",
+    }, .{
+        .WABT_VERSION_STRING = "1.0.34",
+        .HAVE_SNPRINTF = 1,
+        .HAVE_SSIZE_T = 1,
+        .HAVE_STRCASECMP = 1,
+        .COMPILER_IS_CLANG = 1,
+        .SIZEOF_SIZE_T = @sizeOf(usize),
+    });
+
+    const wabt_lib = b.addStaticLibrary(.{
+        .name = "wabt",
+        .target = b.host,
+        .optimize = .Debug,
+    });
+    wabt_lib.addConfigHeader(wabt_config_h);
+    wabt_lib.addIncludePath(wabt_dep.path("include"));
+    wabt_lib.addCSourceFiles(.{
+        .root = wabt_dep.path("."),
+        .files = &wabt_files,
+    });
+    wabt_lib.linkLibCpp();
+
+    const wast2json = b.addExecutable(.{
+        .name = "wast2json",
+        .target = b.host,
+    });
+    wast2json.addConfigHeader(wabt_config_h);
+    wast2json.addIncludePath(wabt_dep.path("include"));
+    wast2json.addCSourceFile(.{
+        .file = wabt_dep.path("src/tools/wast2json.cc"),
+    });
+    wast2json.linkLibCpp();
+    wast2json.linkLibrary(wabt_lib);
+    return wast2json;
 }
 
 const test_names = [_][]const u8 {
@@ -140,4 +189,37 @@ const test_names = [_][]const u8 {
     "utf8-import-field",
     "utf8-import-module",
     "utf8-invalid-encoding",
+};
+
+const wabt_files = [_][]const u8 {
+    "src/binary-reader-ir.cc",
+    "src/binary-reader-logging.cc",
+    "src/binary-reader.cc",
+    "src/binary-writer-spec.cc",
+    "src/binary-writer.cc",
+    "src/binary.cc",
+    "src/binding-hash.cc",
+    "src/color.cc",
+    "src/common.cc",
+    "src/error-formatter.cc",
+    "src/expr-visitor.cc",
+    "src/feature.cc",
+    "src/filenames.cc",
+    "src/ir.cc",
+    "src/leb128.cc",
+    "src/lexer-source-line-finder.cc",
+    "src/lexer-source.cc",
+    "src/literal.cc",
+    "src/opcode-code-table.c",
+    "src/opcode.cc",
+    "src/option-parser.cc",
+    "src/resolve-names.cc",
+    "src/shared-validator.cc",
+    "src/stream.cc",
+    "src/token.cc",
+    "src/type-checker.cc",
+    "src/utf8.cc",
+    "src/validator.cc",
+    "src/wast-lexer.cc",
+    "src/wast-parser.cc",
 };
