@@ -3,5 +3,10 @@
     .name = "zware",
     .version = "0.0.1",
 
-    .dependencies = .{},
+    .dependencies = .{
+        .wabt = .{
+            .url = "https://github.com/WebAssembly/wabt/archive/39f85a791cbbad91a253a851841a29777efdc2cd.tar.gz",
+            .hash = "1220097b5cfb369f95493a753b0b12525f065e2cf607d62e314d54c54aa1071a1eed",
+        },
+    },
 }

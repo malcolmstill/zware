@@ -1,1 +1,0 @@
-(func (v128.const f32x4  1e39  1e39  1e39  1e39) drop)

@@ -1,1 +1,0 @@
-(func $i32x4.replace_lane-arg-empty (result v128)  (i32x4.replace_lane))

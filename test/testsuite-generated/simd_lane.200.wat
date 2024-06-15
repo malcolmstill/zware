@@ -1,1 +1,0 @@
-(func $i8x16.shuffle-arg-empty (result v128)  (i8x16.shuffle))

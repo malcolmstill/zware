@@ -30,18 +30,6 @@ jobs:
           version: 0.12.0
       - name: Run testsuite
         run: zig build testsuite
-  parsecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
-        with:
-          version: 0.12.0
-      - name: Build parsecheck
-        working-directory: ./test/parsecheck
-        run: zig build --prefix ./
-      - name: Run parse check
-        run: test/parsecheck/bin/parsecheck test/testsuite-generated
   build_interface:
     strategy:
       matrix:
