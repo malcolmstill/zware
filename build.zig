@@ -37,10 +37,12 @@ pub fn build(b: *Build) !void {
     });
     testrunner.root_module.addImport("zware", zware_module);
 
+    const testsuite_dep = b.dependency("testsuite", .{});
+
     const testsuite_step = b.step("testsuite", "Run all the testsuite tests");
     for (test_names) |test_name| {
         const run_wast2json = b.addRunArtifact(wast2json);
-        run_wast2json.addFileArg(b.path(b.fmt("test/testsuite/{s}.wast", .{test_name})));
+        run_wast2json.addFileArg(testsuite_dep.path(b.fmt("{s}.wast", .{test_name})));
         run_wast2json.addArg("-o");
         const json_file = run_wast2json.addOutputFileArg(b.fmt("{s}.json", .{test_name}));
 

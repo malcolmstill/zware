@@ -8,5 +8,9 @@
             .url = "https://github.com/WebAssembly/wabt/archive/39f85a791cbbad91a253a851841a29777efdc2cd.tar.gz",
             .hash = "1220097b5cfb369f95493a753b0b12525f065e2cf607d62e314d54c54aa1071a1eed",
         },
+        .testsuite = .{
+            .url = "https://github.com/WebAssembly/testsuite/archive/e25ae159357c055b3a6fac99043644e208d26d2a.tar.gz",
+            .hash = "122045901fc130829252a0beb5e98abc79aea814af8c195fe210fa05bda77cea83ef",
+        },
     },
 }
