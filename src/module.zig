@@ -138,7 +138,7 @@ pub const Module = struct {
         return count;
     }
 
-    pub fn getExport(self: *Module, tag: Tag, name: []const u8) !usize {
+    pub fn getExport(self: *const Module, tag: Tag, name: []const u8) !usize {
         for (self.exports.list.items) |exported| {
             if (tag == exported.tag and mem.eql(u8, name, exported.name)) return exported.index;
         }
@@ -841,7 +841,7 @@ fn Section(comptime T: type) type {
             return self.list.items;
         }
 
-        pub fn lookup(self: *Self, idx: anytype) !T {
+        pub fn lookup(self: *const Self, idx: anytype) !T {
             const index = switch (@TypeOf(idx)) {
                 u32 => idx,
                 usize => math.cast(u32, idx) orelse return error.IndexTooLarge,

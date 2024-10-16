@@ -16,7 +16,8 @@ pub const Function = struct {
             instance: *Instance,
         },
         host_function: struct {
-            func: *const fn (*VirtualMachine) WasmError!void,
+            func: *const fn (*VirtualMachine, usize) WasmError!void,
+            context: usize,
         },
     },
 

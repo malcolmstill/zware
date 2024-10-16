@@ -295,7 +295,7 @@ pub const VirtualMachine = struct {
                 next_ip = f.start;
             },
             .host_function => |hf| {
-                try hf.func(self);
+                try hf.func(self, hf.context);
                 next_ip = ip + 1;
             },
         }
@@ -350,7 +350,7 @@ pub const VirtualMachine = struct {
                 next_ip = func.start;
             },
             .host_function => |host_func| {
-                try host_func.func(self);
+                try host_func.func(self, host_func.context);
 
                 next_ip = ip + 1;
             },

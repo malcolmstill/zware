@@ -57,6 +57,24 @@ pub fn build(b: *Build) !void {
     const test_step = b.step("test", "Run all the tests");
     test_step.dependOn(unittest_step);
     test_step.dependOn(testsuite_step);
+
+    {
+        const exe = b.addExecutable(.{
+            .name = "zware-run",
+            .root_source_file = b.path("tools/zware-run/main.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        exe.root_module.addImport("zware", zware_module);
+        const install = b.addInstallArtifact(exe, .{});
+        b.getInstallStep().dependOn(&install.step);
+        const run = b.addRunArtifact(exe);
+        run.step.dependOn(&install.step);
+        if (b.args) |args| {
+            run.addArgs(args);
+        }
+        b.step("run", "Run the cmdline runner zware-run").dependOn(&run.step);
+    }
 }
 
 fn addWast2Json(b: *Build) *Build.Step.Compile {

@@ -4,6 +4,7 @@ const math = std.math;
 const posix = std.posix;
 const wasi = std.os.wasi;
 const ArrayList = std.ArrayList;
+const Error = @import("error.zig").Error;
 const Module = @import("module.zig").Module;
 const Store = @import("store.zig").ArrayListStore;
 const Function = @import("store/function.zig").Function;
@@ -128,9 +129,20 @@ pub const Instance = struct {
     }
 
     pub fn instantiate(self: *Instance) !void {
+        var context: Error = undefined;
+        self.instantiateWithError(&context) catch |err| switch (err) {
+            error.SeeContext => switch (context) {
+                .missing_import => return error.ImportNotFound,
+                .any => |e| return e,
+            },
+            else => |e| return e,
+        };
+    }
+
+    pub fn instantiateWithError(self: *Instance, err: *Error) !void {
         if (self.module.decoded == false) return error.ModuleNotDecoded;
 
-        try self.instantiateImports();
+        try self.instantiateImports(err);
         try self.instantiateFunctions();
         try self.instantiateGlobals();
         try self.instantiateMemories();
@@ -143,9 +155,11 @@ pub const Instance = struct {
         }
     }
 
-    fn instantiateImports(self: *Instance) !void {
+    fn instantiateImports(self: *Instance, err: *Error) error{ OutOfMemory, SeeContext }!void {
         for (self.module.imports.list.items) |import| {
-            const import_handle = try self.store.import(import.module, import.name, import.desc_tag);
+            const import_handle = self.store.import(import.module, import.name, import.desc_tag) catch |e| switch (e) {
+                error.ImportNotFound => return err.set(.{ .missing_import = import }),
+            };
             switch (import.desc_tag) {
                 .Func => try self.funcaddrs.append(import_handle),
                 .Mem => try self.memaddrs.append(import_handle),
@@ -361,7 +375,7 @@ pub const Instance = struct {
             },
             .host_function => |host_func| {
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
-                try host_func.func(&vm);
+                try host_func.func(&vm, host_func.context);
             },
         }
     }
@@ -404,7 +418,7 @@ pub const Instance = struct {
             },
             .host_function => |host_func| {
                 var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
-                try host_func.func(&vm);
+                try host_func.func(&vm, host_func.context);
             },
         }
     }
