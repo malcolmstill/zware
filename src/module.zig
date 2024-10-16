@@ -156,7 +156,7 @@ pub const Decoder = struct {
             else => return err,
         };
 
-        const size = try self.readULEB128(u32);
+        const size = try self.readLEB128(u32);
 
         const section_start = self.fbs.pos;
 
@@ -181,7 +181,7 @@ pub const Decoder = struct {
     }
 
     fn decodeTypeSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.types.count = count;
 
         var f: usize = 0;
@@ -189,7 +189,7 @@ pub const Decoder = struct {
             const tag = try self.readByte();
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
-            const param_count = try self.readULEB128(u32);
+            const param_count = try self.readLEB128(u32);
             const params_start = self.fbs.pos;
             {
                 var i: usize = 0;
@@ -199,7 +199,7 @@ pub const Decoder = struct {
             }
             const params_end = self.fbs.pos;
 
-            const results_count = try self.readULEB128(u32);
+            const results_count = try self.readLEB128(u32);
             const results_start = self.fbs.pos;
             {
                 var i: usize = 0;
@@ -228,17 +228,17 @@ pub const Decoder = struct {
     }
 
     fn decodeImportSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const module_name_length = try self.readULEB128(u32);
+            const module_name_length = try self.readLEB128(u32);
             const module_name = try self.readSlice(module_name_length);
 
             if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
 
-            const name_length = try self.readULEB128(u32);
+            const name_length = try self.readLEB128(u32);
             const name = try self.readSlice(name_length);
 
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
@@ -263,7 +263,7 @@ pub const Decoder = struct {
     }
 
     fn decodeFunctionSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.functions.count = count;
 
         var i: usize = 0;
@@ -273,7 +273,7 @@ pub const Decoder = struct {
     }
 
     fn decodeFunction(self: *Decoder, module: *Module, import: ?u32) !void {
-        const typeidx = try self.readULEB128(u32);
+        const typeidx = try self.readLEB128(u32);
 
         if (typeidx >= module.types.list.items.len) return error.ValidatorInvalidTypeIndex;
 
@@ -288,7 +288,7 @@ pub const Decoder = struct {
     }
 
     fn decodeTableSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.tables.count = count;
 
         var i: usize = 0;
@@ -300,12 +300,12 @@ pub const Decoder = struct {
     fn decodeTable(self: *Decoder, module: *Module, import: ?u32) !void {
         const reftype = try self.readEnum(RefType);
         const limit_type = try self.readEnum(LimitType);
-        const min = try self.readULEB128(u32);
+        const min = try self.readLEB128(u32);
         const max: ?u32 = blk: {
             switch (limit_type) {
                 .Min => break :blk null,
                 .MinMax => {
-                    const max = try self.readULEB128(u32);
+                    const max = try self.readLEB128(u32);
                     if (min > max) return error.ValidatorTableMinGreaterThanMax;
                     break :blk max;
                 },
@@ -322,7 +322,7 @@ pub const Decoder = struct {
     }
 
     fn decodeMemorySection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.memories.count = count;
 
         var i: usize = 0;
@@ -335,13 +335,13 @@ pub const Decoder = struct {
         if (module.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
 
         const limit_type = try self.readEnum(LimitType);
-        const min = try self.readULEB128(u32);
+        const min = try self.readLEB128(u32);
         if (min > 65536) return error.ValidatorMemoryMinTooLarge;
         const max: ?u32 = blk: {
             switch (limit_type) {
                 .Min => break :blk null,
                 .MinMax => {
-                    const max = try self.readULEB128(u32);
+                    const max = try self.readLEB128(u32);
                     if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
                     if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
                     break :blk max;
@@ -358,7 +358,7 @@ pub const Decoder = struct {
     }
 
     fn decodeGlobalSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.globals.count = count;
 
         var i: usize = 0;
@@ -391,12 +391,12 @@ pub const Decoder = struct {
     }
 
     fn decodeExportSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.exports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const name_length = try self.readULEB128(u32);
+            const name_length = try self.readLEB128(u32);
             const name = try self.readSlice(name_length);
 
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
@@ -406,7 +406,7 @@ pub const Decoder = struct {
             }
 
             const tag = try self.readEnum(Tag);
-            const index = try self.readULEB128(u32);
+            const index = try self.readLEB128(u32);
 
             switch (tag) {
                 .Func => {
@@ -429,7 +429,7 @@ pub const Decoder = struct {
     fn decodeStartSection(self: *Decoder, module: *Module) !void {
         if (module.start != null) return error.MultipleStartSections;
 
-        const funcidx = try self.readULEB128(u32);
+        const funcidx = try self.readLEB128(u32);
         const func = try module.functions.lookup(funcidx);
         const functype = try module.types.lookup(func.typeidx);
 
@@ -439,12 +439,12 @@ pub const Decoder = struct {
     }
 
     fn decodeElementSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.elements.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const elem_type = try self.readULEB128(u32);
+            const elem_type = try self.readLEB128(u32);
 
             switch (elem_type) {
                 0 => {
@@ -453,13 +453,13 @@ pub const Decoder = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readULEB128(u32);
+                        const funcidx = try self.readLEB128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -484,13 +484,13 @@ pub const Decoder = struct {
                 1 => {
                     _ = try self.readEnum(ElemKind);
 
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readULEB128(u32);
+                        const funcidx = try self.readLEB128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -510,20 +510,20 @@ pub const Decoder = struct {
                     });
                 },
                 2 => {
-                    const tableidx = try self.readULEB128(u32);
+                    const tableidx = try self.readLEB128(u32);
 
                     if (tableidx >= module.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
                     _ = try self.readEnum(ElemKind);
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readULEB128(u32);
+                        const funcidx = try self.readLEB128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -547,13 +547,13 @@ pub const Decoder = struct {
                 },
                 3 => {
                     _ = try self.readEnum(ElemKind);
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readULEB128(u32);
+                        const funcidx = try self.readLEB128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -578,7 +578,7 @@ pub const Decoder = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
-                    const init_expression_count = try self.readULEB128(u32);
+                    const init_expression_count = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -600,7 +600,7 @@ pub const Decoder = struct {
                 },
                 5 => { // Passive
                     const reftype = try self.readEnum(RefType);
-                    const expr_count = try self.readULEB128(u32);
+                    const expr_count = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -620,7 +620,7 @@ pub const Decoder = struct {
                 },
                 7 => { // Declarative
                     const reftype = try self.readEnum(RefType);
-                    const expr_count = try self.readULEB128(u32);
+                    const expr_count = try self.readLEB128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -646,11 +646,11 @@ pub const Decoder = struct {
 
     fn decodeDataCountSection(self: *Decoder, module: *Module, size: u32) !void {
         if (size == 0) return;
-        module.data_count = try self.readULEB128(u32);
+        module.data_count = try self.readLEB128(u32);
     }
 
     fn decodeCodeSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
         module.codes.count = count;
 
         try module.parsed_code.ensureTotalCapacity(count * 32);
@@ -662,9 +662,9 @@ pub const Decoder = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             // size: the number of bytes defining the function, includes bytes defining locals
-            _ = try self.readULEB128(u32);
+            _ = try self.readLEB128(u32);
 
-            const locals_definitions_count = try self.readULEB128(u32);
+            const locals_definitions_count = try self.readLEB128(u32);
 
             const locals_start = module.local_types.items.len;
 
@@ -672,7 +672,7 @@ pub const Decoder = struct {
             var j: usize = 0;
             var locals_count: usize = 0;
             while (j < locals_definitions_count) : (j += 1) {
-                const type_count = try self.readULEB128(u32);
+                const type_count = try self.readLEB128(u32);
                 const local_type = try self.readEnum(ValType);
                 locals_count += type_count;
 
@@ -694,7 +694,7 @@ pub const Decoder = struct {
     }
 
     fn decodeDataSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readULEB128(u32);
+        const count = try self.readLEB128(u32);
 
         if (module.data_count) |data_count| {
             if (count != data_count) return error.DataCountSectionDataSectionCountMismatch;
@@ -704,7 +704,7 @@ pub const Decoder = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const data_section_type = try self.readULEB128(u32);
+            const data_section_type = try self.readLEB128(u32);
 
             switch (data_section_type) {
                 0 => {
@@ -714,7 +714,7 @@ pub const Decoder = struct {
 
                     const parsed_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
                     try module.datas.list.append(DataSegment{
@@ -727,7 +727,7 @@ pub const Decoder = struct {
                     });
                 },
                 1 => {
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
                     try module.datas.list.append(DataSegment{
@@ -737,13 +737,13 @@ pub const Decoder = struct {
                     });
                 },
                 2 => {
-                    const memidx = try self.readULEB128(u32);
+                    const memidx = try self.readLEB128(u32);
 
                     if (memidx >= module.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
                     const parsed_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readULEB128(u32);
+                    const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
                     try module.datas.list.append(DataSegment{
@@ -765,7 +765,7 @@ pub const Decoder = struct {
     fn decodeCustomSection(self: *Decoder, module: *Module, size: u32) !void {
         const offset = self.fbs.pos;
 
-        const name_length = try self.readULEB128(u32);
+        const name_length = try self.readLEB128(u32);
         const name = try self.readSlice(name_length);
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
@@ -806,8 +806,12 @@ pub const Decoder = struct {
         return self.fbs.reader().readEnum(T, .little);
     }
 
-    fn readULEB128(self: *Decoder, comptime T: type) !T {
-        return leb.readULEB128(T, self.fbs.reader());
+    fn readLEB128(self: *Decoder, comptime T: type) !T {
+        const readFn = switch (@typeInfo(T).Int.signedness) {
+            .signed => std.leb.readILEB128,
+            .unsigned => std.leb.readULEB128,
+        };
+        return readFn(T, self.fbs.reader());
     }
 
     pub fn readSlice(self: *Decoder, count: usize) ![]const u8 {
