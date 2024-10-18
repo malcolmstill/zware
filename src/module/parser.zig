@@ -171,7 +171,7 @@ pub const Parser = struct {
             .@"unreachable" => rr = Rr.@"unreachable",
             .nop => rr = Rr.nop,
             .block => {
-                const block_type = try self.readILEB128Mem(i32);
+                const block_type = try self.readLEB128Mem(i32);
 
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
@@ -210,7 +210,7 @@ pub const Parser = struct {
                 };
             },
             .loop => {
-                const block_type = try self.readILEB128Mem(i32);
+                const block_type = try self.readLEB128Mem(i32);
 
                 var block_params: u16 = 0;
                 var block_returns: u16 = if (block_type == -0x40) 0 else 1;
@@ -248,7 +248,7 @@ pub const Parser = struct {
                 };
             },
             .@"if" => {
-                const block_type = try self.readILEB128Mem(i32);
+                const block_type = try self.readLEB128Mem(i32);
 
                 // 1. First assume the number of block params is 0
                 // 2. The number of return values is 0 if block_type == -0x40
@@ -334,25 +334,25 @@ pub const Parser = struct {
                 rr = Rr.end;
             },
             .br => {
-                const label = try self.readULEB128Mem(u32);
+                const label = try self.readLEB128Mem(u32);
                 try self.validator.validateBr(label);
                 rr = Rr{ .br = label };
             },
             .br_if => {
-                const label = try self.readULEB128Mem(u32);
+                const label = try self.readLEB128Mem(u32);
                 try self.validator.validateBrIf(label);
                 rr = Rr{ .br_if = label };
             },
             .br_table => {
                 const label_start = self.module.br_table_indices.items.len;
-                const label_count = try self.readULEB128Mem(u32);
+                const label_count = try self.readLEB128Mem(u32);
 
                 var j: usize = 0;
                 while (j < label_count) : (j += 1) {
-                    const tmp_label = try self.readULEB128Mem(u32);
+                    const tmp_label = try self.readLEB128Mem(u32);
                     try self.module.br_table_indices.append(tmp_label);
                 }
-                const ln = try self.readULEB128Mem(u32);
+                const ln = try self.readLEB128Mem(u32);
                 const l_star = self.module.br_table_indices.items[label_start .. label_start + j];
 
                 try self.validator.validateBrTable(l_star, ln);
@@ -366,7 +366,7 @@ pub const Parser = struct {
             },
             .@"return" => rr = Rr.@"return",
             .call => {
-                const funcidx = try self.readULEB128Mem(u32);
+                const funcidx = try self.readLEB128Mem(u32);
                 const func = try self.module.functions.lookup(funcidx);
                 const functype = try self.module.types.lookup(func.typeidx);
 
@@ -377,7 +377,7 @@ pub const Parser = struct {
                 // rr =  Rr{ .fast_call = .{ .ip_start = 0, .params = 1, .locals = 0, .results = 1 } };
             },
             .call_indirect => {
-                const typeidx = try self.readULEB128Mem(u32);
+                const typeidx = try self.readLEB128Mem(u32);
                 const functype = try self.module.types.lookup(typeidx);
 
                 const tableidx = try self.readByte();
@@ -395,9 +395,9 @@ pub const Parser = struct {
             .drop => rr = Rr.drop,
             .select => rr = Rr.select,
             .select_t => {
-                const type_count = try self.readULEB128Mem(u32);
+                const type_count = try self.readLEB128Mem(u32);
                 if (type_count != 1) return error.OnlyOneSelectTTypeSupported; // Future versions may support more than one
-                const valuetype_raw = try self.readULEB128Mem(i32);
+                const valuetype_raw = try self.readLEB128Mem(u32);
                 const valuetype = try std.meta.intToEnum(ValType, valuetype_raw);
 
                 try self.validator.validateSelectT(valuetype);
@@ -405,7 +405,7 @@ pub const Parser = struct {
                 rr = Rr.select;
             },
             .@"global.get" => {
-                const globalidx = try self.readULEB128Mem(u32);
+                const globalidx = try self.readLEB128Mem(u32);
                 const global = try self.module.globals.lookup(globalidx);
 
                 try self.validator.validateGlobalGet(global);
@@ -413,7 +413,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"global.get" = globalidx };
             },
             .@"global.set" => {
-                const globalidx = try self.readULEB128Mem(u32);
+                const globalidx = try self.readLEB128Mem(u32);
                 const global = try self.module.globals.lookup(globalidx);
 
                 try self.validator.validateGlobalSet(global);
@@ -421,7 +421,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"global.set" = globalidx };
             },
             .@"table.get" => {
-                const tableidx = try self.readULEB128Mem(u32);
+                const tableidx = try self.readLEB128Mem(u32);
                 const table = try self.module.tables.lookup(tableidx);
 
                 const reftype: ValType = switch (table.reftype) {
@@ -435,7 +435,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"table.get" = tableidx };
             },
             .@"table.set" => {
-                const tableidx = try self.readULEB128Mem(u32);
+                const tableidx = try self.readLEB128Mem(u32);
                 const table = try self.module.tables.lookup(tableidx);
 
                 const reftype: ValType = switch (table.reftype) {
@@ -449,7 +449,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"table.set" = tableidx };
             },
             .@"local.get" => {
-                const localidx = try self.readULEB128Mem(u32);
+                const localidx = try self.readLEB128Mem(u32);
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
 
@@ -477,7 +477,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"local.get" = localidx };
             },
             .@"local.set" => {
-                const localidx = try self.readULEB128Mem(u32);
+                const localidx = try self.readLEB128Mem(u32);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
@@ -506,7 +506,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"local.set" = localidx };
             },
             .@"local.tee" => {
-                const localidx = try self.readULEB128Mem(u32);
+                const localidx = try self.readLEB128Mem(u32);
 
                 const params = self.params orelse return error.ValidatorConstantExpressionRequired;
                 const locals = self.locals orelse return error.ValidatorConstantExpressionRequired;
@@ -549,11 +549,11 @@ pub const Parser = struct {
                 rr = Rr{ .@"memory.grow" = memidx };
             },
             .@"i32.const" => {
-                const i32_const = try self.readILEB128Mem(i32);
+                const i32_const = try self.readLEB128Mem(i32);
                 rr = Rr{ .@"i32.const" = i32_const };
             },
             .@"i64.const" => {
-                const i64_const = try self.readILEB128Mem(i64);
+                const i64_const = try self.readLEB128Mem(i64);
                 rr = Rr{ .@"i64.const" = i64_const };
             },
             .@"f32.const" => {
@@ -567,8 +567,8 @@ pub const Parser = struct {
             .@"i32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
 
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -581,8 +581,8 @@ pub const Parser = struct {
             },
             .@"i64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
@@ -595,8 +595,8 @@ pub const Parser = struct {
             },
             .@"f32.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -609,8 +609,8 @@ pub const Parser = struct {
             },
             .@"f64.load" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
@@ -623,8 +623,8 @@ pub const Parser = struct {
             },
             .@"i32.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -637,8 +637,8 @@ pub const Parser = struct {
             },
             .@"i32.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -651,8 +651,8 @@ pub const Parser = struct {
             },
             .@"i32.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -665,8 +665,8 @@ pub const Parser = struct {
             },
             .@"i32.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -679,8 +679,8 @@ pub const Parser = struct {
             },
             .@"i64.load8_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -693,8 +693,8 @@ pub const Parser = struct {
             },
             .@"i64.load8_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -707,8 +707,8 @@ pub const Parser = struct {
             },
             .@"i64.load16_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -721,8 +721,8 @@ pub const Parser = struct {
             },
             .@"i64.load16_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -735,8 +735,8 @@ pub const Parser = struct {
             },
             .@"i64.load32_s" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -749,8 +749,8 @@ pub const Parser = struct {
             },
             .@"i64.load32_u" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -763,8 +763,8 @@ pub const Parser = struct {
             },
             .@"i32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -777,8 +777,8 @@ pub const Parser = struct {
             },
             .@"i64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
@@ -791,8 +791,8 @@ pub const Parser = struct {
             },
             .@"f32.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -805,8 +805,8 @@ pub const Parser = struct {
             },
             .@"f64.store" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 64) return error.InvalidAlignment;
 
@@ -819,8 +819,8 @@ pub const Parser = struct {
             },
             .@"i32.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -833,8 +833,8 @@ pub const Parser = struct {
             },
             .@"i32.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -847,8 +847,8 @@ pub const Parser = struct {
             },
             .@"i64.store8" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 8) return error.InvalidAlignment;
 
@@ -861,8 +861,8 @@ pub const Parser = struct {
             },
             .@"i64.store16" => {
                 if (self.module.memories.list.items.len != 1) return error.ValidatorUnknownMemory;
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 16) return error.InvalidAlignment;
 
@@ -874,8 +874,8 @@ pub const Parser = struct {
                 };
             },
             .@"i64.store32" => {
-                const alignment = try self.readULEB128Mem(u32);
-                const offset = try self.readULEB128Mem(u32);
+                const alignment = try self.readLEB128Mem(u32);
+                const offset = try self.readLEB128Mem(u32);
 
                 if (try math.mul(u32, 8, try math.powi(u32, 2, alignment)) > 32) return error.InvalidAlignment;
 
@@ -1015,7 +1015,7 @@ pub const Parser = struct {
             .@"i64.extend16_s" => rr = Rr.@"i64.extend16_s",
             .@"i64.extend32_s" => rr = Rr.@"i64.extend32_s",
             .@"ref.null" => {
-                const rtype = try self.readULEB128Mem(i32);
+                const rtype = try self.readLEB128Mem(u32);
                 const reftype = std.meta.intToEnum(RefType, rtype) catch return error.MalformedRefType;
 
                 try self.validator.validateRefNull(reftype);
@@ -1023,7 +1023,7 @@ pub const Parser = struct {
             },
             .@"ref.is_null" => rr = Rr.@"ref.is_null",
             .@"ref.func" => {
-                const funcidx = try self.readULEB128Mem(u32);
+                const funcidx = try self.readLEB128Mem(u32);
                 if (funcidx >= self.module.functions.list.items.len) return error.ValidatorInvalidFunction;
 
                 // Gather funcidx* from constant expressions
@@ -1044,7 +1044,7 @@ pub const Parser = struct {
                 rr = Rr{ .@"ref.func" = funcidx };
             },
             .misc => {
-                const version = try self.readULEB128Mem(u32);
+                const version = try self.readLEB128Mem(u32);
                 const misc_opcode = try std.meta.intToEnum(MiscOpcode, version);
                 try self.validator.validateMisc(misc_opcode);
 
@@ -1058,7 +1058,7 @@ pub const Parser = struct {
                     .@"i64.trunc_sat_f64_s" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_s" },
                     .@"i64.trunc_sat_f64_u" => rr = Rr{ .misc = MiscRr.@"i64.trunc_sat_f64_u" },
                     .@"memory.init" => {
-                        const dataidx = try self.readULEB128Mem(u32);
+                        const dataidx = try self.readLEB128Mem(u32);
                         const memidx = try self.readByte();
 
                         const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
@@ -1075,7 +1075,7 @@ pub const Parser = struct {
                         };
                     },
                     .@"data.drop" => {
-                        const dataidx = try self.readULEB128Mem(u32);
+                        const dataidx = try self.readLEB128Mem(u32);
 
                         const data_count = self.module.data_count orelse return error.InstructionRequiresDataCountSection;
                         if (!(dataidx < data_count)) return error.InvalidDataIndex;
@@ -1100,10 +1100,10 @@ pub const Parser = struct {
                         rr = Rr{ .misc = MiscRr{ .@"memory.fill" = memidx } };
                     },
                     .@"table.init" => {
-                        const elemidx = try self.readULEB128Mem(u32);
+                        const elemidx = try self.readLEB128Mem(u32);
                         const elemtype = try self.module.elements.lookup(elemidx);
 
-                        const tableidx = try self.readULEB128Mem(u32);
+                        const tableidx = try self.readLEB128Mem(u32);
                         const tabletype = try self.module.tables.lookup(tableidx);
 
                         if (elemtype.reftype != tabletype.reftype) return error.MismatchedTypes;
@@ -1114,17 +1114,17 @@ pub const Parser = struct {
                         } } };
                     },
                     .@"elem.drop" => {
-                        const elemidx = try self.readULEB128Mem(u32);
+                        const elemidx = try self.readLEB128Mem(u32);
 
                         if (elemidx >= self.module.elements.list.items.len) return error.ValidatorInvalidElementIndex;
 
                         rr = Rr{ .misc = MiscRr{ .@"elem.drop" = .{ .elemidx = elemidx } } };
                     },
                     .@"table.copy" => {
-                        const dest_tableidx = try self.readULEB128Mem(u32);
+                        const dest_tableidx = try self.readLEB128Mem(u32);
                         const dest_tabletype = try self.module.tables.lookup(dest_tableidx);
 
-                        const src_tableidx = try self.readULEB128Mem(u32);
+                        const src_tableidx = try self.readLEB128Mem(u32);
                         const src_tabletype = try self.module.tables.lookup(src_tableidx);
 
                         if (dest_tabletype.reftype != src_tabletype.reftype) return error.MismatchedTypes;
@@ -1135,7 +1135,7 @@ pub const Parser = struct {
                         } } };
                     },
                     .@"table.grow" => {
-                        const tableidx = try self.readULEB128Mem(u32);
+                        const tableidx = try self.readLEB128Mem(u32);
                         const table = try self.module.tables.lookup(tableidx);
 
                         const reftype: ValType = switch (table.reftype) {
@@ -1153,7 +1153,7 @@ pub const Parser = struct {
                         } } };
                     },
                     .@"table.size" => {
-                        const tableidx = try self.readULEB128Mem(u32);
+                        const tableidx = try self.readLEB128Mem(u32);
                         if (tableidx >= self.module.tables.list.items.len) return error.ValidatorInvalidTableIndex;
 
                         rr = Rr{ .misc = MiscRr{ .@"table.size" = .{
@@ -1161,7 +1161,7 @@ pub const Parser = struct {
                         } } };
                     },
                     .@"table.fill" => {
-                        const tableidx = try self.readULEB128Mem(u32);
+                        const tableidx = try self.readLEB128Mem(u32);
                         const table = try self.module.tables.lookup(tableidx);
 
                         const reftype: ValType = switch (table.reftype) {
@@ -1185,27 +1185,26 @@ pub const Parser = struct {
         return rr;
     }
 
-    pub fn readULEB128Mem(self: *Parser, comptime T: type) !T {
+    pub fn readLEB128Mem(self: *Parser, comptime T: type) !T {
         var buf = std.io.fixedBufferStream(self.code);
-        const value = try leb.readULEB128(T, buf.reader());
-        self.code.ptr += buf.pos;
-        self.code.len -= buf.pos;
-        return value;
-    }
 
-    pub fn readILEB128Mem(self: *Parser, comptime T: type) !T {
-        var buf = std.io.fixedBufferStream(self.code);
-        const value = try leb.readILEB128(T, buf.reader());
+        const readFn = switch (@typeInfo(T).Int.signedness) {
+            .signed => std.leb.readILEB128,
+            .unsigned => std.leb.readULEB128,
+        };
+        const value = try readFn(T, buf.reader());
 
-        // The following is a bit of a kludge that should really
-        // be fixed in either the std lib self.readILEB128 or using a
-        // a fresh implementation. The issue is that the wasm spec
-        // expects the "unused" bits in a negative ILEB128 to all be
-        // one and the same bits in a positive ILEB128 to be zero.
-        switch (T) {
-            i32 => if (buf.pos == 5 and value < 0 and buf.buffer[4] & 0x70 != 0x70) return error.Overflow,
-            i64 => if (buf.pos == 10 and value < 0 and buf.buffer[9] & 0x7e != 0x7e) return error.Overflow,
-            else => @compileError("self.readILEB128Mem expects i32 or i64"),
+        if (@typeInfo(T).Int.signedness == .signed) {
+            // The following is a bit of a kludge that should really
+            // be fixed in either the std lib readILEB128 or using a
+            // a fresh implementation. The issue is that the wasm spec
+            // expects the "unused" bits in a negative ILEB128 to all be
+            // one and the same bits in a positive ILEB128 to be zero.
+            switch (T) {
+                i32 => if (buf.pos == 5 and value < 0 and buf.buffer[4] & 0x70 != 0x70) return error.Overflow,
+                i64 => if (buf.pos == 10 and value < 0 and buf.buffer[9] & 0x7e != 0x7e) return error.Overflow,
+                else => @compileError("self.readLEB128Mem expects an unsigned type, i32 or i64"),
+            }
         }
 
         self.code.ptr += buf.pos;
