@@ -34,37 +34,37 @@ const WasmError = zware.WasmError;
 
 var gpa = GeneralPurposeAllocator(.{}){};
 
-fn print(_: *VirtualMachine) WasmError!void {
+fn print(_: *VirtualMachine, _: usize) WasmError!void {
     std.debug.print("print\n", .{});
 }
 
-fn print_i32(vm: *VirtualMachine) WasmError!void {
+fn print_i32(vm: *VirtualMachine, _: usize) WasmError!void {
     const value = vm.popOperand(i32);
     std.debug.print("print_i32: {}\n", .{value});
 }
 
-fn print_i64(vm: *VirtualMachine) WasmError!void {
+fn print_i64(vm: *VirtualMachine, _: usize) WasmError!void {
     const value = vm.popOperand(i64);
     std.debug.print("print_i64: {}\n", .{value});
 }
 
-fn print_f32(vm: *VirtualMachine) WasmError!void {
+fn print_f32(vm: *VirtualMachine, _: usize) WasmError!void {
     const value = vm.popOperand(f32);
     std.debug.print("print_f32: {}\n", .{value});
 }
 
-fn print_f64(vm: *VirtualMachine) WasmError!void {
+fn print_f64(vm: *VirtualMachine, _: usize) WasmError!void {
     const value = vm.popOperand(f64);
     std.debug.print("print_f64: {}\n", .{value});
 }
 
-fn print_i32_f32(vm: *VirtualMachine) WasmError!void {
+fn print_i32_f32(vm: *VirtualMachine, _: usize) WasmError!void {
     const value_f32 = vm.popOperand(f32);
     const value_i32 = vm.popOperand(i32);
     std.debug.print("print_i32_f32: {}, {}\n", .{ value_i32, value_f32 });
 }
 
-fn print_f64_f64(vm: *VirtualMachine) WasmError!void {
+fn print_f64_f64(vm: *VirtualMachine, _: usize) WasmError!void {
     const value_f64_2 = vm.popOperand(f64);
     const value_f64_1 = vm.popOperand(f64);
     std.debug.print("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
@@ -113,13 +113,13 @@ pub fn main() anyerror!void {
     try store.exposeGlobal(spectest, "global_f64", 666, .F64, .Immutable);
 
     // Expose host functions
-    try store.exposeHostFunction(spectest, "print", print, &[_]ValType{}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_i32", print_i32, &[_]ValType{.I32}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_i64", print_i64, &[_]ValType{.I64}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_f32", print_f32, &[_]ValType{.F32}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_f64", print_f64, &[_]ValType{.F64}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_i32_f32", print_i32_f32, &[_]ValType{.I32, .F32}, &[_]ValType{});
-    try store.exposeHostFunction(spectest, "print_f64_f64", print_f64_f64, &[_]ValType{.F64, .F64}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print", print, 0, &[_]ValType{}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i32", print_i32, 0, &[_]ValType{.I32}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i64", print_i64, 0, &[_]ValType{.I64}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f32", print_f32, 0, &[_]ValType{.F32}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f64", print_f64, 0, &[_]ValType{.F64}, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_i32_f32", print_i32_f32, 0, &[_]ValType{ .I32, .F32 }, &[_]ValType{});
+    try store.exposeHostFunction(spectest, "print_f64_f64", print_f64_f64, 0, &[_]ValType{ .F64, .F64 }, &[_]ValType{});
 
     var current_instance: *Instance = undefined;
     var registered_names = StringHashMap(*Instance).init(alloc);
@@ -893,7 +893,6 @@ const CommandRegister = struct {
     as: []const u8,
 };
 
-
 const Action = union(enum) {
     invoke: ActionInvoke,
     get: ActionGet,
@@ -928,7 +927,6 @@ const ActionGet = struct {
     field: []const u8,
     module: ?[]const u8 = null,
 };
-
 
 const Value = struct {
     type: []const u8,

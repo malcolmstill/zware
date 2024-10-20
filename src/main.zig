@@ -1,4 +1,6 @@
+pub const Error = @import("error.zig").Error;
 pub const Module = @import("module.zig").Module;
+pub const FuncType = @import("module.zig").FuncType;
 pub const Instance = @import("instance.zig").Instance;
 pub const VirtualMachine = @import("instance/vm.zig").VirtualMachine;
 pub const WasmError = @import("instance/vm.zig").WasmError;

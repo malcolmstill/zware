@@ -14,6 +14,8 @@ const Mutability = @import("module.zig").Mutability;
 const RefType = @import("valtype.zig").RefType;
 const ValType = @import("valtype.zig").ValType;
 const Instance = @import("instance.zig").Instance;
+const VirtualMachine = @import("instance/vm.zig").VirtualMachine;
+const WasmError = @import("instance/vm.zig").WasmError;
 
 // - Stores provide the runtime memory shared between modules
 // - For different applications you may want to use a store that
@@ -188,13 +190,22 @@ pub const ArrayListStore = struct {
 
     // Helper functions for exposing values
 
-    pub fn exposeHostFunction(self: *ArrayListStore, module: []const u8, function_name: []const u8, host_function_pointer: anytype, params: []const ValType, results: []const ValType) !void {
+    pub fn exposeHostFunction(
+        self: *ArrayListStore,
+        module: []const u8,
+        function_name: []const u8,
+        host_function_pointer: *const fn (*VirtualMachine, usize) WasmError!void,
+        host_function_context: usize,
+        params: []const ValType,
+        results: []const ValType,
+    ) !void {
         const funcaddr = try self.addFunction(Function{
             .params = params,
             .results = results,
             .subtype = .{
                 .host_function = .{
                     .func = host_function_pointer,
+                    .context = host_function_context,
                 },
             },
         });
