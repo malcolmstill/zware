@@ -3,7 +3,7 @@ const mem = std.mem;
 const RefType = @import("../valtype.zig").RefType;
 
 pub const Elem = struct {
-    @"type": RefType,
+    type: RefType,
     elem: []u32,
     alloc: mem.Allocator,
     dropped: bool = false,
@@ -12,7 +12,7 @@ pub const Elem = struct {
         const elem = try alloc.alloc(u32, count);
 
         return Elem{
-            .@"type" = reftype,
+            .type = reftype,
             .elem = elem,
             .alloc = alloc,
         };

@@ -560,7 +560,7 @@ pub const Validator = struct {
             return Type.Unknown;
         }
         if (v.op_stack.items.len == ctrl_frame.height) return error.ValidatorPopOperandError;
-        return v.op_stack.pop();
+        return v.op_stack.pop() orelse error.OperandNotInOpstack;
     }
 
     pub fn popOperandExpecting(v: *Validator, expected: Type) !Type {

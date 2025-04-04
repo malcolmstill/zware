@@ -80,11 +80,17 @@ pub fn build(b: *Build) !void {
 fn addWast2Json(b: *Build) *Build.Step.Compile {
     const wabt_dep = b.dependency("wabt", .{});
 
+    const wabt_debug = b.option(enum {
+            debug,
+            no_debug,
+    }, "wabt-debug", "build wabt with debug on") orelse .no_debug;
+
     const wabt_config_h = b.addConfigHeader(.{
         .style = .{ .cmake = wabt_dep.path("src/config.h.in") },
         .include_path = "wabt/config.h",
     }, .{
         .WABT_VERSION_STRING = "1.0.34",
+        .WABT_DEBUG = @as(?isize, if (wabt_debug == .debug) 1 else null),
         .HAVE_SNPRINTF = 1,
         .HAVE_SSIZE_T = 1,
         .HAVE_STRCASECMP = 1,
@@ -94,7 +100,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
 
     const wabt_lib = b.addStaticLibrary(.{
         .name = "wabt",
-        .target = b.host,
+        .target = b.graph.host,
         .optimize = .Debug,
     });
     wabt_lib.addConfigHeader(wabt_config_h);
@@ -107,7 +113,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
 
     const wast2json = b.addExecutable(.{
         .name = "wast2json",
-        .target = b.host,
+        .target = b.graph.host,
     });
     wast2json.addConfigHeader(wabt_config_h);
     wast2json.addIncludePath(wabt_dep.path("include"));

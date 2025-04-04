@@ -13,14 +13,14 @@ const Rr = @import("../rr.zig").Rr;
 
 const nan_f32 =
     if (@hasDecl(math, "nan"))
-    math.nan(f32)
-else
-    math.nan_f32;
+        math.nan(f32)
+    else
+        math.nan_f32;
 const nan_f64 =
     if (@hasDecl(math, "nan"))
-    math.nan(f64)
-else
-    math.nan_f64;
+        math.nan(f64)
+    else
+        math.nan_f64;
 
 // VirtualMachine:
 //

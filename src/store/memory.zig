@@ -55,7 +55,7 @@ pub const Memory = struct {
         mem.copyForwards(u8, self.data.items[address .. address + data.len], data);
     }
 
-   pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
+    pub fn uncheckedFill(self: *Memory, dst_address: u32, n: u32, value: u8) void {
         @memset(self.data.items[dst_address .. dst_address + n], value);
     }
 
@@ -75,7 +75,6 @@ pub const Memory = struct {
     pub fn read(self: *Memory, comptime T: type, offset: u32, address: u32) !T {
         const effective_address = @as(u33, offset) + @as(u33, address);
         if (effective_address + @sizeOf(T) - 1 >= self.data.items.len) return error.OutOfBoundsMemoryAccess;
-
 
         switch (T) {
             u8,
