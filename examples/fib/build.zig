@@ -6,12 +6,12 @@ pub fn build(b: *Build) void {
 
     const exe = b.addExecutable(.{
         .name = "fib",
-        .root_source_file = .{ .path = "src/fib.zig" },
+        .root_source_file = b.path("src/fib.zig"),
         .target = target,
         .optimize = optimize,
     });
     exe.root_module.addAnonymousImport("zware", .{
-        .root_source_file = .{ .path = "../../src/main.zig" },
+        .root_source_file = b.path("../../src/main.zig"),
     });
     b.installArtifact(exe);
 
