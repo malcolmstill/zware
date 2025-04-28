@@ -75,14 +75,32 @@ pub fn build(b: *Build) !void {
         }
         b.step("run", "Run the cmdline runner zware-run").dependOn(&run.step);
     }
+
+    {
+        const exe = b.addExecutable(.{
+            .name = "zware-gen",
+            .root_source_file = b.path("tools/zware-gen/src/zware_gen.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        exe.root_module.addImport("zware", zware_module);
+        const install = b.addInstallArtifact(exe, .{});
+        b.getInstallStep().dependOn(&install.step);
+        const run = b.addRunArtifact(exe);
+        run.step.dependOn(&install.step);
+        if (b.args) |args| {
+            run.addArgs(args);
+        }
+        b.step("gen", "Run the cmdline runner zware-gen").dependOn(&run.step);
+    }
 }
 
 fn addWast2Json(b: *Build) *Build.Step.Compile {
     const wabt_dep = b.dependency("wabt", .{});
 
     const wabt_debug = b.option(enum {
-            debug,
-            no_debug,
+        debug,
+        no_debug,
     }, "wabt-debug", "build wabt with debug on") orelse .no_debug;
 
     const wabt_config_h = b.addConfigHeader(.{
@@ -125,7 +143,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
     return wast2json;
 }
 
-const test_names = [_][]const u8 {
+const test_names = [_][]const u8{
     "address",
     "align",
     "binary-leb128",
@@ -217,7 +235,7 @@ const test_names = [_][]const u8 {
     "utf8-invalid-encoding",
 };
 
-const wabt_files = [_][]const u8 {
+const wabt_files = [_][]const u8{
     "src/binary-reader-ir.cc",
     "src/binary-reader-logging.cc",
     "src/binary-reader.cc",
