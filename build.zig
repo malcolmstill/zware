@@ -61,7 +61,7 @@ pub fn build(b: *Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "zware-run",
-            .root_source_file = b.path("tools/zware-run/main.zig"),
+            .root_source_file = b.path("tools/zware-run.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -79,7 +79,7 @@ pub fn build(b: *Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "zware-gen",
-            .root_source_file = b.path("tools/zware-gen/src/zware_gen.zig"),
+            .root_source_file = b.path("tools/zware-gen.zig"),
             .target = target,
             .optimize = optimize,
         });
