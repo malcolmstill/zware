@@ -807,7 +807,7 @@ pub const Decoder = struct {
     }
 
     fn readLEB128(self: *Decoder, comptime T: type) !T {
-        const readFn = switch (@typeInfo(T).Int.signedness) {
+        const readFn = switch (@typeInfo(T).int.signedness) {
             .signed => std.leb.readILEB128,
             .unsigned => std.leb.readULEB128,
         };

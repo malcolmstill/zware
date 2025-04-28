@@ -61,7 +61,7 @@ pub fn build(b: *Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "zware-run",
-            .root_source_file = b.path("tools/zware-run/main.zig"),
+            .root_source_file = b.path("tools/zware-run.zig"),
             .target = target,
             .optimize = optimize,
         });
@@ -75,16 +75,40 @@ pub fn build(b: *Build) !void {
         }
         b.step("run", "Run the cmdline runner zware-run").dependOn(&run.step);
     }
+
+    {
+        const exe = b.addExecutable(.{
+            .name = "zware-gen",
+            .root_source_file = b.path("tools/zware-gen.zig"),
+            .target = target,
+            .optimize = optimize,
+        });
+        exe.root_module.addImport("zware", zware_module);
+        const install = b.addInstallArtifact(exe, .{});
+        b.getInstallStep().dependOn(&install.step);
+        const run = b.addRunArtifact(exe);
+        run.step.dependOn(&install.step);
+        if (b.args) |args| {
+            run.addArgs(args);
+        }
+        b.step("gen", "Run the cmdline runner zware-gen").dependOn(&run.step);
+    }
 }
 
 fn addWast2Json(b: *Build) *Build.Step.Compile {
     const wabt_dep = b.dependency("wabt", .{});
+
+    const wabt_debug = b.option(enum {
+        debug,
+        no_debug,
+    }, "wabt-debug", "build wabt with debug on") orelse .no_debug;
 
     const wabt_config_h = b.addConfigHeader(.{
         .style = .{ .cmake = wabt_dep.path("src/config.h.in") },
         .include_path = "wabt/config.h",
     }, .{
         .WABT_VERSION_STRING = "1.0.34",
+        .WABT_DEBUG = @as(?isize, if (wabt_debug == .debug) 1 else null),
         .HAVE_SNPRINTF = 1,
         .HAVE_SSIZE_T = 1,
         .HAVE_STRCASECMP = 1,
@@ -94,7 +118,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
 
     const wabt_lib = b.addStaticLibrary(.{
         .name = "wabt",
-        .target = b.host,
+        .target = b.graph.host,
         .optimize = .Debug,
     });
     wabt_lib.addConfigHeader(wabt_config_h);
@@ -107,7 +131,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
 
     const wast2json = b.addExecutable(.{
         .name = "wast2json",
-        .target = b.host,
+        .target = b.graph.host,
     });
     wast2json.addConfigHeader(wabt_config_h);
     wast2json.addIncludePath(wabt_dep.path("include"));
@@ -119,7 +143,7 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
     return wast2json;
 }
 
-const test_names = [_][]const u8 {
+const test_names = [_][]const u8{
     "address",
     "align",
     "binary-leb128",
@@ -211,7 +235,7 @@ const test_names = [_][]const u8 {
     "utf8-invalid-encoding",
 };
 
-const wabt_files = [_][]const u8 {
+const wabt_files = [_][]const u8{
     "src/binary-reader-ir.cc",
     "src/binary-reader-logging.cc",
     "src/binary-reader.cc",

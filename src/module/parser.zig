@@ -1188,13 +1188,13 @@ pub const Parser = struct {
     pub fn readLEB128Mem(self: *Parser, comptime T: type) !T {
         var buf = std.io.fixedBufferStream(self.code);
 
-        const readFn = switch (@typeInfo(T).Int.signedness) {
+        const readFn = switch (@typeInfo(T).int.signedness) {
             .signed => std.leb.readILEB128,
             .unsigned => std.leb.readULEB128,
         };
         const value = try readFn(T, buf.reader());
 
-        if (@typeInfo(T).Int.signedness == .signed) {
+        if (@typeInfo(T).int.signedness == .signed) {
             // The following is a bit of a kludge that should really
             // be fixed in either the std lib readILEB128 or using a
             // a fresh implementation. The issue is that the wasm spec

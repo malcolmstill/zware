@@ -118,9 +118,9 @@ pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
     const file = std.fs.File{ .handle = host_fd };
     const stat = file.stat() catch |err|
         {
-        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
-        return;
-    };
+            try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+            return;
+        };
 
     try memory.write(u64, stat_ptr, 0, 0); // device id
     try memory.write(u64, stat_ptr, 8, stat.inode); // inode
