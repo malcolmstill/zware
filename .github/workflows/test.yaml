@@ -14,9 +14,9 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: mlugg/setup-zig@v1.2.1
         with:
-          version: 0.12.0
+          version: 0.14.0
       - run: zig build unittest
   testsuite:
     strategy:
@@ -25,44 +25,18 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: mlugg/setup-zig@v1.2.1
         with:
-          version: 0.12.0
+          version: 0.14.0
       - name: Run testsuite
         run: zig build testsuite
-  build_interface:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{matrix.os}}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
-        with:
-          version: 0.12.0
-      - name: Build interface
-        working-directory: ./test/interface
-        run: zig build
-  build-zware-gen:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-    runs-on: ${{matrix.os}}
-    steps:
-      - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
-        with:
-          version: 0.12.0
-      - name: Build zware-gen
-        working-directory: ./tools/zware-gen
-        run: zig build
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: mlugg/setup-zig@v1.2.1
         with:
-          version: 0.12.0
+          version: 0.14.0
       - run: zig fmt --check src/*.zig
   fib:
     strategy:
@@ -71,9 +45,21 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: goto-bus-stop/setup-zig@v1
+      - uses: mlugg/setup-zig@v1.2.1
         with:
-          version: 0.12.0
+          version: 0.14.0
       - name: Build fib
         working-directory: ./examples/fib
+        run: zig build
+  build:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{matrix.os}}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: mlugg/setup-zig@v1.2.1
+        with:
+          version: 0.14.0
+      - name: Build zware-gen, zware-run and libzware.a
         run: zig build
