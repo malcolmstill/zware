@@ -61,23 +61,23 @@ pub const Module = struct {
     }
 
     pub fn deinit(self: *Module) void {
-        self.customs.deinit();
-        self.types.deinit();
-        self.imports.deinit();
-        self.functions.deinit();
-        self.tables.deinit();
-        self.memories.deinit();
-        self.globals.deinit();
-        self.exports.deinit();
-        self.elements.deinit();
-        self.codes.deinit();
-        self.datas.deinit();
+        defer self.customs.deinit();
+        defer self.types.deinit();
+        defer self.imports.deinit();
+        defer self.functions.deinit();
+        defer self.tables.deinit();
+        defer self.memories.deinit();
+        defer self.globals.deinit();
+        defer self.exports.deinit();
+        defer self.elements.deinit();
+        defer self.codes.deinit();
+        defer self.datas.deinit();
 
-        self.element_init_offsets.deinit();
-        self.parsed_code.deinit();
-        self.local_types.deinit();
-        self.br_table_indices.deinit();
-        self.references.deinit();
+        defer self.element_init_offsets.deinit();
+        defer self.parsed_code.deinit();
+        defer self.local_types.deinit();
+        defer self.br_table_indices.deinit();
+        defer self.references.deinit();
     }
 
     pub fn decode(self: *Module) !void {

@@ -77,16 +77,16 @@ pub const Instance = struct {
     }
 
     pub fn deinit(self: *Instance) void {
-        self.funcaddrs.deinit();
-        self.memaddrs.deinit();
-        self.tableaddrs.deinit();
-        self.globaladdrs.deinit();
-        self.elemaddrs.deinit();
-        self.dataaddrs.deinit();
+        defer self.funcaddrs.deinit();
+        defer self.memaddrs.deinit();
+        defer self.tableaddrs.deinit();
+        defer self.globaladdrs.deinit();
+        defer self.elemaddrs.deinit();
+        defer self.dataaddrs.deinit();
 
-        self.wasi_preopens.deinit();
-        self.wasi_args.deinit();
-        self.wasi_env.deinit();
+        defer self.wasi_preopens.deinit();
+        defer self.wasi_args.deinit();
+        defer self.wasi_env.deinit();
     }
 
     pub fn getFunc(self: *Instance, funcidx: usize) !Function {
