@@ -10,17 +10,19 @@ pub fn build(b: *Build) !void {
 
     try b.modules.put(b.dupe("zware"), zware_module);
 
-    const lib = b.addStaticLibrary(.{
-        .name = "zware",
+    const main_mod = b.addModule("zware", .{
         .root_source_file = b.path("src/main.zig"),
         .target = target,
         .optimize = optimize,
     });
+    const lib = b.addLibrary(.{
+        .name = "zware",
+        .root_module = main_mod,
+    });
     b.installArtifact(lib);
 
     const main_tests = b.addTest(.{
-        .root_source_file = b.path("src/main.zig"),
-        .optimize = optimize,
+        .root_module = main_mod,
     });
 
     const run_main_tests = b.addRunArtifact(main_tests);
@@ -31,9 +33,11 @@ pub fn build(b: *Build) !void {
 
     const testrunner = b.addExecutable(.{
         .name = "testrunner",
-        .root_source_file = b.path("test/testrunner/src/testrunner.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.addModule("testrunner", .{
+            .root_source_file = b.path("test/testrunner/src/testrunner.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     testrunner.root_module.addImport("zware", zware_module);
 
@@ -61,9 +65,11 @@ pub fn build(b: *Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "zware-run",
-            .root_source_file = b.path("tools/zware-run.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.addModule("zware-run", .{
+                .root_source_file = b.path("tools/zware-run.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         exe.root_module.addImport("zware", zware_module);
         const install = b.addInstallArtifact(exe, .{});
@@ -79,9 +85,11 @@ pub fn build(b: *Build) !void {
     {
         const exe = b.addExecutable(.{
             .name = "zware-gen",
-            .root_source_file = b.path("tools/zware-gen.zig"),
-            .target = target,
-            .optimize = optimize,
+            .root_module = b.addModule("zware-gen", .{
+                .root_source_file = b.path("tools/zware-gen.zig"),
+                .target = target,
+                .optimize = optimize,
+            }),
         });
         exe.root_module.addImport("zware", zware_module);
         const install = b.addInstallArtifact(exe, .{});
@@ -116,10 +124,12 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
         .SIZEOF_SIZE_T = @sizeOf(usize),
     });
 
-    const wabt_lib = b.addStaticLibrary(.{
+    const wabt_lib = b.addLibrary(.{
         .name = "wabt",
-        .target = b.graph.host,
-        .optimize = .Debug,
+        .root_module = b.createModule(.{
+            .target = b.graph.host,
+            .optimize = .Debug,
+        }),
     });
     wabt_lib.addConfigHeader(wabt_config_h);
     wabt_lib.addIncludePath(wabt_dep.path("include"));
@@ -131,7 +141,9 @@ fn addWast2Json(b: *Build) *Build.Step.Compile {
 
     const wast2json = b.addExecutable(.{
         .name = "wast2json",
-        .target = b.graph.host,
+        .root_module = b.createModule(.{
+            .target = b.graph.host,
+        }),
     });
     wast2json.addConfigHeader(wabt_config_h);
     wast2json.addIncludePath(wabt_dep.path("include"));

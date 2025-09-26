@@ -44,13 +44,13 @@ pub const ArrayListStore = struct {
     pub fn init(alloc: mem.Allocator) ArrayListStore {
         const store = ArrayListStore{
             .alloc = alloc,
-            .functions = ArrayList(Function).init(alloc),
-            .memories = ArrayList(Memory).init(alloc),
-            .tables = ArrayList(Table).init(alloc),
-            .globals = ArrayList(Global).init(alloc),
-            .elems = ArrayList(Elem).init(alloc),
-            .datas = ArrayList(Data).init(alloc),
-            .imports = ArrayList(ImportExport).init(alloc),
+            .functions = ArrayList(Function).empty,
+            .memories = ArrayList(Memory).empty,
+            .tables = ArrayList(Table).empty,
+            .globals = ArrayList(Global).empty,
+            .elems = ArrayList(Elem).empty,
+            .datas = ArrayList(Data).empty,
+            .imports = ArrayList(ImportExport).empty,
         };
 
         return store;

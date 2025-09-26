@@ -41,22 +41,22 @@ pub const Module = struct {
         return Module{
             .alloc = alloc,
             .wasm_bin = wasm_bin,
-            .customs = Section(Custom).init(alloc),
-            .types = Section(FuncType).init(alloc),
-            .imports = Section(Import).init(alloc),
-            .functions = Section(Function).init(alloc),
-            .tables = Section(TableType).init(alloc),
-            .memories = Section(MemType).init(alloc),
-            .globals = Section(GlobalType).init(alloc),
-            .exports = Section(Export).init(alloc),
-            .elements = Section(ElementSegment).init(alloc),
-            .codes = Section(Code).init(alloc),
-            .datas = Section(DataSegment).init(alloc),
-            .element_init_offsets = ArrayList(usize).init(alloc),
-            .parsed_code = ArrayList(Rr).init(alloc),
-            .local_types = ArrayList(LocalType).init(alloc),
-            .br_table_indices = ArrayList(u32).init(alloc),
-            .references = ArrayList(u32).init(alloc),
+            .customs = Section(Custom).empty,
+            .types = Section(FuncType).empty,
+            .imports = Section(Import).empty,
+            .functions = Section(Function).empty,
+            .tables = Section(TableType).empty,
+            .memories = Section(MemType).empty,
+            .globals = Section(GlobalType).empty,
+            .exports = Section(Export).empty,
+            .elements = Section(ElementSegment).empty,
+            .codes = Section(Code).empty,
+            .datas = Section(DataSegment).empty,
+            .element_init_offsets = ArrayList(usize).empty,
+            .parsed_code = ArrayList(Rr).empty,
+            .local_types = ArrayList(LocalType).empty,
+            .br_table_indices = ArrayList(u32).empty,
+            .references = ArrayList(u32).empty,
         };
     }
 
@@ -97,7 +97,7 @@ pub const Module = struct {
         // Push an initial return instruction so we don't have to
         // track the end of a function to use its return on invoke
         // See https://github.com/malcolmstill/zware/pull/133
-        try self.parsed_code.append(.@"return");
+        try self.parsed_code.append(self.alloc, .@"return");
 
         var i: usize = 0;
         while (true) : (i += 1) {
@@ -220,7 +220,7 @@ pub const Decoder = struct {
             results_valtype.ptr = @ptrCast(results.ptr);
             results_valtype.len = results.len;
 
-            try module.types.list.append(FuncType{
+            try module.types.list.append(module.alloc, FuncType{
                 .params = params_valtype,
                 .results = results_valtype,
             });
@@ -281,7 +281,7 @@ pub const Decoder = struct {
             module.function_index_start = module.functions.list.items.len;
         }
 
-        try module.functions.list.append(Function{
+        try module.functions.list.append(module.alloc, Function{
             .typeidx = typeidx,
             .import = import,
         });
@@ -311,7 +311,7 @@ pub const Decoder = struct {
                 },
             }
         };
-        try module.tables.list.append(TableType{
+        try module.tables.list.append(module.alloc, TableType{
             .import = import,
             .reftype = reftype,
             .limits = Limit{
@@ -348,7 +348,7 @@ pub const Decoder = struct {
                 },
             }
         };
-        try module.memories.list.append(MemType{
+        try module.memories.list.append(module.alloc, MemType{
             .import = import,
             .limits = Limit{
                 .min = min,
@@ -773,7 +773,7 @@ pub const Decoder = struct {
         const data_length = try math.sub(usize, size, (self.fbs.pos - offset));
         const data = try self.readSlice(data_length);
 
-        try module.customs.list.append(Custom{
+        try module.customs.list.append(module.alloc, Custom{
             .name = name,
             .data = data,
         });
@@ -809,7 +809,7 @@ pub const Decoder = struct {
     fn readLEB128(self: *Decoder, comptime T: type) !T {
         const readFn = switch (@typeInfo(T).int.signedness) {
             .signed => std.leb.readILEB128,
-            .unsigned => std.leb.readULEB128,
+            .unsigned => std.leb.readUleb128,
         };
         return readFn(T, self.fbs.reader());
     }
@@ -831,11 +831,9 @@ fn Section(comptime T: type) type {
 
         const Self = @This();
 
-        pub fn init(alloc: mem.Allocator) Self {
-            return Self{
-                .list = ArrayList(T).init(alloc),
-            };
-        }
+        pub const empty = Self{
+            .list = ArrayList(T).empty,
+        };
 
         pub fn deinit(self: *Self) void {
             self.list.deinit();
