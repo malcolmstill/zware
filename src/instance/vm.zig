@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const os = std.os;
 const posix = std.posix;
 const mem = std.mem;
@@ -125,7 +126,10 @@ pub const VirtualMachine = struct {
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip];
 
-        return try @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
+        switch (builtin.zig_backend) {
+            .stage2_x86_64 => return @call(.auto, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+            else => return @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+        }
     }
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
@@ -2111,7 +2115,10 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip].misc;
 
-        return try @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
+        switch (builtin.zig_backend) {
+            .stage2_x86_64 => return @call(.auto, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+            else => return @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+        }
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
