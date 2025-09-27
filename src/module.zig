@@ -41,43 +41,43 @@ pub const Module = struct {
         return Module{
             .alloc = alloc,
             .wasm_bin = wasm_bin,
-            .customs = Section(Custom).empty,
-            .types = Section(FuncType).empty,
-            .imports = Section(Import).empty,
-            .functions = Section(Function).empty,
-            .tables = Section(TableType).empty,
-            .memories = Section(MemType).empty,
-            .globals = Section(GlobalType).empty,
-            .exports = Section(Export).empty,
-            .elements = Section(ElementSegment).empty,
-            .codes = Section(Code).empty,
-            .datas = Section(DataSegment).empty,
-            .element_init_offsets = ArrayList(usize).empty,
-            .parsed_code = ArrayList(Rr).empty,
-            .local_types = ArrayList(LocalType).empty,
-            .br_table_indices = ArrayList(u32).empty,
-            .references = ArrayList(u32).empty,
+            .customs = .empty,
+            .types = .empty,
+            .imports = .empty,
+            .functions = .empty,
+            .tables = .empty,
+            .memories = .empty,
+            .globals = .empty,
+            .exports = .empty,
+            .elements = .empty,
+            .codes = .empty,
+            .datas = .empty,
+            .element_init_offsets = .empty,
+            .parsed_code = .empty,
+            .local_types = .empty,
+            .br_table_indices = .empty,
+            .references = .empty,
         };
     }
 
     pub fn deinit(self: *Module) void {
-        defer self.customs.deinit();
-        defer self.types.deinit();
-        defer self.imports.deinit();
-        defer self.functions.deinit();
-        defer self.tables.deinit();
-        defer self.memories.deinit();
-        defer self.globals.deinit();
-        defer self.exports.deinit();
-        defer self.elements.deinit();
-        defer self.codes.deinit();
-        defer self.datas.deinit();
+        defer self.customs.deinit(self.alloc);
+        defer self.types.deinit(self.alloc);
+        defer self.imports.deinit(self.alloc);
+        defer self.functions.deinit(self.alloc);
+        defer self.tables.deinit(self.alloc);
+        defer self.memories.deinit(self.alloc);
+        defer self.globals.deinit(self.alloc);
+        defer self.exports.deinit(self.alloc);
+        defer self.elements.deinit(self.alloc);
+        defer self.codes.deinit(self.alloc);
+        defer self.datas.deinit(self.alloc);
 
-        defer self.element_init_offsets.deinit();
-        defer self.parsed_code.deinit();
-        defer self.local_types.deinit();
-        defer self.br_table_indices.deinit();
-        defer self.references.deinit();
+        defer self.element_init_offsets.deinit(self.alloc);
+        defer self.parsed_code.deinit(self.alloc);
+        defer self.local_types.deinit(self.alloc);
+        defer self.br_table_indices.deinit(self.alloc);
+        defer self.references.deinit(self.alloc);
     }
 
     pub fn decode(self: *Module) !void {
@@ -254,7 +254,7 @@ pub const Decoder = struct {
                 .Global => try self.decodeGlobal(module, import_index),
             };
 
-            try module.imports.list.append(Import{
+            try module.imports.list.append(module.alloc, Import{
                 .module = module_name,
                 .name = name,
                 .desc_tag = tag,
@@ -382,7 +382,7 @@ pub const Decoder = struct {
         if (parsed_code == null and import == null) return error.ExpectedOneOrTheOther;
         if (parsed_code != null and import != null) return error.ExpectedOneOrTheOther;
 
-        try module.globals.list.append(GlobalType{
+        try module.globals.list.append(module.alloc, GlobalType{
             .valtype = global_type,
             .mutability = mutability,
             .start = if (parsed_code) |pc| pc.start else null,
@@ -411,14 +411,14 @@ pub const Decoder = struct {
             switch (tag) {
                 .Func => {
                     if (index >= module.functions.list.items.len) return error.ValidatorExportUnknownFunction;
-                    try module.references.append(index);
+                    try module.references.append(module.alloc, index);
                 },
                 .Table => if (index >= module.tables.list.items.len) return error.ValidatorExportUnknownTable,
                 .Mem => if (index >= module.memories.list.items.len) return error.ValidatorExportUnknownMemory,
                 .Global => if (index >= module.globals.list.items.len) return error.ValidatorExportUnknownGlobal,
             }
 
-            try module.exports.list.append(Export{
+            try module.exports.list.append(module.alloc, Export{
                 .name = name,
                 .tag = tag,
                 .index = index,
@@ -463,15 +463,15 @@ pub const Decoder = struct {
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try module.references.append(funcidx);
+                        try module.references.append(module.alloc, funcidx);
 
                         const init_offset = module.parsed_code.items.len;
-                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try module.parsed_code.append(Rr.@"return");
-                        try module.element_init_offsets.append(init_offset);
+                        try module.parsed_code.append(module.alloc, Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(module.alloc, Rr.@"return");
+                        try module.element_init_offsets.append(module.alloc, init_offset);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -494,15 +494,15 @@ pub const Decoder = struct {
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try module.references.append(funcidx);
+                        try module.references.append(module.alloc, funcidx);
 
                         const init_offset = module.parsed_code.items.len;
-                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try module.parsed_code.append(Rr.@"return");
-                        try module.element_init_offsets.append(init_offset);
+                        try module.parsed_code.append(module.alloc, Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(module.alloc, Rr.@"return");
+                        try module.element_init_offsets.append(module.alloc, init_offset);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -527,15 +527,15 @@ pub const Decoder = struct {
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try module.references.append(funcidx);
+                        try module.references.append(module.alloc, funcidx);
 
                         const init_offset = module.parsed_code.items.len;
-                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try module.parsed_code.append(Rr.@"return");
-                        try module.element_init_offsets.append(init_offset);
+                        try module.parsed_code.append(module.alloc, Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(module.alloc, Rr.@"return");
+                        try module.element_init_offsets.append(module.alloc, init_offset);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -557,15 +557,15 @@ pub const Decoder = struct {
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
-                        try module.references.append(funcidx);
+                        try module.references.append(module.alloc, funcidx);
 
                         const init_offset = module.parsed_code.items.len;
-                        try module.parsed_code.append(Rr{ .@"ref.func" = funcidx });
-                        try module.parsed_code.append(Rr.@"return");
-                        try module.element_init_offsets.append(init_offset);
+                        try module.parsed_code.append(module.alloc, Rr{ .@"ref.func" = funcidx });
+                        try module.parsed_code.append(module.alloc, Rr.@"return");
+                        try module.element_init_offsets.append(module.alloc, init_offset);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = data_length,
@@ -585,10 +585,10 @@ pub const Decoder = struct {
                     var j: usize = 0;
                     while (j < init_expression_count) : (j += 1) {
                         const parsed_init_code = try self.readConstantExpression(module, .FuncRef);
-                        try module.element_init_offsets.append(parsed_init_code.start);
+                        try module.element_init_offsets.append(module.alloc, parsed_init_code.start);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = .FuncRef,
                         .init = first_init_offset,
                         .count = init_expression_count,
@@ -608,10 +608,10 @@ pub const Decoder = struct {
                     while (j < expr_count) : (j += 1) {
                         const init_offset = module.parsed_code.items.len;
                         _ = try self.readConstantExpression(module, .FuncRef);
-                        try module.element_init_offsets.append(init_offset);
+                        try module.element_init_offsets.append(module.alloc, init_offset);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = reftype,
                         .init = first_init_offset,
                         .count = expr_count,
@@ -627,10 +627,10 @@ pub const Decoder = struct {
                     var j: usize = 0;
                     while (j < expr_count) : (j += 1) {
                         const parsed_init_code = try self.readConstantExpression(module, .FuncRef);
-                        try module.element_init_offsets.append(parsed_init_code.start);
+                        try module.element_init_offsets.append(module.alloc, parsed_init_code.start);
                     }
 
-                    try module.elements.list.append(ElementSegment{
+                    try module.elements.list.append(module.alloc, ElementSegment{
                         .reftype = reftype,
                         .init = first_init_offset,
                         .count = expr_count,
@@ -653,7 +653,7 @@ pub const Decoder = struct {
         const count = try self.readLEB128(u32);
         module.codes.count = count;
 
-        try module.parsed_code.ensureTotalCapacity(count * 32);
+        try module.parsed_code.ensureTotalCapacity(module.alloc, count * 32);
 
         if (count == 0) return;
 
@@ -676,7 +676,7 @@ pub const Decoder = struct {
                 const local_type = try self.readEnum(ValType);
                 locals_count += type_count;
 
-                try module.local_types.append(.{ .count = type_count, .valtype = local_type });
+                try module.local_types.append(module.alloc, .{ .count = type_count, .valtype = local_type });
             }
             if (locals_count >= 0x100000000) return error.TooManyLocals;
 
@@ -685,7 +685,7 @@ pub const Decoder = struct {
             if (function_index_start + i >= module.functions.list.items.len) return error.FunctionCodeSectionsInconsistent;
             const parsed_code = try self.readFunction(module, locals, function_index_start + i);
 
-            try module.codes.list.append(Code{
+            try module.codes.list.append(module.alloc, Code{
                 .locals_count = locals_count,
                 .start = parsed_code.start,
                 .required_stack_space = parsed_code.max_depth,
@@ -717,7 +717,7 @@ pub const Decoder = struct {
                     const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try module.datas.list.append(DataSegment{
+                    try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = DataSegmentMode{ .Active = .{
@@ -730,7 +730,7 @@ pub const Decoder = struct {
                     const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try module.datas.list.append(DataSegment{
+                    try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = .Passive,
@@ -746,7 +746,7 @@ pub const Decoder = struct {
                     const data_length = try self.readLEB128(u32);
                     const data = try self.readSlice(data_length);
 
-                    try module.datas.list.append(DataSegment{
+                    try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
                         .data = data,
                         .mode = DataSegmentMode{ .Active = .{
@@ -835,8 +835,8 @@ fn Section(comptime T: type) type {
             .list = ArrayList(T).empty,
         };
 
-        pub fn deinit(self: *Self) void {
-            self.list.deinit();
+        pub fn deinit(self: *Self, alloc: mem.Allocator) void {
+            self.list.deinit(alloc);
         }
 
         pub fn itemsSlice(self: *Self) []T {

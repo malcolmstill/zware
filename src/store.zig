@@ -44,26 +44,26 @@ pub const ArrayListStore = struct {
     pub fn init(alloc: mem.Allocator) ArrayListStore {
         const store = ArrayListStore{
             .alloc = alloc,
-            .functions = ArrayList(Function).empty,
-            .memories = ArrayList(Memory).empty,
-            .tables = ArrayList(Table).empty,
-            .globals = ArrayList(Global).empty,
-            .elems = ArrayList(Elem).empty,
-            .datas = ArrayList(Data).empty,
-            .imports = ArrayList(ImportExport).empty,
+            .functions = .empty,
+            .memories = .empty,
+            .tables = .empty,
+            .globals = .empty,
+            .elems = .empty,
+            .datas = .empty,
+            .imports = .empty,
         };
 
         return store;
     }
 
     pub fn deinit(self: *ArrayListStore) void {
-        defer self.functions.deinit();
-        defer self.memories.deinit();
-        defer self.tables.deinit();
-        defer self.globals.deinit();
-        defer self.elems.deinit();
-        defer self.datas.deinit();
-        defer self.imports.deinit();
+        defer self.functions.deinit(self.alloc);
+        defer self.memories.deinit(self.alloc);
+        defer self.tables.deinit(self.alloc);
+        defer self.globals.deinit(self.alloc);
+        defer self.elems.deinit(self.alloc);
+        defer self.datas.deinit(self.alloc);
+        defer self.imports.deinit(self.alloc);
 
         for (self.memories.items) |*m| {
             m.deinit();
@@ -114,7 +114,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn addFunction(self: *ArrayListStore, func: Function) !usize {
-        const fun_ptr = try self.functions.addOne();
+        const fun_ptr = try self.functions.addOne(self.alloc);
         fun_ptr.* = func;
         return self.functions.items.len - 1;
     }
@@ -128,7 +128,7 @@ pub const ArrayListStore = struct {
 
     /// Allocate a new Memory with min / max size and add to store.
     pub fn addMemory(self: *ArrayListStore, min: u32, max: ?u32) !usize {
-        const mem_ptr = try self.memories.addOne();
+        const mem_ptr = try self.memories.addOne(self.alloc);
         mem_ptr.* = Memory.init(self.alloc, min, max);
         _ = try mem_ptr.grow(min);
         return self.memories.items.len - 1;
@@ -142,7 +142,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn addTable(self: *ArrayListStore, reftype: RefType, entries: u32, max: ?u32) !usize {
-        const tbl_ptr = try self.tables.addOne();
+        const tbl_ptr = try self.tables.addOne(self.alloc);
         tbl_ptr.* = try Table.init(self.alloc, reftype, entries, max);
         return self.tables.items.len - 1;
     }
@@ -156,7 +156,7 @@ pub const ArrayListStore = struct {
 
     /// Add a Global to the store and return its globaladdr
     pub fn addGlobal(self: *ArrayListStore, value: Global) !usize {
-        const glbl_ptr = try self.globals.addOne();
+        const glbl_ptr = try self.globals.addOne(self.alloc);
         glbl_ptr.* = value;
 
         return self.globals.items.len - 1;
@@ -170,7 +170,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn addElem(self: *ArrayListStore, reftype: RefType, count: u32) !usize {
-        const elem_ptr = try self.elems.addOne();
+        const elem_ptr = try self.elems.addOne(self.alloc);
         elem_ptr.* = try Elem.init(self.alloc, reftype, count);
         return self.elems.items.len - 1;
     }
@@ -183,7 +183,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn addData(self: *ArrayListStore, count: u32) !usize {
-        const data_ptr = try self.datas.addOne();
+        const data_ptr = try self.datas.addOne(self.alloc);
         data_ptr.* = try Data.init(self.alloc, count);
         return self.datas.items.len - 1;
     }

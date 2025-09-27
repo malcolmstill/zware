@@ -52,9 +52,9 @@ pub const VirtualMachine = struct {
     // These fields match the types in Instance but are
     // instead pointers. These will point to the Instance
     // that initialises the VirtualMachine
-    wasi_preopens: *std.AutoHashMap(wasi.fd_t, WasiPreopen),
+    wasi_preopens: *std.AutoHashMapUnmanaged(wasi.fd_t, WasiPreopen),
     wasi_args: *std.ArrayList([:0]u8),
-    wasi_env: *std.StringHashMap([]const u8),
+    wasi_env: *std.StringHashMapUnmanaged([]const u8),
 
     pub const Frame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory

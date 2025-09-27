@@ -33,6 +33,7 @@ const VirtualMachineOptions = struct {
 //      - `tableaddrs`: as per `memaddrs` but for tables
 //      - `globaladdrs`: as per `memaddrs` but for globals
 pub const Instance = struct {
+    alloc: mem.Allocator,
     module: Module,
     store: *Store,
     funcaddrs: ArrayList(usize),
@@ -55,38 +56,39 @@ pub const Instance = struct {
     // a VirtualMachine swaps out its `inst` (instance) pointer as
     // it executes; an arbitrary `inst` will not contain the correct
     // data.
-    wasi_preopens: std.AutoHashMap(wasi.fd_t, WasiPreopen),
+    wasi_preopens: std.AutoHashMapUnmanaged(wasi.fd_t, WasiPreopen),
     wasi_args: std.ArrayList([:0]u8),
-    wasi_env: std.StringHashMap([]const u8),
+    wasi_env: std.StringHashMapUnmanaged([]const u8),
 
     pub fn init(alloc: mem.Allocator, store: *Store, module: Module) Instance {
         return Instance{
+            .alloc = alloc,
             .module = module,
             .store = store,
-            .funcaddrs = ArrayList(usize).init(alloc),
-            .memaddrs = ArrayList(usize).init(alloc),
-            .tableaddrs = ArrayList(usize).init(alloc),
-            .globaladdrs = ArrayList(usize).init(alloc),
-            .elemaddrs = ArrayList(usize).init(alloc),
-            .dataaddrs = ArrayList(usize).init(alloc),
+            .funcaddrs = .empty,
+            .memaddrs = .empty,
+            .tableaddrs = .empty,
+            .globaladdrs = .empty,
+            .elemaddrs = .empty,
+            .dataaddrs = .empty,
 
-            .wasi_preopens = std.AutoHashMap(wasi.fd_t, WasiPreopen).init(alloc),
-            .wasi_args = ArrayList([:0]u8).init(alloc),
-            .wasi_env = std.StringHashMap([]const u8).init(alloc),
+            .wasi_preopens = .empty,
+            .wasi_args = .empty,
+            .wasi_env = .empty,
         };
     }
 
     pub fn deinit(self: *Instance) void {
-        defer self.funcaddrs.deinit();
-        defer self.memaddrs.deinit();
-        defer self.tableaddrs.deinit();
-        defer self.globaladdrs.deinit();
-        defer self.elemaddrs.deinit();
-        defer self.dataaddrs.deinit();
+        defer self.funcaddrs.deinit(self.alloc);
+        defer self.memaddrs.deinit(self.alloc);
+        defer self.tableaddrs.deinit(self.alloc);
+        defer self.globaladdrs.deinit(self.alloc);
+        defer self.elemaddrs.deinit(self.alloc);
+        defer self.dataaddrs.deinit(self.alloc);
 
-        defer self.wasi_preopens.deinit();
-        defer self.wasi_args.deinit();
-        defer self.wasi_env.deinit();
+        defer self.wasi_preopens.deinit(self.alloc);
+        defer self.wasi_args.deinit(self.alloc);
+        defer self.wasi_env.deinit(self.alloc);
     }
 
     pub fn getFunc(self: *Instance, funcidx: usize) !Function {
@@ -161,10 +163,10 @@ pub const Instance = struct {
                 error.ImportNotFound => return err.set(.{ .missing_import = import }),
             };
             switch (import.desc_tag) {
-                .Func => try self.funcaddrs.append(import_handle),
-                .Mem => try self.memaddrs.append(import_handle),
-                .Table => try self.tableaddrs.append(import_handle),
-                .Global => try self.globaladdrs.append(import_handle),
+                .Func => try self.funcaddrs.append(self.alloc, import_handle),
+                .Mem => try self.memaddrs.append(self.alloc, import_handle),
+                .Table => try self.tableaddrs.append(self.alloc, import_handle),
+                .Global => try self.globaladdrs.append(self.alloc, import_handle),
             }
         }
     }
@@ -208,7 +210,7 @@ pub const Instance = struct {
                 });
 
                 // Need to do this regardless of if import or internal
-                try self.funcaddrs.append(handle);
+                try self.funcaddrs.append(self.alloc, handle);
             }
         }
     }
@@ -226,7 +228,7 @@ pub const Instance = struct {
                     .mutability = global_def.mutability,
                     .valtype = global_def.valtype,
                 });
-                try self.globaladdrs.append(handle);
+                try self.globaladdrs.append(self.alloc, handle);
             }
         }
     }
@@ -239,7 +241,7 @@ pub const Instance = struct {
                 try memtype.limits.checkMatch(imported_mem.size(), imported_mem.max);
             } else {
                 const handle = try self.store.addMemory(memtype.limits.min, memtype.limits.max);
-                try self.memaddrs.append(handle);
+                try self.memaddrs.append(self.alloc, handle);
             }
         }
     }
@@ -252,7 +254,7 @@ pub const Instance = struct {
                 try tabletype.limits.checkMatch(imported_table.min, imported_table.max);
             } else {
                 const handle = try self.store.addTable(tabletype.reftype, tabletype.limits.min, tabletype.limits.max);
-                try self.tableaddrs.append(handle);
+                try self.tableaddrs.append(self.alloc, handle);
             }
         }
     }
@@ -260,7 +262,7 @@ pub const Instance = struct {
     fn instantiateData(self: *Instance) !void {
         for (self.module.datas.list.items) |datatype| {
             const dataddr = try self.store.addData(datatype.count);
-            try self.dataaddrs.append(dataddr);
+            try self.dataaddrs.append(self.alloc, dataddr);
             var data = try self.store.data(dataddr);
 
             // TODO: Do we actually need to copy the data or just close over module bytes?
@@ -285,7 +287,7 @@ pub const Instance = struct {
     fn instantiateElements(self: *Instance) !void {
         for (self.module.elements.list.items) |elemtype| {
             const elemaddr = try self.store.addElem(elemtype.reftype, elemtype.count);
-            try self.elemaddrs.append(elemaddr);
+            try self.elemaddrs.append(self.alloc, elemaddr);
             var elem = try self.store.elem(elemaddr);
 
             for (self.module.element_init_offsets.items[elemtype.init .. elemtype.init + elemtype.count], 0..) |expr, j| {
