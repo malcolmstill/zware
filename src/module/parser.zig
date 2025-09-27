@@ -1186,7 +1186,7 @@ pub const Parser = struct {
     }
 
     pub fn readLEB128Mem(self: *Parser, comptime T: type) !T {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
 
         const readFn = switch (@typeInfo(T).int.signedness) {
             .signed => std.leb.readIleb128,
@@ -1213,7 +1213,7 @@ pub const Parser = struct {
     }
 
     pub fn readU32(self: *Parser) !u32 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readInt(u32, .little);
 
@@ -1223,7 +1223,7 @@ pub const Parser = struct {
     }
 
     pub fn readU64(self: *Parser) !u64 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readInt(u64, .little);
 
@@ -1233,7 +1233,7 @@ pub const Parser = struct {
     }
 
     pub fn readByte(self: *Parser) !u8 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readByte();
 

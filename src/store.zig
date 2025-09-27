@@ -96,7 +96,7 @@ pub const ArrayListStore = struct {
     }
 
     pub fn @"export"(self: *ArrayListStore, module: []const u8, name: []const u8, tag: Tag, handle: usize) !void {
-        try self.imports.append(ImportExport{
+        try self.imports.append(self.alloc, ImportExport{
             .import = Import{
                 .module = module,
                 .name = name,

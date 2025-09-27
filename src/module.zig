@@ -148,7 +148,7 @@ pub const Module = struct {
 };
 
 pub const Decoder = struct {
-    fbs: std.io.FixedBufferStream([]const u8),
+    fbs: std.Io.FixedBufferStream([]const u8),
 
     pub fn decodeSection(self: *Decoder, module: *Module) !void {
         const id: SectionType = self.readEnum(SectionType) catch |err| switch (err) {

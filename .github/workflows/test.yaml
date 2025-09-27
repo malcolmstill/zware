@@ -14,9 +14,9 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1.2.1
+      - uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.14.0
+          version: 0.15.1
       - run: zig build unittest
   testsuite:
     strategy:
@@ -25,18 +25,18 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1.2.1
+      - uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.14.0
+          version: 0.15.1
       - name: Run testsuite
         run: zig build testsuite
   lint:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1.2.1
+      - uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.14.0
+          version: 0.15.1
       - run: zig fmt --check src/*.zig
   fib:
     strategy:
@@ -45,9 +45,9 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1.2.1
+      - uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.14.0
+          version: 0.15.1
       - name: Build fib
         working-directory: ./examples/fib
         run: zig build
@@ -58,8 +58,8 @@ jobs:
     runs-on: ${{matrix.os}}
     steps:
       - uses: actions/checkout@v2
-      - uses: mlugg/setup-zig@v1.2.1
+      - uses: mlugg/setup-zig@v2.0.5
         with:
-          version: 0.14.0
+          version: 0.15.1
       - name: Build zware-gen, zware-run and libzware.a
         run: zig build

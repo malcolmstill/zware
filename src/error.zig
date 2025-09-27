@@ -27,12 +27,8 @@ pub const Error = union(enum) {
     }
     pub fn format(
         self: Error,
-        comptime fmt: []const u8,
-        options: std.fmt.FormatOptions,
-        writer: anytype,
+        writer: *std.Io.Writer,
     ) !void {
-        _ = fmt;
-        _ = options;
         switch (self) {
             .missing_import => |import| try writer.print(
                 "missing {s} import '{s}' from module '{s}'",
