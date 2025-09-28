@@ -6,9 +6,11 @@ pub fn build(b: *Build) void {
 
     const exe = b.addExecutable(.{
         .name = "fib",
-        .root_source_file = b.path("src/fib.zig"),
-        .target = target,
-        .optimize = optimize,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/fib.zig"),
+            .target = target,
+            .optimize = optimize,
+        }),
     });
     exe.root_module.addAnonymousImport("zware", .{
         .root_source_file = b.path("../../src/main.zig"),
