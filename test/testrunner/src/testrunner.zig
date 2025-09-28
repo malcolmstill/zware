@@ -819,21 +819,21 @@ const Command = union(enum) {
 
 const CommandModule = struct {
     // type: "module"
-    line: usize,
+    line: u32,
     name: ?[]const u8 = null,
     filename: []const u8,
 };
 
 const CommandAssertReturn = struct {
     // type: "assert_return"
-    line: usize,
+    line: u32,
     action: Action,
     expected: []const Value,
 };
 
 const CommandAssertTrap = struct {
     // type: "assert_trap"
-    line: usize,
+    line: u32,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
@@ -841,7 +841,7 @@ const CommandAssertTrap = struct {
 
 const CommandAssertMalformed = struct {
     // type: "assert_malformed"
-    line: usize,
+    line: u32,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
@@ -849,7 +849,7 @@ const CommandAssertMalformed = struct {
 
 const CommandAssertInvalid = struct {
     // type: "assert_invalid"
-    line: usize,
+    line: u32,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
@@ -857,7 +857,7 @@ const CommandAssertInvalid = struct {
 
 const CommandAssertExhaustion = struct {
     // type: "assert_exhaustion"
-    line: usize,
+    line: u32,
     action: Action,
     text: []const u8,
     expected: []const ValueTrap,
@@ -865,7 +865,7 @@ const CommandAssertExhaustion = struct {
 
 const CommandAssertUnlinkable = struct {
     // type: "assert_unlinkable"
-    line: usize,
+    line: u32,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
@@ -873,7 +873,7 @@ const CommandAssertUnlinkable = struct {
 
 const CommandAssertUninstantiable = struct {
     // type: "assert_uninstantiable"
-    line: usize,
+    line: u32,
     filename: []const u8,
     text: []const u8,
     module_type: []const u8,
@@ -881,14 +881,14 @@ const CommandAssertUninstantiable = struct {
 
 const CommandAction = struct {
     // type: "action"
-    line: usize,
+    line: u32,
     action: Action,
     expected: []const ValueTrap,
 };
 
 const CommandRegister = struct {
     // type: "register"
-    line: usize,
+    line: u32,
     name: ?[]const u8 = null,
     as: []const u8,
 };
