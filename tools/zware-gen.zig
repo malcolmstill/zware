@@ -27,9 +27,10 @@ pub fn main() !void {
     defer module.deinit();
     try module.decode();
 
-    const stdout_file = std.io.getStdOut().writer();
-    var bw = std.io.bufferedWriter(stdout_file);
-    const stdout = bw.writer();
+    const stdout_fd = std.fs.File.stdout();
+    var stdout_buf: [4096]u8 = undefined;
+    var stdout_writer = stdout_fd.writer(&stdout_buf);
+    const stdout = &stdout_writer.interface;
 
     try stdout.print("const std = @import(\"std\");\n", .{});
     try stdout.print("const zware = @import(\"zware\");\n\n", .{});
@@ -222,7 +223,7 @@ pub fn main() !void {
     }
     try stdout.print("}};\n\n", .{});
 
-    try bw.flush();
+    try stdout.flush();
 }
 
 fn zigType(v: zware.ValType) []const u8 {

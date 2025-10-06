@@ -11,6 +11,7 @@ const MiscOpcode = @import("../opcode.zig").MiscOpcode;
 const Module = @import("../module.zig").Module;
 
 pub const Validator = struct {
+    alloc: std.mem.Allocator,
     op_stack: OperandStack = undefined,
     ctrl_stack: ControlStack = undefined,
     max_depth: usize = 0,
@@ -18,16 +19,17 @@ pub const Validator = struct {
 
     pub fn init(alloc: mem.Allocator, is_constant: bool) Validator {
         return Validator{
-            .op_stack = OperandStack.init(alloc),
-            .ctrl_stack = ControlStack.init(alloc),
+            .alloc = alloc,
+            .op_stack = OperandStack.empty,
+            .ctrl_stack = ControlStack.empty,
             .is_constant = is_constant,
         };
     }
 
     pub fn deinit(self: *Validator) void {
         // Static allocation?
-        self.op_stack.deinit();
-        self.ctrl_stack.deinit();
+        self.op_stack.deinit(self.alloc);
+        self.ctrl_stack.deinit(self.alloc);
     }
 
     pub fn validateBlock(v: *Validator, in_operands: []const ValType, out_operands: []const ValType) !void {
@@ -550,7 +552,7 @@ pub const Validator = struct {
 
     pub fn pushOperand(v: *Validator, t: Type) !void {
         defer v.trackMaxDepth();
-        try v.op_stack.append(t);
+        try v.op_stack.append(v.alloc, t);
     }
 
     fn popOperand(v: *Validator) !Type {
@@ -600,7 +602,7 @@ pub const Validator = struct {
             .height = v.op_stack.items.len,
             .unreachable_flag = false,
         };
-        try v.ctrl_stack.append(frame);
+        try v.ctrl_stack.append(v.alloc, frame);
         try v.pushOperands(in);
     }
 

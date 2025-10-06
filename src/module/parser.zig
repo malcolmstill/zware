@@ -61,7 +61,7 @@ pub const Parser = struct {
         try self.pushFunction(locals, funcidx);
 
         while (try self.next()) |instr| {
-            try self.module.parsed_code.append(instr);
+            try self.module.parsed_code.append(self.module.alloc, instr);
         }
 
         const bytes_read = self.bytesRead();
@@ -103,7 +103,7 @@ pub const Parser = struct {
                 => {},
                 else => return error.ValidatorConstantExpressionRequired,
             }
-            try self.module.parsed_code.append(instr);
+            try self.module.parsed_code.append(self.module.alloc, instr);
         }
 
         const bytes_read = self.bytesRead();
@@ -350,7 +350,7 @@ pub const Parser = struct {
                 var j: usize = 0;
                 while (j < label_count) : (j += 1) {
                     const tmp_label = try self.readLEB128Mem(u32);
-                    try self.module.br_table_indices.append(tmp_label);
+                    try self.module.br_table_indices.append(self.module.alloc, tmp_label);
                 }
                 const ln = try self.readLEB128Mem(u32);
                 const l_star = self.module.br_table_indices.items[label_start .. label_start + j];
@@ -1028,7 +1028,7 @@ pub const Parser = struct {
 
                 // Gather funcidx* from constant expressions
                 if (self.is_constant) {
-                    try self.module.references.append(funcidx);
+                    try self.module.references.append(self.module.alloc, funcidx);
                 } else {
                     // For functions, check that the funcidx has already been referenced
                     var in_references = false;
@@ -1186,11 +1186,11 @@ pub const Parser = struct {
     }
 
     pub fn readLEB128Mem(self: *Parser, comptime T: type) !T {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
 
         const readFn = switch (@typeInfo(T).int.signedness) {
-            .signed => std.leb.readILEB128,
-            .unsigned => std.leb.readULEB128,
+            .signed => std.leb.readIleb128,
+            .unsigned => std.leb.readUleb128,
         };
         const value = try readFn(T, buf.reader());
 
@@ -1213,7 +1213,7 @@ pub const Parser = struct {
     }
 
     pub fn readU32(self: *Parser) !u32 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readInt(u32, .little);
 
@@ -1223,7 +1223,7 @@ pub const Parser = struct {
     }
 
     pub fn readU64(self: *Parser) !u64 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readInt(u64, .little);
 
@@ -1233,7 +1233,7 @@ pub const Parser = struct {
     }
 
     pub fn readByte(self: *Parser) !u8 {
-        var buf = std.io.fixedBufferStream(self.code);
+        var buf = std.Io.fixedBufferStream(self.code);
         const rd = buf.reader();
         const value = try rd.readByte();
 

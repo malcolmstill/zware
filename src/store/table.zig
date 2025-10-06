@@ -12,8 +12,8 @@ pub const Table = struct {
     reftype: RefType,
 
     pub fn init(alloc: mem.Allocator, reftype: RefType, min: u32, max: ?u32) !Table {
-        var data = ArrayList(?usize).init(alloc);
-        try data.appendNTimes(null, min);
+        var data: ArrayList(?usize) = .empty;
+        try data.appendNTimes(alloc, null, min);
 
         return Table{
             .alloc = alloc,
@@ -25,7 +25,7 @@ pub const Table = struct {
     }
 
     pub fn deinit(self: *Table) void {
-        self.data.deinit();
+        self.data.deinit(self.alloc);
     }
 
     pub fn lookup(self: *Table, index: u32) !usize {
@@ -57,7 +57,7 @@ pub const Table = struct {
 
         const old_size = math.cast(u32, self.data.items.len) orelse return error.TableGrowToolarge;
 
-        try self.data.appendNTimes(null, n);
+        try self.data.appendNTimes(self.alloc, null, n);
 
         return old_size;
     }

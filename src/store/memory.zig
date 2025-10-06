@@ -14,14 +14,14 @@ pub const Memory = struct {
     pub fn init(alloc: mem.Allocator, min: u32, max: ?u32) Memory {
         return Memory{
             .alloc = alloc,
-            .data = ArrayList(u8).init(alloc),
+            .data = .empty,
             .min = min,
             .max = max,
         };
     }
 
     pub fn deinit(self: *Memory) void {
-        self.data.deinit();
+        self.data.deinit(self.alloc);
     }
 
     // Return the size of the memory (in pages)
@@ -41,7 +41,7 @@ pub const Memory = struct {
 
         const old_size_in_bytes = self.data.items.len;
         const old_size_in_pages = self.size();
-        _ = try self.data.resize(self.data.items.len + PAGE_SIZE * num_pages);
+        _ = try self.data.resize(self.alloc, self.data.items.len + PAGE_SIZE * num_pages);
 
         // Zero memory. FIXME: I don't think this is required (maybe do this only in debug build)
         @memset(self.data.items[old_size_in_bytes .. old_size_in_bytes + PAGE_SIZE * num_pages], 0);

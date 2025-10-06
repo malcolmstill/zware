@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const os = std.os;
 const posix = std.posix;
 const mem = std.mem;
@@ -52,9 +53,9 @@ pub const VirtualMachine = struct {
     // These fields match the types in Instance but are
     // instead pointers. These will point to the Instance
     // that initialises the VirtualMachine
-    wasi_preopens: *std.AutoHashMap(wasi.fd_t, WasiPreopen),
+    wasi_preopens: *std.AutoHashMapUnmanaged(wasi.fd_t, WasiPreopen),
     wasi_args: *std.ArrayList([:0]u8),
-    wasi_env: *std.StringHashMap([]const u8),
+    wasi_env: *std.StringHashMapUnmanaged([]const u8),
 
     pub const Frame = struct {
         locals: []u64 = undefined, // TODO: we're in trouble if we move our stacks in memory
@@ -125,7 +126,11 @@ pub const VirtualMachine = struct {
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip];
 
-        return try @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
+        if (builtin.zig_backend == .stage2_x86_64) {
+            @compileError("zware currently requires the LLVM backend for `.always_tail`. See https://github.com/ziglang/zig/issues/24044");
+        }
+
+        return @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
@@ -2111,7 +2116,11 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip].misc;
 
-        return try @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
+        if (builtin.zig_backend == .stage2_x86_64) {
+            @compileError("zware currently requires the LLVM backend for `.always_tail`. See https://github.com/ziglang/zig/issues/24044");
+        }
+
+        return @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
