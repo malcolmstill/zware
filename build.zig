@@ -71,6 +71,7 @@ pub fn build(b: *Build) !void {
                 .target = target,
                 .optimize = optimize,
             }),
+            .use_llvm = true,
         });
         exe.root_module.addImport("zware", zware_module);
         const install = b.addInstallArtifact(exe, .{});

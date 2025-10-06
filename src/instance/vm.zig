@@ -126,10 +126,11 @@ pub const VirtualMachine = struct {
     inline fn dispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip];
 
-        switch (builtin.zig_backend) {
-            .stage2_x86_64 => return @call(.auto, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
-            else => return @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+        if (builtin.zig_backend == .stage2_x86_64) {
+            @compileError("zware currently requires the LLVM backend for `.always_tail`. See https://github.com/ziglang/zig/issues/24044");
         }
+
+        return @call(.always_tail, lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     pub const REF_NULL: u64 = 0xFFFF_FFFF_FFFF_FFFF;
@@ -2115,10 +2116,11 @@ pub const VirtualMachine = struct {
     inline fn miscDispatch(self: *VirtualMachine, next_ip: usize, code: []Rr) WasmError!void {
         const next_instr = code[next_ip].misc;
 
-        switch (builtin.zig_backend) {
-            .stage2_x86_64 => return @call(.auto, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
-            else => return @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code }),
+        if (builtin.zig_backend == .stage2_x86_64) {
+            @compileError("zware currently requires the LLVM backend for `.always_tail`. See https://github.com/ziglang/zig/issues/24044");
         }
+
+        return @call(.always_tail, misc_lookup[@intFromEnum(next_instr)], .{ self, next_ip, code });
     }
 
     fn @"i32.trunc_sat_f32_s"(self: *VirtualMachine, ip: usize, code: []Rr) WasmError!void {
