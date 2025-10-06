@@ -15,8 +15,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: mlugg/setup-zig@v2.0.5
-        with:
-          version: 0.15.1
       - run: zig build unittest
   testsuite:
     strategy:
@@ -26,8 +24,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: mlugg/setup-zig@v2.0.5
-        with:
-          version: 0.15.1
       - name: Run testsuite
         run: zig build testsuite
   lint:
@@ -35,8 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: mlugg/setup-zig@v2.0.5
-        with:
-          version: 0.15.1
       - run: zig fmt --check src/*.zig
   fib:
     strategy:
@@ -46,8 +40,6 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: mlugg/setup-zig@v2.0.5
-        with:
-          version: 0.15.1
       - name: Build fib
         working-directory: ./examples/fib
         run: zig build
@@ -59,7 +51,5 @@ jobs:
     steps:
       - uses: actions/checkout@v2
       - uses: mlugg/setup-zig@v2.0.5
-        with:
-          version: 0.15.1
       - name: Build zware-gen, zware-run and libzware.a
         run: zig build
