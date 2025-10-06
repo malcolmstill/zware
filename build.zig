@@ -23,6 +23,7 @@ pub fn build(b: *Build) !void {
 
     const main_tests = b.addTest(.{
         .root_module = main_mod,
+        .use_llvm = true,
     });
 
     const run_main_tests = b.addRunArtifact(main_tests);
