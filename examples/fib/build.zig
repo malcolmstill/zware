@@ -11,6 +11,7 @@ pub fn build(b: *Build) void {
             .target = target,
             .optimize = optimize,
         }),
+        .use_llvm = true,
     });
     exe.root_module.addAnonymousImport("zware", .{
         .root_source_file = b.path("../../src/main.zig"),
