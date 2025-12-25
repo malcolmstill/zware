@@ -380,7 +380,7 @@ pub const Parser = struct {
                 const typeidx = try self.readLEB128Mem(u32);
                 const functype = try self.module.types.lookup(typeidx);
 
-                const tableidx = try self.readByte();
+                const tableidx = try self.readLEB128Mem(u32);
                 if (tableidx >= self.module.tables.list.items.len) return error.ValidatorCallIndirectNoTable;
 
                 try self.validator.validateCallIndirect(functype);
