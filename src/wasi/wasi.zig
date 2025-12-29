@@ -468,35 +468,64 @@ pub fn fd_tell(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
+/// Convert native directory entry type to WASI filetype
+fn toWasiFiletype(native_type: u8) wasi.filetype_t {
+    return switch (native_type) {
+        std.posix.DT.BLK => .BLOCK_DEVICE,
+        std.posix.DT.CHR => .CHARACTER_DEVICE,
+        std.posix.DT.DIR => .DIRECTORY,
+        std.posix.DT.LNK => .SYMBOLIC_LINK,
+        std.posix.DT.REG => .REGULAR_FILE,
+        std.posix.DT.SOCK => .SOCKET_STREAM,
+        std.posix.DT.FIFO => .UNKNOWN, // WASI has no FIFO type
+        else => .UNKNOWN,
+    };
+}
+
+/// Write a WASI dirent entry to memory
+/// Uses std.os.wasi.dirent_t for spec-compliant structure layout
+fn writeWasiDirent(
+    mem_data: []u8,
+    memory: anytype,
+    offset: u32,
+    next_cookie: u64,
+    inode: u64,
+    name: []const u8,
+    filetype: wasi.filetype_t,
+) !void {
+    // WASI dirent_t structure (from std.os.wasi):
+    //   next: dircookie_t (u64) - offset 0
+    //   ino: inode_t (u64) - offset 8
+    //   namlen: dirnamlen_t (u32) - offset 16
+    //   type: filetype_t (u8) - offset 20
+    //   [3 bytes padding to align to 24 bytes]
+    //   name follows immediately after (not null-terminated)
+    try memory.write(u64, offset, 0, next_cookie);
+    try memory.write(u64, offset + 8, 0, inode);
+    try memory.write(u32, offset + 16, 0, @as(u32, @intCast(name.len)));
+    mem_data[offset + 20] = @intFromEnum(filetype);
+    // Padding bytes 21-23 are implicitly handled
+    const name_offset = offset + @sizeOf(wasi.dirent_t);
+    @memcpy(mem_data[name_offset..][0..name.len], name);
+}
+
 /// fd_readdir - Read directory entries from a directory file descriptor
 /// Reads directory entries into the provided buffer using the cookie for pagination.
 /// The cookie value 0 starts from the beginning; subsequent calls use the d_next
 /// value from the last entry to continue reading.
 ///
-/// WASI dirent structure (24 bytes header + variable name):
-///   d_next: u64 (offset 0)   - Cookie for next entry
-///   d_ino: u64 (offset 8)    - Inode number
-///   d_namlen: u32 (offset 16) - Length of the name
-///   d_type: u8 (offset 20)   - File type
-///   padding: 3 bytes (offset 21-23)
-///   name: [d_namlen]u8 (offset 24) - Name (not null-terminated)
-/// fd_readdir - Read directory entries from a directory file descriptor
-/// Reads directory entries into the provided buffer using the cookie for pagination.
-/// The cookie value 0 starts from the beginning; subsequent calls use the d_next
-/// value from the last entry to continue reading.
-///
-/// WASI dirent structure (24 bytes header + variable name):
-///   d_next: u64 (offset 0)   - Cookie for next entry
-///   d_ino: u64 (offset 8)    - Inode number
-///   d_namlen: u32 (offset 16) - Length of the name
-///   d_type: u8 (offset 20)   - File type
-///   padding: 3 bytes (offset 21-23)
-///   name: [d_namlen]u8 (offset 24) - Name (not null-terminated)
+/// Uses std.os.wasi types for spec-compliant WASI dirent structure:
+///   next: dircookie_t (u64) - Cookie for next entry
+///   ino: inode_t (u64) - Inode number
+///   namlen: dirnamlen_t (u32) - Length of the name
+///   type: filetype_t (u8) - File type
+///   [3 bytes padding]
+///   name: [namlen]u8 - Name (not null-terminated)
 ///
 /// Platform support:
 ///   - Linux: getdents64 syscall (no libc required)
 ///   - macOS/iOS/BSD: getdirentries/getdents via std.c (requires libc)
-///   - Windows: Not yet implemented
+///   - Windows: NtQueryDirectoryFile via std.os.windows
 pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
     const bufused_ptr = vm.popOperand(u32);
     const cookie = vm.popOperand(u64);
@@ -507,6 +536,9 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
     const memory = try vm.inst.getMemory(0);
     const mem_data = memory.memory();
     const host_fd = vm.getHostFd(fd);
+
+    // Size of WASI dirent header (from std.os.wasi.dirent_t)
+    const dirent_header_size: u32 = @sizeOf(wasi.dirent_t);
 
     switch (native_os) {
         .linux => {
@@ -525,12 +557,9 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                 var kernel_offset: usize = 0;
                 while (kernel_offset < nread) {
                     const linux_entry: *align(1) std.os.linux.dirent64 = @ptrCast(&kernel_buf[kernel_offset]);
-                    const d_ino = linux_entry.ino;
-                    const d_reclen = linux_entry.reclen;
-                    const d_type = linux_entry.type;
                     const name = mem.sliceTo(@as([*:0]u8, @ptrCast(&linux_entry.name)), 0);
 
-                    kernel_offset += d_reclen;
+                    kernel_offset += linux_entry.reclen;
 
                     // Skip . and ..
                     if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
@@ -541,9 +570,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         continue;
                     }
 
-                    // WASI dirent header is 24 bytes
-                    const wasi_dirent_header_size: u32 = 24;
-                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+                    const wasi_entry_size: u32 = dirent_header_size + @as(u32, @intCast(name.len));
 
                     if (bytes_used + wasi_entry_size > buf_len) {
                         try memory.write(u32, bufused_ptr, 0, bytes_used);
@@ -551,12 +578,15 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         return;
                     }
 
-                    const wasm_offset = buf_ptr + bytes_used;
-                    try memory.write(u64, wasm_offset, 0, entry_idx + 1); // d_next
-                    try memory.write(u64, wasm_offset + 8, 0, d_ino); // d_ino
-                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len))); // d_namlen
-                    mem_data[wasm_offset + 20] = d_type; // d_type
-                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+                    try writeWasiDirent(
+                        mem_data,
+                        memory,
+                        buf_ptr + bytes_used,
+                        entry_idx + 1,
+                        linux_entry.ino,
+                        name,
+                        toWasiFiletype(linux_entry.type),
+                    );
 
                     bytes_used += wasi_entry_size;
                     entry_idx += 1;
@@ -586,12 +616,9 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                 var kernel_offset: usize = 0;
                 while (kernel_offset < @as(usize, @intCast(nread))) {
                     const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
-                    const d_ino: u64 = entry.ino;
-                    const d_reclen: u16 = entry.reclen;
                     const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
-                    const d_type: u8 = entry.type;
 
-                    kernel_offset += d_reclen;
+                    kernel_offset += entry.reclen;
 
                     // Skip . and ..
                     if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
@@ -601,8 +628,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         continue;
                     }
 
-                    const wasi_dirent_header_size: u32 = 24;
-                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+                    const wasi_entry_size: u32 = dirent_header_size + @as(u32, @intCast(name.len));
 
                     if (bytes_used + wasi_entry_size > buf_len) {
                         try memory.write(u32, bufused_ptr, 0, bytes_used);
@@ -610,12 +636,15 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         return;
                     }
 
-                    const wasm_offset = buf_ptr + bytes_used;
-                    try memory.write(u64, wasm_offset, 0, entry_idx + 1);
-                    try memory.write(u64, wasm_offset + 8, 0, d_ino);
-                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len)));
-                    mem_data[wasm_offset + 20] = d_type;
-                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+                    try writeWasiDirent(
+                        mem_data,
+                        memory,
+                        buf_ptr + bytes_used,
+                        entry_idx + 1,
+                        entry.ino,
+                        name,
+                        toWasiFiletype(entry.type),
+                    );
 
                     bytes_used += wasi_entry_size;
                     entry_idx += 1;
@@ -644,12 +673,9 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                 var kernel_offset: usize = 0;
                 while (kernel_offset < @as(usize, @intCast(nread))) {
                     const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
-                    const d_ino: u64 = entry.fileno;
-                    const d_reclen: u16 = entry.reclen;
                     const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
-                    const d_type: u8 = entry.type;
 
-                    kernel_offset += d_reclen;
+                    kernel_offset += entry.reclen;
 
                     // Skip . and ..
                     if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
@@ -659,8 +685,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         continue;
                     }
 
-                    const wasi_dirent_header_size: u32 = 24;
-                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+                    const wasi_entry_size: u32 = dirent_header_size + @as(u32, @intCast(name.len));
 
                     if (bytes_used + wasi_entry_size > buf_len) {
                         try memory.write(u32, bufused_ptr, 0, bytes_used);
@@ -668,12 +693,15 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         return;
                     }
 
-                    const wasm_offset = buf_ptr + bytes_used;
-                    try memory.write(u64, wasm_offset, 0, entry_idx + 1);
-                    try memory.write(u64, wasm_offset + 8, 0, d_ino);
-                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len)));
-                    mem_data[wasm_offset + 20] = d_type;
-                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+                    try writeWasiDirent(
+                        mem_data,
+                        memory,
+                        buf_ptr + bytes_used,
+                        entry_idx + 1,
+                        entry.fileno,
+                        name,
+                        toWasiFiletype(entry.type),
+                    );
 
                     bytes_used += wasi_entry_size;
                     entry_idx += 1;
@@ -685,7 +713,97 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
         },
 
         .windows => {
-            @compileError("fd_readdir not yet implemented for Windows - requires NtQueryDirectoryFile or FindFirstFile/FindNextFile");
+            // Windows implementation using NtQueryDirectoryFile
+            const w = std.os.windows;
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+            var first_iter = true;
+
+            while (true) {
+                var io: w.IO_STATUS_BLOCK = undefined;
+                var dir_buf: [4096]u8 align(@alignOf(w.FILE_BOTH_DIR_INFORMATION)) = undefined;
+
+                const rc = w.ntdll.NtQueryDirectoryFile(
+                    @ptrFromInt(@as(usize, @bitCast(@as(isize, host_fd)))),
+                    null,
+                    null,
+                    null,
+                    &io,
+                    &dir_buf,
+                    dir_buf.len,
+                    .FileBothDirectoryInformation,
+                    w.FALSE, // ReturnSingleEntry
+                    null, // FileName filter
+                    if (first_iter) w.TRUE else w.FALSE, // RestartScan
+                );
+                first_iter = false;
+
+                if (rc != .SUCCESS) break;
+                if (io.Information == 0) break;
+
+                var buf_offset: usize = 0;
+                while (buf_offset < io.Information) {
+                    const dir_info: *align(2) w.FILE_BOTH_DIR_INFORMATION = @ptrCast(@alignCast(&dir_buf[buf_offset]));
+
+                    // Get name as UTF-8
+                    const name_wtf16 = @as([*]u16, @ptrCast(&dir_info.FileName))[0 .. dir_info.FileNameLength / 2];
+                    var name_buf: [256]u8 = undefined;
+                    const name_len = std.unicode.wtf16LeToWtf8(&name_buf, name_wtf16);
+                    const name = name_buf[0..name_len];
+
+                    // Move to next entry
+                    if (dir_info.NextEntryOffset != 0) {
+                        buf_offset += dir_info.NextEntryOffset;
+                    } else {
+                        buf_offset = io.Information; // Force exit
+                    }
+
+                    // Skip . and ..
+                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
+
+                    // Skip entries before cookie
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    // Determine file type
+                    const filetype: wasi.filetype_t = blk: {
+                        const attrs = dir_info.FileAttributes;
+                        if (attrs & w.FILE_ATTRIBUTE_DIRECTORY != 0) break :blk .DIRECTORY;
+                        if (attrs & w.FILE_ATTRIBUTE_REPARSE_POINT != 0) break :blk .SYMBOLIC_LINK;
+                        break :blk .REGULAR_FILE;
+                    };
+
+                    const wasi_entry_size: u32 = dirent_header_size + @as(u32, @intCast(name.len));
+
+                    if (bytes_used + wasi_entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    // Windows doesn't have inodes, use FileIndex as a pseudo-inode
+                    const pseudo_inode: u64 = @as(u64, dir_info.FileIndex);
+
+                    try writeWasiDirent(
+                        mem_data,
+                        memory,
+                        buf_ptr + bytes_used,
+                        entry_idx + 1,
+                        pseudo_inode,
+                        name,
+                        filetype,
+                    );
+
+                    bytes_used += wasi_entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
         else => {
