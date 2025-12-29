@@ -416,10 +416,14 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.NoSpaceLeft => .NOSPC,
         error.BrokenPipe => .PIPE,
         error.NotOpenForWriting => .BADF,
+        error.NotOpenForReading => .BADF,
         error.SystemResources => .NOMEM,
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
+        error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
+        error.InvalidArgument => .INVAL,
+        error.PermissionDenied => .PERM,
         else => std.debug.panic("WASI: Unhandled zig stdlib error: {s}", .{@errorName(err)}),
     };
 }
