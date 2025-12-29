@@ -512,7 +512,10 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
     switch (native_os) {
         .linux => {
-            _ = std.os.linux.lseek(host_fd, 0, std.os.linux.SEEK.SET);
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+                return;
+            };
 
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
@@ -552,8 +555,8 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
         },
 
         .macos, .ios, .tvos, .watchos, .visionos => {
-            posix.lseek_SET(host_fd, 0) catch {
-                try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
 
@@ -595,8 +598,8 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
         },
 
         .freebsd, .openbsd, .netbsd, .dragonfly => {
-            posix.lseek_SET(host_fd, 0) catch {
-                try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
 
