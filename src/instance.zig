@@ -455,7 +455,7 @@ pub const Instance = struct {
     }
 
     pub fn addWasiPreopen(self: *Instance, wasi_fd: wasi.fd_t, name: []const u8, host_fd: posix.fd_t) !void {
-        return self.wasi_preopens.put(wasi_fd, .{
+        return self.wasi_preopens.put(self.alloc, wasi_fd, .{
             .wasi_fd = wasi_fd,
             .name = name,
             .host_fd = host_fd,
@@ -475,7 +475,7 @@ pub const Instance = struct {
         const args = try std.process.argsAlloc(alloc);
 
         for (args) |arg| {
-            try self.wasi_args.append(arg);
+            try self.wasi_args.append(alloc, arg);
         }
 
         return args;
