@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const fs = std.fs;
 const posix = std.posix;
 const math = std.math;
 const wasi = std.os.wasi;
+const native_os = builtin.os.tag;
 
 const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 const WasmError = @import("../instance/vm.zig").WasmError;
@@ -447,3 +449,247 @@ fn toWasiTimestamp(ns: i128) u64 {
 }
 
 const _ = std.testing.refAllDecls();
+
+/// fd_tell - Get the current offset of a file descriptor
+/// Returns the current position within the file
+pub fn fd_tell(vm: *VirtualMachine) WasmError!void {
+    const offset_ptr = vm.popOperand(u32);
+    const fd = vm.popOperand(i32);
+
+    const host_fd = vm.getHostFd(fd);
+    const current_offset = posix.lseek_CUR_get(host_fd) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+
+    const memory = try vm.inst.getMemory(0);
+    try memory.write(u64, offset_ptr, 0, current_offset);
+
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
+/// fd_readdir - Read directory entries from a directory file descriptor
+/// Reads directory entries into the provided buffer using the cookie for pagination.
+/// The cookie value 0 starts from the beginning; subsequent calls use the d_next
+/// value from the last entry to continue reading.
+///
+/// WASI dirent structure (24 bytes header + variable name):
+///   d_next: u64 (offset 0)   - Cookie for next entry
+///   d_ino: u64 (offset 8)    - Inode number
+///   d_namlen: u32 (offset 16) - Length of the name
+///   d_type: u8 (offset 20)   - File type
+///   padding: 3 bytes (offset 21-23)
+///   name: [d_namlen]u8 (offset 24) - Name (not null-terminated)
+/// fd_readdir - Read directory entries from a directory file descriptor
+/// Reads directory entries into the provided buffer using the cookie for pagination.
+/// The cookie value 0 starts from the beginning; subsequent calls use the d_next
+/// value from the last entry to continue reading.
+///
+/// WASI dirent structure (24 bytes header + variable name):
+///   d_next: u64 (offset 0)   - Cookie for next entry
+///   d_ino: u64 (offset 8)    - Inode number
+///   d_namlen: u32 (offset 16) - Length of the name
+///   d_type: u8 (offset 20)   - File type
+///   padding: 3 bytes (offset 21-23)
+///   name: [d_namlen]u8 (offset 24) - Name (not null-terminated)
+///
+/// Platform support:
+///   - Linux: getdents64 syscall (no libc required)
+///   - macOS/iOS/BSD: getdirentries/getdents via std.c (requires libc)
+///   - Windows: Not yet implemented
+pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
+    const bufused_ptr = vm.popOperand(u32);
+    const cookie = vm.popOperand(u64);
+    const buf_len = vm.popOperand(u32);
+    const buf_ptr = vm.popOperand(u32);
+    const fd = vm.popOperand(i32);
+
+    const memory = try vm.inst.getMemory(0);
+    const mem_data = memory.memory();
+    const host_fd = vm.getHostFd(fd);
+
+    switch (native_os) {
+        .linux => {
+            // Linux implementation using getdents64 syscall (no libc needed)
+            _ = std.os.linux.lseek(host_fd, 0, std.os.linux.SEEK.SET);
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 = undefined;
+                const nread = std.os.linux.getdents64(host_fd, &kernel_buf, kernel_buf.len);
+                if (nread == 0) break;
+                if (@as(isize, @bitCast(nread)) < 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < nread) {
+                    const linux_entry: *align(1) std.os.linux.dirent64 = @ptrCast(&kernel_buf[kernel_offset]);
+                    const d_ino = linux_entry.ino;
+                    const d_reclen = linux_entry.reclen;
+                    const d_type = linux_entry.type;
+                    const name = mem.sliceTo(@as([*:0]u8, @ptrCast(&linux_entry.name)), 0);
+
+                    kernel_offset += d_reclen;
+
+                    // Skip . and ..
+                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
+
+                    // Skip entries before the cookie position
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    // WASI dirent header is 24 bytes
+                    const wasi_dirent_header_size: u32 = 24;
+                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+
+                    if (bytes_used + wasi_entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    const wasm_offset = buf_ptr + bytes_used;
+                    try memory.write(u64, wasm_offset, 0, entry_idx + 1); // d_next
+                    try memory.write(u64, wasm_offset + 8, 0, d_ino); // d_ino
+                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len))); // d_namlen
+                    mem_data[wasm_offset + 20] = d_type; // d_type
+                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+
+                    bytes_used += wasi_entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        .macos, .ios, .tvos, .watchos, .visionos => {
+            // Darwin implementation using getdirentries via libc
+            posix.lseek_SET(host_fd, 0) catch {
+                try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+                return;
+            };
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+            var seek: i64 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
+                const nread = std.c.getdirentries(host_fd, &kernel_buf, kernel_buf.len, &seek);
+                if (nread <= 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < @as(usize, @intCast(nread))) {
+                    const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
+                    const d_ino: u64 = entry.ino;
+                    const d_reclen: u16 = entry.reclen;
+                    const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
+                    const d_type: u8 = entry.type;
+
+                    kernel_offset += d_reclen;
+
+                    // Skip . and ..
+                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
+
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    const wasi_dirent_header_size: u32 = 24;
+                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+
+                    if (bytes_used + wasi_entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    const wasm_offset = buf_ptr + bytes_used;
+                    try memory.write(u64, wasm_offset, 0, entry_idx + 1);
+                    try memory.write(u64, wasm_offset + 8, 0, d_ino);
+                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len)));
+                    mem_data[wasm_offset + 20] = d_type;
+                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+
+                    bytes_used += wasi_entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        .freebsd, .openbsd, .netbsd, .dragonfly => {
+            // BSD implementation using getdents via libc
+            posix.lseek_SET(host_fd, 0) catch {
+                try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+                return;
+            };
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
+                const nread = std.c.getdents(host_fd, &kernel_buf, kernel_buf.len);
+                if (nread <= 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < @as(usize, @intCast(nread))) {
+                    const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
+                    const d_ino: u64 = entry.fileno;
+                    const d_reclen: u16 = entry.reclen;
+                    const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
+                    const d_type: u8 = entry.type;
+
+                    kernel_offset += d_reclen;
+
+                    // Skip . and ..
+                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
+
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    const wasi_dirent_header_size: u32 = 24;
+                    const wasi_entry_size: u32 = wasi_dirent_header_size + @as(u32, @intCast(name.len));
+
+                    if (bytes_used + wasi_entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    const wasm_offset = buf_ptr + bytes_used;
+                    try memory.write(u64, wasm_offset, 0, entry_idx + 1);
+                    try memory.write(u64, wasm_offset + 8, 0, d_ino);
+                    try memory.write(u32, wasm_offset + 16, 0, @as(u32, @intCast(name.len)));
+                    mem_data[wasm_offset + 20] = d_type;
+                    @memcpy(mem_data[wasm_offset + wasi_dirent_header_size ..][0..name.len], name);
+
+                    bytes_used += wasi_entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        .windows => {
+            @compileError("fd_readdir not yet implemented for Windows - requires NtQueryDirectoryFile or FindFirstFile/FindNextFile");
+        },
+
+        else => {
+            @compileError("fd_readdir not implemented for this platform");
+        },
+    }
+}
