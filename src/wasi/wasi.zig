@@ -565,8 +565,6 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     kernel_offset += linux_entry.reclen;
 
-                    // Skip . and ..
-                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
 
                     // Skip entries before the cookie position
                     if (entry_idx < cookie) {
@@ -624,8 +622,6 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     kernel_offset += entry.reclen;
 
-                    // Skip . and ..
-                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
 
                     if (entry_idx < cookie) {
                         entry_idx += 1;
@@ -681,8 +677,6 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     kernel_offset += entry.reclen;
 
-                    // Skip . and ..
-                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
 
                     if (entry_idx < cookie) {
                         entry_idx += 1;
@@ -763,8 +757,6 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
                         buf_offset = io.Information; // Force exit
                     }
 
-                    // Skip . and ..
-                    if (mem.eql(u8, name, ".") or mem.eql(u8, name, "..")) continue;
 
                     // Skip entries before cookie
                     if (entry_idx < cookie) {
