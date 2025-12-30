@@ -2,7 +2,7 @@
     .name = .zware,
     .version = "0.0.1",
     .fingerprint = 0xea6cb8e2e9e30e64,
-    .minimum_zig_version = "0.15.1",
+    .minimum_zig_version = "0.15.2",
     .dependencies = .{
         .wabt = .{
             .url = "https://github.com/WebAssembly/wabt/archive/39f85a791cbbad91a253a851841a29777efdc2cd.tar.gz",
