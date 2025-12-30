@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const math = std.math;
 const posix = std.posix;
@@ -489,6 +490,10 @@ pub const WasiPreopen = struct {
 };
 
 test "addWasiPreopen registers preopens correctly" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     const testing = std.testing;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
@@ -533,6 +538,10 @@ test "addWasiPreopen registers preopens correctly" {
 }
 
 test "addWasiPreopen overwrites existing fd" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     const testing = std.testing;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
@@ -566,6 +575,10 @@ test "addWasiPreopen overwrites existing fd" {
 }
 
 test "addWasiPreopen edge cases" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     const testing = std.testing;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
@@ -598,6 +611,10 @@ test "addWasiPreopen edge cases" {
 }
 
 test "addWasiPreopen integrates with VirtualMachine lookup" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
     const testing = std.testing;
     const ArenaAllocator = std.heap.ArenaAllocator;
     var arena = ArenaAllocator.init(testing.allocator);
