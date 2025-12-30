@@ -75,7 +75,7 @@ pub const Instance = struct {
 
             .wasi_preopens = .empty,
             .wasi_args = .empty,
-            .wasi_env = .empty,
+            .wasi_env = .{},
         };
     }
 

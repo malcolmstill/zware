@@ -1,9 +1,11 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const fs = std.fs;
 const posix = std.posix;
 const math = std.math;
 const wasi = std.os.wasi;
+const native_os = builtin.os.tag;
 
 const VirtualMachine = @import("../instance/vm.zig").VirtualMachine;
 const WasmError = @import("../instance/vm.zig").WasmError;
@@ -49,6 +51,57 @@ pub fn args_sizes_get(vm: *VirtualMachine) WasmError!void {
         buf_size += arg.len + 1;
     }
     try memory.write(u32, argv_buf_size_ptr, 0, @as(u32, @intCast(buf_size)));
+
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
+pub fn environ_get(vm: *VirtualMachine) WasmError!void {
+    const environ_buf_ptr = vm.popOperand(u32);
+    const environ_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+    const data = memory.memory();
+
+    var environ_buf_i: usize = 0;
+    var i: usize = 0;
+    var iter = vm.wasi_env.iterator();
+    while (iter.next()) |entry| {
+        const env_i_ptr = environ_buf_ptr + environ_buf_i;
+        const key = entry.key_ptr.*;
+        const value = entry.value_ptr.*;
+
+        // Write "KEY=value\0" to WASI memory
+        @memcpy(data[env_i_ptr..][0..key.len], key);
+        data[env_i_ptr + key.len] = '=';
+        @memcpy(data[env_i_ptr + key.len + 1 ..][0..value.len], value);
+        data[env_i_ptr + key.len + 1 + value.len] = 0;
+
+        const env_len = key.len + 1 + value.len + 1; // key + '=' + value + '\0'
+        try memory.write(u32, environ_ptr, 4 * @as(u32, @intCast(i)), @as(u32, @intCast(env_i_ptr)));
+
+        environ_buf_i += env_len;
+        i += 1;
+    }
+
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
+pub fn environ_sizes_get(vm: *VirtualMachine) WasmError!void {
+    const environ_buf_size_ptr = vm.popOperand(u32);
+    const environc_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+
+    const environc = vm.wasi_env.count();
+    try memory.write(u32, environc_ptr, 0, @as(u32, @intCast(environc)));
+
+    var buf_size: usize = 0;
+    var iter = vm.wasi_env.iterator();
+    while (iter.next()) |entry| {
+        // key + '=' + value + '\0'
+        buf_size += entry.key_ptr.*.len + 1 + entry.value_ptr.*.len + 1;
+    }
+    try memory.write(u32, environ_buf_size_ptr, 0, @as(u32, @intCast(buf_size)));
 
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
@@ -414,10 +467,14 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.NoSpaceLeft => .NOSPC,
         error.BrokenPipe => .PIPE,
         error.NotOpenForWriting => .BADF,
+        error.NotOpenForReading => .BADF,
         error.SystemResources => .NOMEM,
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
+        error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
+        error.InvalidArgument => .INVAL,
+        error.PermissionDenied => .PERM,
         else => std.debug.panic("WASI: Unhandled zig stdlib error: {s}", .{@errorName(err)}),
     };
 }
@@ -447,3 +504,194 @@ fn toWasiTimestamp(ns: i128) u64 {
 }
 
 const _ = std.testing.refAllDecls();
+
+pub fn fd_tell(vm: *VirtualMachine) WasmError!void {
+    const offset_ptr = vm.popOperand(u32);
+    const fd = vm.popOperand(i32);
+
+    const host_fd = vm.getHostFd(fd);
+    const current_offset = posix.lseek_CUR_get(host_fd) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+
+    const memory = try vm.inst.getMemory(0);
+    try memory.write(u64, offset_ptr, 0, current_offset);
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
+fn toWasiFiletype(native_type: u8) wasi.filetype_t {
+    return switch (native_type) {
+        std.posix.DT.BLK => .BLOCK_DEVICE,
+        std.posix.DT.CHR => .CHARACTER_DEVICE,
+        std.posix.DT.DIR => .DIRECTORY,
+        std.posix.DT.LNK => .SYMBOLIC_LINK,
+        std.posix.DT.REG => .REGULAR_FILE,
+        std.posix.DT.SOCK => .SOCKET_STREAM,
+        else => .UNKNOWN,
+    };
+}
+
+fn writeWasiDirent(
+    mem_data: []u8,
+    memory: anytype,
+    offset: u32,
+    next_cookie: u64,
+    inode: u64,
+    name: []const u8,
+    filetype: wasi.filetype_t,
+) !void {
+    try memory.write(u64, offset, 0, next_cookie);
+    try memory.write(u64, offset + 8, 0, inode);
+    try memory.write(u32, offset + 16, 0, @as(u32, @intCast(name.len)));
+    mem_data[offset + 20] = @intFromEnum(filetype);
+    const name_offset = offset + @sizeOf(wasi.dirent_t);
+    @memcpy(mem_data[name_offset..][0..name.len], name);
+}
+
+pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
+    const bufused_ptr = vm.popOperand(u32);
+    const cookie = vm.popOperand(u64);
+    const buf_len = vm.popOperand(u32);
+    const buf_ptr = vm.popOperand(u32);
+    const fd = vm.popOperand(i32);
+
+    const memory = try vm.inst.getMemory(0);
+    const mem_data = memory.memory();
+    const host_fd = vm.getHostFd(fd);
+    const dirent_size: u32 = @sizeOf(wasi.dirent_t);
+
+    switch (native_os) {
+        .linux => {
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+                return;
+            };
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 = undefined;
+                const nread = std.os.linux.getdents64(host_fd, &kernel_buf, kernel_buf.len);
+                if (nread == 0) break;
+                if (@as(isize, @bitCast(nread)) < 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < nread) {
+                    const entry: *align(1) std.os.linux.dirent64 = @ptrCast(&kernel_buf[kernel_offset]);
+                    const name = mem.sliceTo(@as([*:0]u8, @ptrCast(&entry.name)), 0);
+                    kernel_offset += entry.reclen;
+
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
+                    if (bytes_used + entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
+                    bytes_used += entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        .macos, .ios, .tvos, .watchos, .visionos => {
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+                return;
+            };
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+            var seek: i64 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
+                const nread = std.c.getdirentries(host_fd, &kernel_buf, kernel_buf.len, &seek);
+                if (nread <= 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < @as(usize, @intCast(nread))) {
+                    const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
+                    const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
+                    kernel_offset += entry.reclen;
+
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
+                    if (bytes_used + entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
+                    bytes_used += entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        .freebsd, .openbsd, .netbsd, .dragonfly => {
+            posix.lseek_SET(host_fd, 0) catch |err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+                return;
+            };
+
+            var entry_idx: u64 = 0;
+            var bytes_used: u32 = 0;
+
+            while (true) {
+                var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
+                const nread = std.c.getdents(host_fd, &kernel_buf, kernel_buf.len);
+                if (nread <= 0) break;
+
+                var kernel_offset: usize = 0;
+                while (kernel_offset < @as(usize, @intCast(nread))) {
+                    const entry: *align(1) std.c.dirent = @ptrCast(&kernel_buf[kernel_offset]);
+                    const name = @as([*]const u8, @ptrCast(&entry.name))[0..entry.namlen];
+                    kernel_offset += entry.reclen;
+
+                    if (entry_idx < cookie) {
+                        entry_idx += 1;
+                        continue;
+                    }
+
+                    const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
+                    if (bytes_used + entry_size > buf_len) {
+                        try memory.write(u32, bufused_ptr, 0, bytes_used);
+                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+                        return;
+                    }
+
+                    try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.fileno, name, toWasiFiletype(entry.type));
+                    bytes_used += entry_size;
+                    entry_idx += 1;
+                }
+            }
+
+            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        },
+
+        else => {
+            @compileError("fd_readdir not implemented for this platform");
+        },
+    }
+}
