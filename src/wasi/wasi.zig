@@ -55,6 +55,57 @@ pub fn args_sizes_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
+pub fn environ_get(vm: *VirtualMachine) WasmError!void {
+    const environ_buf_ptr = vm.popOperand(u32);
+    const environ_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+    const data = memory.memory();
+
+    var environ_buf_i: usize = 0;
+    var i: usize = 0;
+    var iter = vm.wasi_env.iterator();
+    while (iter.next()) |entry| {
+        const env_i_ptr = environ_buf_ptr + environ_buf_i;
+        const key = entry.key_ptr.*;
+        const value = entry.value_ptr.*;
+
+        // Write "KEY=value\0" to WASI memory
+        @memcpy(data[env_i_ptr..][0..key.len], key);
+        data[env_i_ptr + key.len] = '=';
+        @memcpy(data[env_i_ptr + key.len + 1 ..][0..value.len], value);
+        data[env_i_ptr + key.len + 1 + value.len] = 0;
+
+        const env_len = key.len + 1 + value.len + 1; // key + '=' + value + '\0'
+        try memory.write(u32, environ_ptr, 4 * @as(u32, @intCast(i)), @as(u32, @intCast(env_i_ptr)));
+
+        environ_buf_i += env_len;
+        i += 1;
+    }
+
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
+pub fn environ_sizes_get(vm: *VirtualMachine) WasmError!void {
+    const environ_buf_size_ptr = vm.popOperand(u32);
+    const environc_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+
+    const environc = vm.wasi_env.count();
+    try memory.write(u32, environc_ptr, 0, @as(u32, @intCast(environc)));
+
+    var buf_size: usize = 0;
+    var iter = vm.wasi_env.iterator();
+    while (iter.next()) |entry| {
+        // key + '=' + value + '\0'
+        buf_size += entry.key_ptr.*.len + 1 + entry.value_ptr.*.len + 1;
+    }
+    try memory.write(u32, environ_buf_size_ptr, 0, @as(u32, @intCast(buf_size)));
+
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
 pub fn clock_time_get(vm: *VirtualMachine) WasmError!void {
     const timestamp_ptr = vm.popOperand(u32);
     const precision = vm.popOperand(i64); // FIXME: we should probably be using this
