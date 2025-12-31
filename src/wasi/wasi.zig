@@ -486,15 +486,9 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
         }
     };
 
-    // Add the opened file to the wasi preopens map
-    // Use the host_fd as both the wasi_fd and host_fd (direct mapping)
-    // FIXME: This should use a separate fd allocation strategy
-    vm.inst.addWasiPreopen(opened_fd, "", opened_fd) catch {
-        _ = posix.close(opened_fd);
-        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.NOMEM));
-        return;
-    };
-
+    // Return the host fd directly to WASM
+    // The opened file is not added to preopens (only preopened directories go there)
+    // WASM will use this host fd directly via passthrough in getHostFd()
     try memory.write(i32, fd_ptr, 0, opened_fd);
 
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));

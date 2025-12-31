@@ -91,12 +91,7 @@ pub const VirtualMachine = struct {
     }
 
     pub fn getHostFd(self: *VirtualMachine, wasi_fd: wasi.fd_t) posix.fd_t {
-        const preopen = self.lookupWasiPreopen(wasi_fd) orelse {
-            // No mapping exists for this WASI fd.
-            // Return invalid fd (-1) instead of falling back to raw wasi_fd.
-            // This ensures WASI fds are isolated unless explicitly mapped.
-            return @as(posix.fd_t, @bitCast(@as(i32, -1)));
-        };
+        const preopen = self.lookupWasiPreopen(wasi_fd) orelse return wasi_fd;
 
         return preopen.host_fd;
     }
