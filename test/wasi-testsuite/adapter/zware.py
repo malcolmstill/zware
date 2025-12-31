@@ -67,6 +67,10 @@ def compute_argv(test_path: str,
     """
     argv = [] + ZWARE_RUN
 
+    # Isolate stdio for tests to prevent blocking on stdin
+    # Tests should not interact with the host's terminal
+    argv.append("--no-inherit-stdio")
+
     # Add environment variables using --env KEY=VALUE
     for key, value in env.items():
         argv.extend(["--env", f"{key}={value}"])

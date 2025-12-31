@@ -24,10 +24,11 @@ const global = struct {
 
 const Config = struct {
     wasm_path: []const u8,
-    function_name: ?[]const u8 = null,  // null means auto-detect
+    function_name: ?[]const u8 = null, // null means auto-detect
     wasm_args: []const []const u8,
     env_vars: std.StringHashMap([]const u8),
     dir_mappings: std.StringHashMap([]const u8),
+    inherit_stdio: bool = true, // default to true for CLI UX
 
     fn deinit(self: *Config) void {
         self.env_vars.deinit();
@@ -56,6 +57,7 @@ fn parseArgs(args: []const []const u8) !Config {
 
     var wasm_path: ?[]const u8 = null;
     var function_name: ?[]const u8 = null;
+    var inherit_stdio: bool = true; // default to true
     var i: usize = 0;
 
     while (i < args.len) : (i += 1) {
@@ -72,7 +74,7 @@ fn parseArgs(args: []const []const u8) !Config {
                 std.log.err("invalid --env format, expected KEY=VALUE", .{});
                 std.process.exit(0xff);
             };
-            try env_vars.put(env_spec[0..eq_pos], env_spec[eq_pos + 1..]);
+            try env_vars.put(env_spec[0..eq_pos], env_spec[eq_pos + 1 ..]);
         } else if (std.mem.eql(u8, arg, "--dir")) {
             i += 1;
             if (i >= args.len) {
@@ -84,7 +86,7 @@ fn parseArgs(args: []const []const u8) !Config {
                 std.log.err("invalid --dir format, expected GUEST::HOST", .{});
                 std.process.exit(0xff);
             };
-            try dir_mappings.put(dir_spec[0..sep_pos], dir_spec[sep_pos + 2..]);
+            try dir_mappings.put(dir_spec[0..sep_pos], dir_spec[sep_pos + 2 ..]);
         } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--function")) {
             i += 1;
             if (i >= args.len) {
@@ -92,6 +94,10 @@ fn parseArgs(args: []const []const u8) !Config {
                 std.process.exit(0xff);
             }
             function_name = args[i];
+        } else if (std.mem.eql(u8, arg, "--inherit-stdio")) {
+            inherit_stdio = true;
+        } else if (std.mem.eql(u8, arg, "--no-inherit-stdio")) {
+            inherit_stdio = false;
         } else if (std.mem.eql(u8, arg, "--version")) {
             std.debug.print("zware-run 0.0.1\n", .{});
             std.process.exit(0);
@@ -117,6 +123,7 @@ fn parseArgs(args: []const []const u8) !Config {
         .wasm_args = try wasm_args.toOwnedSlice(global.alloc),
         .env_vars = env_vars,
         .dir_mappings = dir_mappings,
+        .inherit_stdio = inherit_stdio,
     };
 }
 
@@ -132,18 +139,22 @@ fn printUsage() void {
         \\  -f, --function NAME   Specify function to call (default: _start)
         \\  --env KEY=VALUE       Set environment variable for WASI
         \\  --dir GUEST::HOST     Map directory for WASI preopens
+        \\  --inherit-stdio       Inherit stdin/stdout/stderr from host (default)
+        \\  --no-inherit-stdio    Isolate stdio (useful for testing)
         \\  --version             Show version
         \\  --help, -h            Show this help
         \\
         \\If no function is specified with -f, attempts to call _start (WASI entry point).
         \\All arguments after FILE.wasm are passed to the WASM program.
         \\WASI imports are always available regardless of which function is called.
+        \\By default, stdio is inherited from the host for normal CLI usage.
         \\
         \\Examples:
         \\  zware-run -f fib fib.wasm             # Call fib() function
         \\  zware-run program.wasm arg1 arg2      # Call _start with arguments
         \\  zware-run --env FOO=bar program.wasm  # Call _start with env var
         \\  zware-run --dir /::. program.wasm arg1 arg2   # Call _start with dir mapping and args
+        \\  zware-run --no-inherit-stdio test.wasm        # Run with isolated stdio
         \\
     ) catch {};
     stderr.flush() catch {};
@@ -225,96 +236,73 @@ fn setupWasiImports(store: *zware.Store) !void {
     const wasi_module = "wasi_snapshot_preview1";
 
     // args_get(argv: **u8, argv_buf: *u8) -> errno
-    try store.exposeHostFunction(wasi_module, "args_get", wasi_args_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "args_get", wasi_args_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // args_sizes_get(argc: *u32, argv_buf_size: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "args_sizes_get", wasi_args_sizes_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "args_sizes_get", wasi_args_sizes_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // environ_get(environ: **u8, environ_buf: *u8) -> errno
-    try store.exposeHostFunction(wasi_module, "environ_get", wasi_environ_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "environ_get", wasi_environ_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // environ_sizes_get(environc: *u32, environ_buf_size: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "environ_sizes_get", wasi_environ_sizes_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "environ_sizes_get", wasi_environ_sizes_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // clock_time_get(id: u32, precision: u64, timestamp: *u64) -> errno
-    try store.exposeHostFunction(wasi_module, "clock_time_get", wasi_clock_time_get, 0,
-        &[_]zware.ValType{.I32, .I64, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "clock_time_get", wasi_clock_time_get, 0, &[_]zware.ValType{ .I32, .I64, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_close(fd: i32) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_close", wasi_fd_close, 0,
-        &[_]zware.ValType{.I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_close", wasi_fd_close, 0, &[_]zware.ValType{.I32}, &[_]zware.ValType{.I32});
 
     // fd_fdstat_get(fd: i32, stat: *fdstat) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_fdstat_get", wasi_fd_fdstat_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_fdstat_get", wasi_fd_fdstat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_fdstat_set_flags(fd: i32, flags: u16) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_fdstat_set_flags", wasi_fd_fdstat_set_flags, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_fdstat_set_flags", wasi_fd_fdstat_set_flags, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_filestat_get(fd: i32, stat: *filestat) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_filestat_get", wasi_fd_filestat_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_filestat_get", wasi_fd_filestat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_prestat_get(fd: i32, prestat: *prestat) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_prestat_get", wasi_fd_prestat_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_prestat_get", wasi_fd_prestat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_prestat_dir_name(fd: i32, path: *u8, path_len: u32) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_prestat_dir_name", wasi_fd_prestat_dir_name, 0,
-        &[_]zware.ValType{.I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_prestat_dir_name", wasi_fd_prestat_dir_name, 0, &[_]zware.ValType{ .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_read(fd: i32, iovs: *const iovec, iovs_len: u32, nread: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_read", wasi_fd_read, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_read", wasi_fd_read, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_readdir(fd: i32, buf: *u8, buf_len: u32, cookie: u64, bufused: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_readdir", wasi_fd_readdir, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I64, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_readdir", wasi_fd_readdir, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I64, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_seek(fd: i32, offset: i64, whence: u8, newoffset: *u64) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_seek", wasi_fd_seek, 0,
-        &[_]zware.ValType{.I32, .I64, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_seek", wasi_fd_seek, 0, &[_]zware.ValType{ .I32, .I64, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_tell(fd: i32, offset: *u64) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_tell", wasi_fd_tell, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_tell", wasi_fd_tell, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // fd_write(fd: i32, iovs: *const ciovec, iovs_len: u32, nwritten: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "fd_write", wasi_fd_write, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "fd_write", wasi_fd_write, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // path_create_directory(fd: i32, path: *const u8, path_len: u32) -> errno
-    try store.exposeHostFunction(wasi_module, "path_create_directory", wasi_path_create_directory, 0,
-        &[_]zware.ValType{.I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "path_create_directory", wasi_path_create_directory, 0, &[_]zware.ValType{ .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // path_filestat_get(fd: i32, flags: u32, path: *const u8, path_len: u32, buf: *filestat) -> errno
-    try store.exposeHostFunction(wasi_module, "path_filestat_get", wasi_path_filestat_get, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "path_filestat_get", wasi_path_filestat_get, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // path_open(fd: i32, dirflags: u32, path: *const u8, path_len: u32, oflags: u32, fs_rights_base: u64, fs_rights_inheriting: u64, fdflags: u32, opened_fd: *i32) -> errno
-    try store.exposeHostFunction(wasi_module, "path_open", wasi_path_open, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32, .I32, .I64, .I64, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "path_open", wasi_path_open, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32, .I64, .I64, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // path_readlink(fd: i32, path: *const u8, path_len: u32, buf: *u8, buf_len: u32, bufused: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "path_readlink", wasi_path_readlink, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "path_readlink", wasi_path_readlink, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // poll_oneoff(in: *const subscription, out: *event, nsubscriptions: u32, nevents: *u32) -> errno
-    try store.exposeHostFunction(wasi_module, "poll_oneoff", wasi_poll_oneoff, 0,
-        &[_]zware.ValType{.I32, .I32, .I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "poll_oneoff", wasi_poll_oneoff, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
 
     // proc_exit(rval: i32) -> !
-    try store.exposeHostFunction(wasi_module, "proc_exit", wasi_proc_exit, 0,
-        &[_]zware.ValType{.I32}, &[_]zware.ValType{});
+    try store.exposeHostFunction(wasi_module, "proc_exit", wasi_proc_exit, 0, &[_]zware.ValType{.I32}, &[_]zware.ValType{});
 
     // random_get(buf: *u8, buf_len: u32) -> errno
-    try store.exposeHostFunction(wasi_module, "random_get", wasi_random_get, 0,
-        &[_]zware.ValType{.I32, .I32}, &[_]zware.ValType{.I32});
+    try store.exposeHostFunction(wasi_module, "random_get", wasi_random_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
 }
 
 fn main2() !void {
@@ -381,9 +369,13 @@ fn main2() !void {
         try instance.wasi_env.put(global.alloc, entry.key_ptr.*, entry.value_ptr.*);
     }
 
+    // Setup WASI stdio (fds 0, 1, 2)
+    if (config.inherit_stdio) {
+        try instance.inheritStdio();
+    }
+
     // Setup WASI preopens (directory mappings)
-    // Start with stdin (0), stdout (1), stderr (2) - these are standard
-    // Custom directories start at fd 3
+    // Preopens always start at fd 3, per WASI convention (fds 0-2 reserved for stdio)
     var preopen_fd: i32 = 3;
     var dir_iter = config.dir_mappings.iterator();
     while (dir_iter.next()) |entry| {

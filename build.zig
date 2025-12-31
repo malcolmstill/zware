@@ -74,7 +74,7 @@ pub fn build(b: *Build) !void {
         "tests/rust/testsuite/wasm32-wasip1",
         "tests/assemblyscript/testsuite/wasm32-wasip1",
         "-r",
-        b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
+        b.pathFromRoot("test/wasi-testsuite/adapter/zware.py"),
     });
     run_wasi_tests.setCwd(wasi_testsuite_dep.path("."));
     run_wasi_tests.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
@@ -125,11 +125,11 @@ pub fn build(b: *Build) !void {
         for (test_list.items) |test_name| {
             const run_test = b.addSystemCommand(&.{
                 "python3",
-                b.pathFromRoot("tools/run-single-wasi-test.py"),
+                b.pathFromRoot("test/wasi-testsuite/run-single-wasi-test.py"),
                 suite.path,
                 test_name,
                 "-r",
-                b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
+                b.pathFromRoot("test/wasi-testsuite/adapter/zware.py"),
                 "--test-runner",
                 "test-runner/wasi_test_runner.py",
             });

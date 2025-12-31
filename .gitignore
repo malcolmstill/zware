@@ -2,3 +2,9 @@ zig-cache
 .zig-cache
 zig-out
 test/testrunner/bin
+
+# WASI testsuite generated files
+test/wasi-testsuite/discovered_tests.json
+__pycache__/
+**/__pycache__/
+*.pyc

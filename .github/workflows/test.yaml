@@ -41,7 +41,7 @@ jobs:
       - name: Discover tests
         id: discover
         run: |
-          MATRIX=$(python3 tools/discover-wasi-tests.py /tmp/wasi-testsuite --format github-matrix)
+          MATRIX=$(python3 test/wasi-testsuite/discover-wasi-tests.py /tmp/wasi-testsuite --format github-matrix)
           echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
 
   wasi-testsuite:

@@ -462,6 +462,15 @@ pub const Instance = struct {
         });
     }
 
+    /// Inherit stdin, stdout, and stderr from the host process.
+    /// Maps WASI fds 0, 1, 2 to host fds 0, 1, 2 respectively.
+    /// This matches the behavior of wasmtime's inherit_stdio().
+    pub fn inheritStdio(self: *Instance) !void {
+        try self.addWasiPreopen(0, "stdin", 0);
+        try self.addWasiPreopen(1, "stdout", 1);
+        try self.addWasiPreopen(2, "stderr", 2);
+    }
+
     // FIXME: hide any allocation / deinit inside Instance
     // Caller must call std.process.argsFree on returned args
     //
