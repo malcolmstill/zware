@@ -1,4 +1,5 @@
 const std = @import("std");
+const builtin = @import("builtin");
 const mem = std.mem;
 const math = std.math;
 const posix = std.posix;
@@ -496,5 +497,178 @@ pub const WasiPreopen = struct {
     name: []const u8,
     host_fd: std.posix.fd_t,
 };
+
+test "addWasiPreopen registers preopens correctly" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const testing = std.testing;
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var store = Store.init(alloc);
+
+    // Create a minimal module (empty wasm with just the header)
+    const empty_wasm = &[_]u8{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
+    var module = Module.init(alloc, empty_wasm);
+    try module.decode();
+
+    var instance = Instance.init(alloc, &store, module);
+
+    // Add a preopen entry
+    const test_wasi_fd: wasi.fd_t = 3;
+    const test_name = "/tmp/test";
+    const test_host_fd: posix.fd_t = 42;
+
+    try instance.addWasiPreopen(test_wasi_fd, test_name, test_host_fd);
+
+    // Verify the entry was added
+    const preopen = instance.wasi_preopens.get(test_wasi_fd);
+    try testing.expect(preopen != null);
+    try testing.expectEqual(test_wasi_fd, preopen.?.wasi_fd);
+    try testing.expectEqualStrings(test_name, preopen.?.name);
+    try testing.expectEqual(test_host_fd, preopen.?.host_fd);
+
+    // Add another preopen and verify both exist
+    const test_wasi_fd2: wasi.fd_t = 4;
+    const test_name2 = "/home/user";
+    const test_host_fd2: posix.fd_t = 99;
+
+    try instance.addWasiPreopen(test_wasi_fd2, test_name2, test_host_fd2);
+
+    // Verify both entries exist
+    try testing.expect(instance.wasi_preopens.get(test_wasi_fd) != null);
+    try testing.expect(instance.wasi_preopens.get(test_wasi_fd2) != null);
+    try testing.expectEqualStrings(test_name2, instance.wasi_preopens.get(test_wasi_fd2).?.name);
+}
+
+test "addWasiPreopen overwrites existing fd" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const testing = std.testing;
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var store = Store.init(alloc);
+
+    const empty_wasm = &[_]u8{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
+    var module = Module.init(alloc, empty_wasm);
+    try module.decode();
+
+    var instance = Instance.init(alloc, &store, module);
+
+    // Add initial preopen
+    const test_fd: wasi.fd_t = 3;
+    try instance.addWasiPreopen(test_fd, "/original", 10);
+
+    // Overwrite with same fd but different values
+    try instance.addWasiPreopen(test_fd, "/updated", 20);
+
+    // Verify the entry was overwritten
+    const preopen = instance.wasi_preopens.get(test_fd);
+    try testing.expect(preopen != null);
+    try testing.expectEqualStrings("/updated", preopen.?.name);
+    try testing.expectEqual(@as(posix.fd_t, 20), preopen.?.host_fd);
+
+    // Verify only one entry exists for this fd
+    try testing.expectEqual(@as(usize, 1), instance.wasi_preopens.count());
+}
+
+test "addWasiPreopen edge cases" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const testing = std.testing;
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var store = Store.init(alloc);
+
+    const empty_wasm = &[_]u8{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
+    var module = Module.init(alloc, empty_wasm);
+    try module.decode();
+
+    var instance = Instance.init(alloc, &store, module);
+
+    // Test fd=0 (edge case - typically stdin)
+    try instance.addWasiPreopen(0, "/fd0", 100);
+    try testing.expect(instance.wasi_preopens.get(0) != null);
+    try testing.expectEqualStrings("/fd0", instance.wasi_preopens.get(0).?.name);
+
+    // Test empty name string
+    try instance.addWasiPreopen(1, "", 101);
+    try testing.expect(instance.wasi_preopens.get(1) != null);
+    try testing.expectEqualStrings("", instance.wasi_preopens.get(1).?.name);
+
+    // Test name with special characters
+    try instance.addWasiPreopen(2, "/path/with spaces/and-dashes", 102);
+    try testing.expect(instance.wasi_preopens.get(2) != null);
+    try testing.expectEqualStrings("/path/with spaces/and-dashes", instance.wasi_preopens.get(2).?.name);
+}
+
+test "addWasiPreopen integrates with VirtualMachine lookup" {
+    // Skip on Windows: posix.fd_t is *anyopaque (HANDLE), not an integer
+    // TODO: Windows file descriptor implementation
+    if (builtin.os.tag == .windows) return error.SkipZigTest;
+
+    const testing = std.testing;
+    const ArenaAllocator = std.heap.ArenaAllocator;
+    var arena = ArenaAllocator.init(testing.allocator);
+    defer arena.deinit();
+
+    const alloc = arena.allocator();
+
+    var store = Store.init(alloc);
+
+    const empty_wasm = &[_]u8{ 0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00 };
+    var module = Module.init(alloc, empty_wasm);
+    try module.decode();
+
+    var instance = Instance.init(alloc, &store, module);
+
+    // Add preopens
+    try instance.addWasiPreopen(3, "/tmp", 50);
+    try instance.addWasiPreopen(4, "/home", 60);
+
+    // Create a VirtualMachine and test lookup functions
+    var op_stack: [1024]u64 = undefined;
+    var frame_stack: [1024]VirtualMachine.Frame = undefined;
+    var label_stack: [1024]VirtualMachine.Label = undefined;
+
+    var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], &instance);
+
+    // Test lookupWasiPreopen
+    const preopen3 = vm.lookupWasiPreopen(3);
+    try testing.expect(preopen3 != null);
+    try testing.expectEqualStrings("/tmp", preopen3.?.name);
+    try testing.expectEqual(@as(posix.fd_t, 50), preopen3.?.host_fd);
+
+    const preopen4 = vm.lookupWasiPreopen(4);
+    try testing.expect(preopen4 != null);
+    try testing.expectEqualStrings("/home", preopen4.?.name);
+
+    // Test lookup of non-existent fd returns null
+    try testing.expect(vm.lookupWasiPreopen(99) == null);
+
+    // Test getHostFd returns mapped fd
+    try testing.expectEqual(@as(posix.fd_t, 50), vm.getHostFd(3));
+    try testing.expectEqual(@as(posix.fd_t, 60), vm.getHostFd(4));
+
+    // Test getHostFd returns input fd when not in preopens (passthrough)
+    try testing.expectEqual(@as(posix.fd_t, 99), vm.getHostFd(99));
+}
 
 const _ = std.testing.refAllDecls();
