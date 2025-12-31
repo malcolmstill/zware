@@ -26,6 +26,44 @@ jobs:
       - uses: mlugg/setup-zig@v2.0.5
       - name: Run testsuite
         run: zig build testsuite
+  wasi-testsuite-discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Fetch WASI testsuite
+        run: |
+          git clone --depth 1 --branch prod/testsuite-base https://github.com/WebAssembly/wasi-testsuite.git /tmp/wasi-testsuite
+      - name: Discover tests
+        id: discover
+        run: |
+          MATRIX=$(python3 test/wasi-testsuite/discover-wasi-tests.py /tmp/wasi-testsuite --format github-matrix)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
+  wasi-testsuite:
+    needs: wasi-testsuite-discover
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJson(needs.wasi-testsuite-discover.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    name: wasi-${{ matrix.suite }}-${{ matrix.test }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - uses: mlugg/setup-zig@v2.0.5
+      - name: Fetch WASI testsuite
+        run: |
+          git clone --depth 1 --branch prod/testsuite-base https://github.com/WebAssembly/wasi-testsuite.git /tmp/wasi-testsuite
+          pip3 install -r /tmp/wasi-testsuite/test-runner/requirements.txt
+      - name: Run WASI test ${{ matrix.suite }}/${{ matrix.test }}
+        run: zig build wasi-${{ matrix.suite }}-${{ matrix.test }}
+
   lint:
     runs-on: ubuntu-latest
     steps:

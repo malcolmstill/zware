@@ -12,6 +12,10 @@
             .url = "https://github.com/WebAssembly/testsuite/archive/e25ae159357c055b3a6fac99043644e208d26d2a.tar.gz",
             .hash = "N-V-__8AAKtbtgBFkB_BMIKSUqC-temKvHmuqBSvjBlf4hD6",
         },
+        .@"wasi-testsuite" = .{
+            .url = "https://github.com/WebAssembly/wasi-testsuite/archive/refs/heads/prod/testsuite-base.tar.gz",
+            .hash = "N-V-__8AAHAN1wCGU7h8wcRWoFr0TLZ_5M4KqbBYKfkLqIoY",
+        },
     },
     .paths = .{
         "build.zig",

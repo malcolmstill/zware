@@ -1,4 +1,5 @@
-const Build = @import("std").Build;
+const std = @import("std");
+const Build = std.Build;
 
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -60,9 +61,93 @@ pub fn build(b: *Build) !void {
         testsuite_step.dependOn(&run_test.step);
     }
 
+    // WASI testsuite integration - individual and aggregated test steps
+    const wasi_testsuite_dep = b.dependency("wasi-testsuite", .{});
+
+    // Aggregated step that runs all WASI tests at once
+    const wasi_testsuite_step = b.step("wasi-testsuite", "Run WASI testsuite tests (all languages)");
+    const run_wasi_tests = b.addSystemCommand(&.{
+        "python3",
+        "test-runner/wasi_test_runner.py",
+        "-t",
+        "tests/c/testsuite/wasm32-wasip1",
+        "tests/rust/testsuite/wasm32-wasip1",
+        "tests/assemblyscript/testsuite/wasm32-wasip1",
+        "-r",
+        b.pathFromRoot("test/wasi-testsuite/adapter/zware.py"),
+    });
+    run_wasi_tests.setCwd(wasi_testsuite_dep.path("."));
+    run_wasi_tests.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
+    run_wasi_tests.step.dependOn(b.getInstallStep());
+    wasi_testsuite_step.dependOn(&run_wasi_tests.step);
+
+    // Individual test steps - dynamically discovered from testsuite
+    // Create a helper function to discover and register tests for a suite
+    const TestSuite = struct {
+        key: []const u8,
+        path: []const u8,
+    };
+
+    const test_suites = [_]TestSuite{
+        .{ .key = "c", .path = "tests/c/testsuite/wasm32-wasip1" },
+        .{ .key = "rust", .path = "tests/rust/testsuite/wasm32-wasip1" },
+        .{ .key = "as", .path = "tests/assemblyscript/testsuite/wasm32-wasip1" },
+    };
+
+    for (test_suites) |suite| {
+        // Get the actual path to the testsuite directory
+        const suite_dir_path = wasi_testsuite_dep.path(suite.path).getPath(b);
+
+        // Open and scan the directory for .wasm files
+        var suite_dir = std.fs.cwd().openDir(suite_dir_path, .{ .iterate = true }) catch continue;
+        defer suite_dir.close();
+
+        var test_list: std.ArrayList([]const u8) = .empty;
+        defer test_list.deinit(b.allocator);
+
+        var iter = suite_dir.iterate();
+        while (iter.next() catch null) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".wasm")) {
+                const test_name = entry.name[0 .. entry.name.len - 5]; // remove .wasm extension
+                const test_name_owned = b.allocator.dupe(u8, test_name) catch continue;
+                test_list.append(b.allocator, test_name_owned) catch continue;
+            }
+        }
+
+        // Sort test names for deterministic ordering
+        std.mem.sort([]const u8, test_list.items, {}, struct {
+            fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+                return std.mem.lessThan(u8, lhs, rhs);
+            }
+        }.lessThan);
+
+        // Create individual build steps for each discovered test
+        for (test_list.items) |test_name| {
+            const run_test = b.addSystemCommand(&.{
+                "python3",
+                b.pathFromRoot("test/wasi-testsuite/run-single-wasi-test.py"),
+                suite.path,
+                test_name,
+                "-r",
+                b.pathFromRoot("test/wasi-testsuite/adapter/zware.py"),
+                "--test-runner",
+                "test-runner/wasi_test_runner.py",
+            });
+            run_test.setCwd(wasi_testsuite_dep.path("."));
+            run_test.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
+            run_test.step.dependOn(b.getInstallStep());
+            b.step(
+                b.fmt("wasi-{s}-{s}", .{ suite.key, test_name }),
+                b.fmt("Run WASI {s} test: {s}", .{ suite.key, test_name }),
+            ).dependOn(&run_test.step);
+        }
+    }
+
     const test_step = b.step("test", "Run all the tests");
     test_step.dependOn(unittest_step);
     test_step.dependOn(testsuite_step);
+    // Note: WASI testsuite is not included in default test step due to external dependencies
+    // Run it explicitly with: zig build wasi-testsuite
 
     {
         const exe = b.addExecutable(.{
