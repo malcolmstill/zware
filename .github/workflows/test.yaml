@@ -57,10 +57,10 @@ jobs:
         with:
           python-version: '3.x'
       - uses: mlugg/setup-zig@v2.0.5
-      - name: Install WASI test runner dependencies
+      - name: Fetch WASI testsuite
         run: |
           git clone --depth 1 --branch prod/testsuite-base https://github.com/WebAssembly/wasi-testsuite.git /tmp/wasi-testsuite
-          pip install -e /tmp/wasi-testsuite/test-runner
+          pip3 install -r /tmp/wasi-testsuite/test-runner/requirements.txt
       - name: Run WASI test ${{ matrix.suite }}/${{ matrix.test }}
         run: zig build wasi-${{ matrix.suite }}-${{ matrix.test }}
 
