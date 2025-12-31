@@ -85,6 +85,13 @@ fn parseArgs(args: []const []const u8) !Config {
                 std.process.exit(0xff);
             };
             try dir_mappings.put(dir_spec[0..sep_pos], dir_spec[sep_pos + 2..]);
+        } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--function")) {
+            i += 1;
+            if (i >= args.len) {
+                std.log.err("-f/--function requires function name argument", .{});
+                std.process.exit(0xff);
+            }
+            function_name = args[i];
         } else if (std.mem.eql(u8, arg, "--version")) {
             std.debug.print("zware-run 0.0.1\n", .{});
             std.process.exit(0);
@@ -93,12 +100,8 @@ fn parseArgs(args: []const []const u8) !Config {
             std.process.exit(0);
         } else if (wasm_path == null) {
             wasm_path = arg;
-        } else if (function_name == null and wasm_args.items.len == 0) {
-            // Second positional arg could be function name OR first program arg
-            // We'll treat it as function name for now, but may need to adjust later
-            function_name = arg;
         } else {
-            // Remaining args are program arguments
+            // All arguments after wasm_path are program arguments
             try wasm_args.append(global.alloc, arg);
         }
     }
@@ -123,20 +126,22 @@ fn printUsage() void {
     var stderr_writer = stderr_fd.writer(&stderr_buf);
     const stderr = &stderr_writer.interface;
     stderr.writeAll(
-        \\Usage: zware-run [OPTIONS] FILE.wasm [FUNCTION] [ARGS...]
+        \\Usage: zware-run [OPTIONS] FILE.wasm [ARGS...]
         \\
         \\Options:
+        \\  -f, --function NAME   Specify function to call (default: _start)
         \\  --env KEY=VALUE       Set environment variable for WASI
         \\  --dir GUEST::HOST     Map directory for WASI preopens
         \\  --version             Show version
         \\  --help, -h            Show this help
         \\
-        \\If FUNCTION is omitted, attempts to call _start (WASI entry point).
+        \\If no function is specified with -f, attempts to call _start (WASI entry point).
+        \\All arguments after FILE.wasm are passed to the WASM program.
         \\WASI imports are always available regardless of which function is called.
         \\
         \\Examples:
-        \\  zware-run fib.wasm fib                # Call fib() function
-        \\  zware-run program.wasm                # Call _start (WASI program)
+        \\  zware-run -f fib fib.wasm             # Call fib() function
+        \\  zware-run program.wasm arg1 arg2      # Call _start with arguments
         \\  zware-run --env FOO=bar program.wasm  # Call _start with env var
         \\  zware-run --dir /::. program.wasm arg1 arg2   # Call _start with dir mapping and args
         \\
