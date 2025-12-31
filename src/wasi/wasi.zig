@@ -582,6 +582,7 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
+        error.NotLink => .INVAL, // EINVAL: Not a symbolic link (per POSIX/WASI spec for readlink)
         error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
         error.InvalidArgument => .INVAL,
         error.PermissionDenied => .PERM,
