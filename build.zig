@@ -60,9 +60,30 @@ pub fn build(b: *Build) !void {
         testsuite_step.dependOn(&run_test.step);
     }
 
+    // WASI testsuite integration - runs all test suites (C, Rust, AssemblyScript)
+    const wasi_testsuite_step = b.step("wasi-testsuite", "Run WASI testsuite tests (all languages)");
+    const wasi_testsuite_dep = b.dependency("wasi-testsuite", .{});
+    const run_wasi_tests = b.addSystemCommand(&.{
+        "python3",
+        "test-runner/wasi_test_runner.py",
+        "-t",
+        "tests/c/testsuite/wasm32-wasip1",
+        "tests/rust/testsuite/wasm32-wasip1",
+        "tests/assemblyscript/testsuite/wasm32-wasip1",
+        "-r",
+        b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
+    });
+    run_wasi_tests.setCwd(wasi_testsuite_dep.path("."));
+    run_wasi_tests.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
+    // Ensure zware-run is built before running tests
+    run_wasi_tests.step.dependOn(b.getInstallStep());
+    wasi_testsuite_step.dependOn(&run_wasi_tests.step);
+
     const test_step = b.step("test", "Run all the tests");
     test_step.dependOn(unittest_step);
     test_step.dependOn(testsuite_step);
+    // Note: WASI testsuite is not included in default test step due to external dependencies
+    // Run it explicitly with: zig build wasi-testsuite
 
     {
         const exe = b.addExecutable(.{

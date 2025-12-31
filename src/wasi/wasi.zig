@@ -425,6 +425,33 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
+/// Read the contents of a symbolic link.
+/// path_readlink(fd, path, path_len, buf, buf_len, bufused) -> errno
+pub fn path_readlink(vm: *VirtualMachine) WasmError!void {
+    const bufused_ptr = vm.popOperand(u32);
+    const buf_len = vm.popOperand(u32);
+    const buf_ptr = vm.popOperand(u32);
+    const path_len = vm.popOperand(u32);
+    const path_ptr = vm.popOperand(u32);
+    const dir_fd = vm.popOperand(i32);
+
+    const memory = try vm.inst.getMemory(0);
+    const data = memory.memory();
+
+    const sub_path = data[path_ptr..][0..path_len];
+    const buf = data[buf_ptr..][0..buf_len];
+
+    const host_fd = vm.getHostFd(dir_fd);
+
+    const result = posix.readlinkat(host_fd, sub_path, buf) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+
+    try memory.write(u32, bufused_ptr, 0, @intCast(result.len));
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
 // FIXME: implement
 pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
     const param0 = vm.popOperand(i32);
@@ -570,6 +597,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 = undefined;
@@ -590,18 +618,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
@@ -614,6 +652,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
             var seek: i64 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
@@ -633,18 +672,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
@@ -656,6 +705,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
@@ -675,18 +725,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.fileno, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
