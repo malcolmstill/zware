@@ -26,169 +26,40 @@ jobs:
       - uses: mlugg/setup-zig@v2.0.5
       - name: Run testsuite
         run: zig build testsuite
+  wasi-testsuite-discover:
+    runs-on: ubuntu-latest
+    outputs:
+      matrix: ${{ steps.discover.outputs.matrix }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Fetch WASI testsuite
+        run: |
+          git clone --depth 1 --branch prod/testsuite-base https://github.com/WebAssembly/wasi-testsuite.git /tmp/wasi-testsuite
+      - name: Discover tests
+        id: discover
+        run: |
+          MATRIX=$(python3 tools/discover-wasi-tests.py /tmp/wasi-testsuite --format github-matrix)
+          echo "matrix=$MATRIX" >> $GITHUB_OUTPUT
+
   wasi-testsuite:
+    needs: wasi-testsuite-discover
     strategy:
       fail-fast: false
-      matrix:
-        os: [ubuntu-latest]
-        include:
-          # C tests (14)
-          - suite: c
-            test: clock_getres-monotonic
-          - suite: c
-            test: clock_getres-realtime
-          - suite: c
-            test: clock_gettime-monotonic
-          - suite: c
-            test: clock_gettime-realtime
-          - suite: c
-            test: fdopendir-with-access
-          - suite: c
-            test: fopen-with-access
-          - suite: c
-            test: fopen-with-no-access
-          - suite: c
-            test: lseek
-          - suite: c
-            test: pread-with-access
-          - suite: c
-            test: pwrite-with-access
-          - suite: c
-            test: pwrite-with-append
-          - suite: c
-            test: sock_shutdown-invalid_fd
-          - suite: c
-            test: sock_shutdown-not_sock
-          - suite: c
-            test: stat-dev-ino
-          # Rust tests (46)
-          - suite: rust
-            test: big_random_buf
-          - suite: rust
-            test: clock_time_get
-          - suite: rust
-            test: close_preopen
-          - suite: rust
-            test: dangling_fd
-          - suite: rust
-            test: dangling_symlink
-          - suite: rust
-            test: directory_seek
-          - suite: rust
-            test: dir_fd_op_failures
-          - suite: rust
-            test: fd_advise
-          - suite: rust
-            test: fd_fdstat_set_rights
-          - suite: rust
-            test: fd_filestat_set
-          - suite: rust
-            test: fd_flags_set
-          - suite: rust
-            test: fd_readdir
-          - suite: rust
-            test: file_allocate
-          - suite: rust
-            test: file_pread_pwrite
-          - suite: rust
-            test: file_seek_tell
-          - suite: rust
-            test: file_truncation
-          - suite: rust
-            test: file_unbuffered_write
-          - suite: rust
-            test: fstflags_validate
-          - suite: rust
-            test: interesting_paths
-          - suite: rust
-            test: isatty
-          - suite: rust
-            test: nofollow_errors
-          - suite: rust
-            test: overwrite_preopen
-          - suite: rust
-            test: path_exists
-          - suite: rust
-            test: path_filestat
-          - suite: rust
-            test: path_link
-          - suite: rust
-            test: path_open_create_existing
-          - suite: rust
-            test: path_open_dirfd_not_dir
-          - suite: rust
-            test: path_open_missing
-          - suite: rust
-            test: path_open_nonblock
-          - suite: rust
-            test: path_open_preopen
-          - suite: rust
-            test: path_open_read_write
-          - suite: rust
-            test: path_rename
-          - suite: rust
-            test: path_rename_dir_trailing_slashes
-          - suite: rust
-            test: path_symlink_trailing_slashes
-          - suite: rust
-            test: poll_oneoff_stdio
-          - suite: rust
-            test: readlink
-          - suite: rust
-            test: remove_directory_trailing_slashes
-          - suite: rust
-            test: remove_nonempty_directory
-          - suite: rust
-            test: renumber
-          - suite: rust
-            test: sched_yield
-          - suite: rust
-            test: stdio
-          - suite: rust
-            test: symlink_create
-          - suite: rust
-            test: symlink_filestat
-          - suite: rust
-            test: symlink_loop
-          - suite: rust
-            test: truncation_rights
-          - suite: rust
-            test: unlink_file_trailing_slashes
-          # AssemblyScript tests (12)
-          - suite: as
-            test: args_get-multiple-arguments
-          - suite: as
-            test: args_sizes_get-multiple-arguments
-          - suite: as
-            test: args_sizes_get-no-arguments
-          - suite: as
-            test: environ_get-multiple-variables
-          - suite: as
-            test: environ_sizes_get-multiple-variables
-          - suite: as
-            test: environ_sizes_get-no-variables
-          - suite: as
-            test: fd_write-to-invalid-fd
-          - suite: as
-            test: fd_write-to-stdout
-          - suite: as
-            test: proc_exit-failure
-          - suite: as
-            test: proc_exit-success
-          - suite: as
-            test: random_get-non-zero-length
-          - suite: as
-            test: random_get-zero-length
-    runs-on: ${{matrix.os}}
-    name: wasi-${{matrix.suite}}-${{matrix.test}}
+      matrix: ${{ fromJson(needs.wasi-testsuite-discover.outputs.matrix) }}
+    runs-on: ubuntu-latest
+    name: wasi-${{ matrix.suite }}-${{ matrix.test }}
     steps:
       - uses: actions/checkout@v2
       - uses: actions/setup-python@v4
         with:
           python-version: '3.x'
       - uses: mlugg/setup-zig@v2.0.5
-      - name: Run WASI test ${{matrix.suite}}/${{matrix.test}}
-        run: zig build wasi-${{matrix.suite}}-${{matrix.test}}
+      - name: Run WASI test ${{ matrix.suite }}/${{ matrix.test }}
+        run: zig build wasi-${{ matrix.suite }}-${{ matrix.test }}
+
   lint:
     runs-on: ubuntu-latest
     steps:

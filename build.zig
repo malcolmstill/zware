@@ -1,4 +1,5 @@
-const Build = @import("std").Build;
+const std = @import("std");
+const Build = std.Build;
 
 pub fn build(b: *Build) !void {
     const target = b.standardTargetOptions(.{});
@@ -80,92 +81,66 @@ pub fn build(b: *Build) !void {
     run_wasi_tests.step.dependOn(b.getInstallStep());
     wasi_testsuite_step.dependOn(&run_wasi_tests.step);
 
-    // Individual test steps for granular CI visibility
-    const wasi_c_tests = [_][]const u8{
-        "clock_getres-monotonic",      "clock_getres-realtime",
-        "clock_gettime-monotonic",     "clock_gettime-realtime",
-        "fdopendir-with-access",       "fopen-with-access",
-        "fopen-with-no-access",        "lseek",
-        "pread-with-access",           "pwrite-with-access",
-        "pwrite-with-append",          "sock_shutdown-invalid_fd",
-        "sock_shutdown-not_sock",      "stat-dev-ino",
+    // Individual test steps - dynamically discovered from testsuite
+    // Create a helper function to discover and register tests for a suite
+    const TestSuite = struct {
+        key: []const u8,
+        path: []const u8,
     };
-    for (wasi_c_tests) |test_name| {
-        const run_test = b.addSystemCommand(&.{
-            "python3",
-            b.pathFromRoot("tools/run-single-wasi-test.py"),
-            "tests/c/testsuite/wasm32-wasip1",
-            test_name,
-            "-r", b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
-            "--test-runner", "test-runner/wasi_test_runner.py",
-        });
-        run_test.setCwd(wasi_testsuite_dep.path("."));
-        run_test.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
-        run_test.step.dependOn(b.getInstallStep());
-        b.step(b.fmt("wasi-c-{s}", .{test_name}), b.fmt("Run WASI C test: {s}", .{test_name})).dependOn(&run_test.step);
-    }
 
-    const wasi_rust_tests = [_][]const u8{
-        "big_random_buf",              "clock_time_get",
-        "close_preopen",               "dangling_fd",
-        "dangling_symlink",            "directory_seek",
-        "dir_fd_op_failures",          "fd_advise",
-        "fd_fdstat_set_rights",        "fd_filestat_set",
-        "fd_flags_set",                "fd_readdir",
-        "file_allocate",               "file_pread_pwrite",
-        "file_seek_tell",              "file_truncation",
-        "file_unbuffered_write",       "fstflags_validate",
-        "interesting_paths",           "isatty",
-        "nofollow_errors",             "overwrite_preopen",
-        "path_exists",                 "path_filestat",
-        "path_link",                   "path_open_create_existing",
-        "path_open_dirfd_not_dir",     "path_open_missing",
-        "path_open_nonblock",          "path_open_preopen",
-        "path_open_read_write",        "path_rename",
-        "path_rename_dir_trailing_slashes", "path_symlink_trailing_slashes",
-        "poll_oneoff_stdio",           "readlink",
-        "remove_directory_trailing_slashes", "remove_nonempty_directory",
-        "renumber",                    "sched_yield",
-        "stdio",                       "symlink_create",
-        "symlink_filestat",            "symlink_loop",
-        "truncation_rights",           "unlink_file_trailing_slashes",
+    const test_suites = [_]TestSuite{
+        .{ .key = "c", .path = "tests/c/testsuite/wasm32-wasip1" },
+        .{ .key = "rust", .path = "tests/rust/testsuite/wasm32-wasip1" },
+        .{ .key = "as", .path = "tests/assemblyscript/testsuite/wasm32-wasip1" },
     };
-    for (wasi_rust_tests) |test_name| {
-        const run_test = b.addSystemCommand(&.{
-            "python3",
-            b.pathFromRoot("tools/run-single-wasi-test.py"),
-            "tests/rust/testsuite/wasm32-wasip1",
-            test_name,
-            "-r", b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
-            "--test-runner", "test-runner/wasi_test_runner.py",
-        });
-        run_test.setCwd(wasi_testsuite_dep.path("."));
-        run_test.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
-        run_test.step.dependOn(b.getInstallStep());
-        b.step(b.fmt("wasi-rust-{s}", .{test_name}), b.fmt("Run WASI Rust test: {s}", .{test_name})).dependOn(&run_test.step);
-    }
 
-    const wasi_as_tests = [_][]const u8{
-        "args_get-multiple-arguments",        "args_sizes_get-multiple-arguments",
-        "args_sizes_get-no-arguments",        "environ_get-multiple-variables",
-        "environ_sizes_get-multiple-variables", "environ_sizes_get-no-variables",
-        "fd_write-to-invalid-fd",             "fd_write-to-stdout",
-        "proc_exit-failure",                  "proc_exit-success",
-        "random_get-non-zero-length",         "random_get-zero-length",
-    };
-    for (wasi_as_tests) |test_name| {
-        const run_test = b.addSystemCommand(&.{
-            "python3",
-            b.pathFromRoot("tools/run-single-wasi-test.py"),
-            "tests/assemblyscript/testsuite/wasm32-wasip1",
-            test_name,
-            "-r", b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
-            "--test-runner", "test-runner/wasi_test_runner.py",
-        });
-        run_test.setCwd(wasi_testsuite_dep.path("."));
-        run_test.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
-        run_test.step.dependOn(b.getInstallStep());
-        b.step(b.fmt("wasi-as-{s}", .{test_name}), b.fmt("Run WASI AssemblyScript test: {s}", .{test_name})).dependOn(&run_test.step);
+    for (test_suites) |suite| {
+        // Get the actual path to the testsuite directory
+        const suite_dir_path = wasi_testsuite_dep.path(suite.path).getPath(b);
+
+        // Open and scan the directory for .wasm files
+        var suite_dir = std.fs.cwd().openDir(suite_dir_path, .{ .iterate = true }) catch continue;
+        defer suite_dir.close();
+
+        var test_list: std.ArrayList([]const u8) = .empty;
+        defer test_list.deinit(b.allocator);
+
+        var iter = suite_dir.iterate();
+        while (iter.next() catch null) |entry| {
+            if (entry.kind == .file and std.mem.endsWith(u8, entry.name, ".wasm")) {
+                const test_name = entry.name[0 .. entry.name.len - 5]; // remove .wasm extension
+                const test_name_owned = b.allocator.dupe(u8, test_name) catch continue;
+                test_list.append(b.allocator, test_name_owned) catch continue;
+            }
+        }
+
+        // Sort test names for deterministic ordering
+        std.mem.sort([]const u8, test_list.items, {}, struct {
+            fn lessThan(_: void, lhs: []const u8, rhs: []const u8) bool {
+                return std.mem.lessThan(u8, lhs, rhs);
+            }
+        }.lessThan);
+
+        // Create individual build steps for each discovered test
+        for (test_list.items) |test_name| {
+            const run_test = b.addSystemCommand(&.{
+                "python3",
+                b.pathFromRoot("tools/run-single-wasi-test.py"),
+                suite.path,
+                test_name,
+                "-r",
+                b.pathFromRoot("wasi-testsuite-adapter/zware.py"),
+                "--test-runner",
+                "test-runner/wasi_test_runner.py",
+            });
+            run_test.setCwd(wasi_testsuite_dep.path("."));
+            run_test.setEnvironmentVariable("ZWARE_RUN", b.getInstallPath(.bin, "zware-run"));
+            run_test.step.dependOn(b.getInstallStep());
+            b.step(
+                b.fmt("wasi-{s}-{s}", .{ suite.key, test_name }),
+                b.fmt("Run WASI {s} test: {s}", .{ suite.key, test_name }),
+            ).dependOn(&run_test.step);
+        }
     }
 
     const test_step = b.step("test", "Run all the tests");
