@@ -681,6 +681,7 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
         error.InvalidArgument => .INVAL,
         error.PermissionDenied => .PERM,
+        error.WouldBlock => .AGAIN, // EAGAIN: Resource temporarily unavailable (non-blocking I/O)
         else => std.debug.panic("WASI: Unhandled zig stdlib error: {s}", .{@errorName(err)}),
     };
 }
