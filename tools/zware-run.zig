@@ -1,5 +1,6 @@
 const std = @import("std");
 const zware = @import("zware");
+const wasi = @import("wasi");
 
 fn oom(e: error{OutOfMemory}) noreturn {
     @panic(@errorName(e));
@@ -21,6 +22,20 @@ const global = struct {
     var import_stubs: std.ArrayListUnmanaged(ImportStub) = .{};
 };
 
+const Config = struct {
+    wasm_path: []const u8,
+    function_name: ?[]const u8 = null, // null means auto-detect
+    wasm_args: []const []const u8,
+    env_vars: std.StringHashMap([]const u8),
+    dir_mappings: std.StringHashMap([]const u8),
+    inherit_stdio: bool = true, // default to true for CLI UX
+
+    fn deinit(self: *Config) void {
+        self.env_vars.deinit();
+        self.dir_mappings.deinit();
+    }
+};
+
 pub fn main() !void {
     try main2();
     if (enable_leak_detection) {
@@ -30,32 +45,282 @@ pub fn main() !void {
         }
     }
 }
+fn parseArgs(args: []const []const u8) !Config {
+    var env_vars = std.StringHashMap([]const u8).init(global.alloc);
+    errdefer env_vars.deinit();
+
+    var dir_mappings = std.StringHashMap([]const u8).init(global.alloc);
+    errdefer dir_mappings.deinit();
+
+    var wasm_args: std.ArrayList([]const u8) = .empty;
+    defer wasm_args.deinit(global.alloc);
+
+    var wasm_path: ?[]const u8 = null;
+    var function_name: ?[]const u8 = null;
+    var inherit_stdio: bool = true; // default to true
+    var i: usize = 0;
+
+    while (i < args.len) : (i += 1) {
+        const arg = args[i];
+
+        if (std.mem.eql(u8, arg, "--env")) {
+            i += 1;
+            if (i >= args.len) {
+                std.log.err("--env requires KEY=VALUE argument", .{});
+                std.process.exit(0xff);
+            }
+            const env_spec = args[i];
+            const eq_pos = std.mem.indexOf(u8, env_spec, "=") orelse {
+                std.log.err("invalid --env format, expected KEY=VALUE", .{});
+                std.process.exit(0xff);
+            };
+            try env_vars.put(env_spec[0..eq_pos], env_spec[eq_pos + 1 ..]);
+        } else if (std.mem.eql(u8, arg, "--dir")) {
+            i += 1;
+            if (i >= args.len) {
+                std.log.err("--dir requires GUEST::HOST argument", .{});
+                std.process.exit(0xff);
+            }
+            const dir_spec = args[i];
+            const sep_pos = std.mem.indexOf(u8, dir_spec, "::") orelse {
+                std.log.err("invalid --dir format, expected GUEST::HOST", .{});
+                std.process.exit(0xff);
+            };
+            try dir_mappings.put(dir_spec[0..sep_pos], dir_spec[sep_pos + 2 ..]);
+        } else if (std.mem.eql(u8, arg, "-f") or std.mem.eql(u8, arg, "--function")) {
+            i += 1;
+            if (i >= args.len) {
+                std.log.err("-f/--function requires function name argument", .{});
+                std.process.exit(0xff);
+            }
+            function_name = args[i];
+        } else if (std.mem.eql(u8, arg, "--inherit-stdio")) {
+            inherit_stdio = true;
+        } else if (std.mem.eql(u8, arg, "--no-inherit-stdio")) {
+            inherit_stdio = false;
+        } else if (std.mem.eql(u8, arg, "--version")) {
+            std.debug.print("zware-run 0.0.1\n", .{});
+            std.process.exit(0);
+        } else if (std.mem.eql(u8, arg, "--help") or std.mem.eql(u8, arg, "-h")) {
+            printUsage();
+            std.process.exit(0);
+        } else if (wasm_path == null) {
+            wasm_path = arg;
+        } else {
+            // All arguments after wasm_path are program arguments
+            try wasm_args.append(global.alloc, arg);
+        }
+    }
+
+    if (wasm_path == null) {
+        printUsage();
+        std.process.exit(0xff);
+    }
+
+    return Config{
+        .wasm_path = wasm_path.?,
+        .function_name = function_name,
+        .wasm_args = try wasm_args.toOwnedSlice(global.alloc),
+        .env_vars = env_vars,
+        .dir_mappings = dir_mappings,
+        .inherit_stdio = inherit_stdio,
+    };
+}
+
+fn printUsage() void {
+    const stderr_fd = std.fs.File.stderr();
+    var stderr_buf: [4096]u8 = undefined;
+    var stderr_writer = stderr_fd.writer(&stderr_buf);
+    const stderr = &stderr_writer.interface;
+    stderr.writeAll(
+        \\Usage: zware-run [OPTIONS] FILE.wasm [ARGS...]
+        \\
+        \\Options:
+        \\  -f, --function NAME   Specify function to call (default: _start)
+        \\  --env KEY=VALUE       Set environment variable for WASI
+        \\  --dir GUEST::HOST     Map directory for WASI preopens
+        \\  --inherit-stdio       Inherit stdin/stdout/stderr from host (default)
+        \\  --no-inherit-stdio    Isolate stdio (useful for testing)
+        \\  --version             Show version
+        \\  --help, -h            Show this help
+        \\
+        \\If no function is specified with -f, attempts to call _start (WASI entry point).
+        \\All arguments after FILE.wasm are passed to the WASM program.
+        \\WASI imports are always available regardless of which function is called.
+        \\By default, stdio is inherited from the host for normal CLI usage.
+        \\
+        \\Examples:
+        \\  zware-run -f fib fib.wasm             # Call fib() function
+        \\  zware-run program.wasm arg1 arg2      # Call _start with arguments
+        \\  zware-run --env FOO=bar program.wasm  # Call _start with env var
+        \\  zware-run --dir /::. program.wasm arg1 arg2   # Call _start with dir mapping and args
+        \\  zware-run --no-inherit-stdio test.wasm        # Run with isolated stdio
+        \\
+    ) catch {};
+    stderr.flush() catch {};
+}
+
+// WASI wrapper functions - these adapt WASI functions to the host function signature
+fn wasi_args_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.args_get(vm);
+}
+fn wasi_args_sizes_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.args_sizes_get(vm);
+}
+fn wasi_environ_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.environ_get(vm);
+}
+fn wasi_environ_sizes_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.environ_sizes_get(vm);
+}
+fn wasi_clock_time_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.clock_time_get(vm);
+}
+fn wasi_fd_close(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_close(vm);
+}
+fn wasi_fd_fdstat_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_fdstat_get(vm);
+}
+fn wasi_fd_fdstat_set_flags(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_fdstat_set_flags(vm);
+}
+fn wasi_fd_filestat_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_filestat_get(vm);
+}
+fn wasi_fd_prestat_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_prestat_get(vm);
+}
+fn wasi_fd_prestat_dir_name(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_prestat_dir_name(vm);
+}
+fn wasi_fd_read(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_read(vm);
+}
+fn wasi_fd_readdir(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_readdir(vm);
+}
+fn wasi_fd_seek(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_seek(vm);
+}
+fn wasi_fd_tell(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_tell(vm);
+}
+fn wasi_fd_write(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.fd_write(vm);
+}
+fn wasi_path_create_directory(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.path_create_directory(vm);
+}
+fn wasi_path_filestat_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.path_filestat_get(vm);
+}
+fn wasi_path_open(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.path_open(vm);
+}
+fn wasi_path_readlink(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.path_readlink(vm);
+}
+fn wasi_poll_oneoff(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.poll_oneoff(vm);
+}
+fn wasi_proc_exit(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.proc_exit(vm);
+}
+fn wasi_random_get(vm: *zware.VirtualMachine, _: usize) zware.WasmError!void {
+    return zware.wasi.random_get(vm);
+}
+
+// Expose all WASI imports to the store
+fn setupWasiImports(store: *zware.Store) !void {
+    const wasi_module = "wasi_snapshot_preview1";
+
+    // args_get(argv: **u8, argv_buf: *u8) -> errno
+    try store.exposeHostFunction(wasi_module, "args_get", wasi_args_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // args_sizes_get(argc: *u32, argv_buf_size: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "args_sizes_get", wasi_args_sizes_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // environ_get(environ: **u8, environ_buf: *u8) -> errno
+    try store.exposeHostFunction(wasi_module, "environ_get", wasi_environ_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // environ_sizes_get(environc: *u32, environ_buf_size: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "environ_sizes_get", wasi_environ_sizes_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // clock_time_get(id: u32, precision: u64, timestamp: *u64) -> errno
+    try store.exposeHostFunction(wasi_module, "clock_time_get", wasi_clock_time_get, 0, &[_]zware.ValType{ .I32, .I64, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_close(fd: i32) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_close", wasi_fd_close, 0, &[_]zware.ValType{.I32}, &[_]zware.ValType{.I32});
+
+    // fd_fdstat_get(fd: i32, stat: *fdstat) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_fdstat_get", wasi_fd_fdstat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_fdstat_set_flags(fd: i32, flags: u16) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_fdstat_set_flags", wasi_fd_fdstat_set_flags, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_filestat_get(fd: i32, stat: *filestat) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_filestat_get", wasi_fd_filestat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_prestat_get(fd: i32, prestat: *prestat) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_prestat_get", wasi_fd_prestat_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_prestat_dir_name(fd: i32, path: *u8, path_len: u32) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_prestat_dir_name", wasi_fd_prestat_dir_name, 0, &[_]zware.ValType{ .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_read(fd: i32, iovs: *const iovec, iovs_len: u32, nread: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_read", wasi_fd_read, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_readdir(fd: i32, buf: *u8, buf_len: u32, cookie: u64, bufused: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_readdir", wasi_fd_readdir, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I64, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_seek(fd: i32, offset: i64, whence: u8, newoffset: *u64) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_seek", wasi_fd_seek, 0, &[_]zware.ValType{ .I32, .I64, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_tell(fd: i32, offset: *u64) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_tell", wasi_fd_tell, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // fd_write(fd: i32, iovs: *const ciovec, iovs_len: u32, nwritten: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "fd_write", wasi_fd_write, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // path_create_directory(fd: i32, path: *const u8, path_len: u32) -> errno
+    try store.exposeHostFunction(wasi_module, "path_create_directory", wasi_path_create_directory, 0, &[_]zware.ValType{ .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // path_filestat_get(fd: i32, flags: u32, path: *const u8, path_len: u32, buf: *filestat) -> errno
+    try store.exposeHostFunction(wasi_module, "path_filestat_get", wasi_path_filestat_get, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // path_open(fd: i32, dirflags: u32, path: *const u8, path_len: u32, oflags: u32, fs_rights_base: u64, fs_rights_inheriting: u64, fdflags: u32, opened_fd: *i32) -> errno
+    try store.exposeHostFunction(wasi_module, "path_open", wasi_path_open, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32, .I64, .I64, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // path_readlink(fd: i32, path: *const u8, path_len: u32, buf: *u8, buf_len: u32, bufused: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "path_readlink", wasi_path_readlink, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // poll_oneoff(in: *const subscription, out: *event, nsubscriptions: u32, nevents: *u32) -> errno
+    try store.exposeHostFunction(wasi_module, "poll_oneoff", wasi_poll_oneoff, 0, &[_]zware.ValType{ .I32, .I32, .I32, .I32 }, &[_]zware.ValType{.I32});
+
+    // proc_exit(rval: i32) -> !
+    try store.exposeHostFunction(wasi_module, "proc_exit", wasi_proc_exit, 0, &[_]zware.ValType{.I32}, &[_]zware.ValType{});
+
+    // random_get(buf: *u8, buf_len: u32) -> errno
+    try store.exposeHostFunction(wasi_module, "random_get", wasi_random_get, 0, &[_]zware.ValType{ .I32, .I32 }, &[_]zware.ValType{.I32});
+}
+
 fn main2() !void {
     defer global.import_stubs.deinit(global.alloc);
 
     const full_cmdline = try std.process.argsAlloc(global.alloc);
     defer std.process.argsFree(global.alloc, full_cmdline);
 
-    if (full_cmdline.len <= 1) {
-        const stderr_fd = std.fs.File.stderr();
-        var stderr_buf: [4096]u8 = undefined;
-        var stderr_writer = stderr_fd.writer(&stderr_buf);
-        const stderr = &stderr_writer.interface;
-        try stderr.writeAll("Usage: zware-run FILE.wasm FUNCTION\n");
-        try stderr.flush();
-        std.process.exit(0xff);
-    }
+    var config = try parseArgs(full_cmdline[1..]);
+    defer config.deinit();
 
-    const pos_args = full_cmdline[1..];
-    if (pos_args.len != 2) {
-        std.log.err("expected {} positional cmdline arguments but got {}", .{ 2, pos_args.len });
-        std.process.exit(0xff);
-    }
-    const wasm_path = pos_args[0];
-    const wasm_func_name = pos_args[1];
+    const wasm_path = config.wasm_path;
 
     var store = zware.Store.init(global.alloc);
     defer store.deinit();
+
+    // Setup WASI imports (always available)
+    try setupWasiImports(&store);
 
     const wasm_content = content_blk: {
         var file = std.fs.cwd().openFile(wasm_path, .{}) catch |e| {
@@ -71,7 +336,9 @@ fn main2() !void {
     defer module.deinit();
     try module.decode();
 
-    const export_funcidx = try getExportFunction(&module, wasm_func_name);
+    // Determine which function to call
+    const func_name = config.function_name orelse "_start";
+    const export_funcidx = try getExportFunction(&module, func_name);
     const export_funcdef = module.functions.list.items[export_funcidx];
     const export_functype = try module.types.lookup(export_funcdef.typeidx);
     if (export_functype.params.len != 0) {
@@ -81,6 +348,48 @@ fn main2() !void {
 
     var instance = zware.Instance.init(global.alloc, &store, module);
     defer if (enable_leak_detection) instance.deinit();
+
+    // Setup WASI arguments
+    const wasi_args = try global.alloc.alloc([:0]u8, config.wasm_args.len + 1);
+    defer global.alloc.free(wasi_args);
+
+    // First arg is the program name (wasm path)
+    wasi_args[0] = try global.alloc.dupeZ(u8, wasm_path);
+    for (config.wasm_args, 0..) |arg, i| {
+        wasi_args[i + 1] = try global.alloc.dupeZ(u8, arg);
+    }
+
+    for (wasi_args) |arg| {
+        try instance.wasi_args.append(global.alloc, arg);
+    }
+
+    // Setup WASI environment variables
+    var env_iter = config.env_vars.iterator();
+    while (env_iter.next()) |entry| {
+        try instance.wasi_env.put(global.alloc, entry.key_ptr.*, entry.value_ptr.*);
+    }
+
+    // Setup WASI stdio (fds 0, 1, 2)
+    if (config.inherit_stdio) {
+        try instance.inheritStdio();
+    }
+
+    // Setup WASI preopens (directory mappings)
+    // Preopens always start at fd 3, per WASI convention (fds 0-2 reserved for stdio)
+    var preopen_fd: i32 = 3;
+    var dir_iter = config.dir_mappings.iterator();
+    while (dir_iter.next()) |entry| {
+        const guest_path = entry.key_ptr.*;
+        const host_path = entry.value_ptr.*;
+
+        const dir = std.fs.cwd().openDir(host_path, .{}) catch |e| {
+            std.log.err("failed to open directory '{s}': {s}", .{ host_path, @errorName(e) });
+            std.process.exit(0xff);
+        };
+
+        try instance.addWasiPreopen(preopen_fd, guest_path, dir.fd);
+        preopen_fd += 1;
+    }
 
     try populateMissingImports(&store, &module);
 
@@ -97,7 +406,7 @@ fn main2() !void {
     var in = [_]u64{};
     const out_args = try global.alloc.alloc(u64, export_functype.results.len);
     defer global.alloc.free(out_args);
-    try instance.invoke(wasm_func_name, &in, out_args, .{});
+    try instance.invoke(func_name, &in, out_args, .{});
     std.log.info("{} output(s)", .{out_args.len});
     for (out_args, 0..) |out_arg, out_index| {
         std.log.info("output {} {f}", .{ out_index, fmtValue(export_functype.results[out_index], out_arg) });

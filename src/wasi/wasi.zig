@@ -126,6 +126,10 @@ pub fn fd_close(vm: *VirtualMachine) WasmError!void {
     const fd = vm.popOperand(i32);
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     posix.close(host_fd);
 
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
@@ -138,14 +142,25 @@ pub fn fd_fdstat_get(vm: *VirtualMachine) WasmError!void {
     const memory = try vm.inst.getMemory(0);
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     const file = fs.File{ .handle = host_fd };
     const stat = file.stat() catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
     };
 
-    try memory.write(u16, stat_ptr, 0x00, @intFromEnum(toWasiFileType(stat.kind)));
-    try memory.write(u16, stat_ptr, 0x02, 0);
+    // Write fdstat structure:
+    // offset 0x00: u8 fs_filetype
+    // offset 0x02: u16 fs_flags
+    // offset 0x08: u64 fs_rights_base
+    // offset 0x10: u64 fs_rights_inheriting
+    try memory.write(u8, stat_ptr, 0x00, @intFromEnum(toWasiFileType(stat.kind)));
+    try memory.write(u16, stat_ptr, 0x02, 0); // fs_flags
+
+    // Grant all rights for now (FIXME: should be more restrictive)
     try memory.write(u64, stat_ptr, 0x08, math.maxInt(u64));
     try memory.write(u64, stat_ptr, 0x10, math.maxInt(u64));
 
@@ -168,6 +183,10 @@ pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
     const memory = try vm.inst.getMemory(0);
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     const file = std.fs.File{ .handle = host_fd };
     const stat = file.stat() catch |err|
         {
@@ -194,10 +213,11 @@ pub fn fd_prestat_get(vm: *VirtualMachine) WasmError!void {
     const memory = try vm.inst.getMemory(0);
 
     if (vm.lookupWasiPreopen(fd)) |preopen| {
-        const some_other_ptr = try memory.read(u32, prestat_ptr, 0);
-        const name_len_ptr = try memory.read(u32, prestat_ptr, 4);
-        try memory.write(u32, some_other_ptr, 0, 0);
-        try memory.write(u32, name_len_ptr, 0, @as(u32, @intCast(preopen.name.len)));
+        // Write prestat structure:
+        // offset 0: u8 tag (0 = PREOPENTYPE_DIR)
+        // offset 4: u32 pr_name_len
+        try memory.write(u8, prestat_ptr, 0, 0); // tag = 0 (PREOPENTYPE_DIR)
+        try memory.write(u32, prestat_ptr, 4, @as(u32, @intCast(preopen.name.len)));
 
         try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
     } else {
@@ -229,6 +249,10 @@ pub fn fd_read(vm: *VirtualMachine) WasmError!void {
     const data = memory.memory();
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
 
     var i: u32 = 0;
     var total_read: usize = 0;
@@ -260,28 +284,34 @@ pub fn fd_seek(vm: *VirtualMachine) WasmError!void {
     const offset = vm.popOperand(i64);
     const fd = vm.popOperand(i32);
 
+    const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
+
     switch (relative_to) {
         wasi.whence_t.CUR => {
-            posix.lseek_CUR(fd, offset) catch |err| {
+            posix.lseek_CUR(host_fd, offset) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
         wasi.whence_t.END => {
-            posix.lseek_END(fd, offset) catch |err| {
+            posix.lseek_END(host_fd, offset) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
         wasi.whence_t.SET => {
-            posix.lseek_SET(fd, @intCast(offset)) catch |err| {
+            posix.lseek_SET(host_fd, @intCast(offset)) catch |err| {
                 try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
                 return;
             };
         },
     }
 
-    const new_offset = posix.lseek_CUR_get(fd) catch |err| {
+    const new_offset = posix.lseek_CUR_get(host_fd) catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
     };
@@ -302,6 +332,10 @@ pub fn fd_write(vm: *VirtualMachine) WasmError!void {
     const data = memory.memory();
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
 
     var n: usize = 0;
     var i: u32 = 0;
@@ -350,7 +384,21 @@ pub fn path_filestat_get(vm: *VirtualMachine) WasmError!void {
 
     const sub_path = data[path_ptr .. path_ptr + path_len];
 
+    // Validate path for security: reject absolute paths and parent directory references
+    if (sub_path.len > 0 and sub_path[0] == '/') {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.NOTCAPABLE));
+        return;
+    }
+    if (mem.indexOf(u8, sub_path, "..") != null) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.NOTCAPABLE));
+        return;
+    }
+
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     const dir: fs.Dir = .{ .fd = host_fd };
     const stat = dir.statFile(sub_path) catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
@@ -393,6 +441,10 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
     const sub_path = data[path_ptr .. path_ptr + path_len];
 
     const host_fd = vm.getHostFd(dir_fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
 
     const flags = posix.O{
         .CREAT = oflags.CREAT,
@@ -409,31 +461,184 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
             break :blk .RDWR;
         } else if (fs_rights_base.FD_WRITE) blk: {
             break :blk .WRONLY;
-        } else if (fs_rights_base.FD_READ) blk: {
+        } else blk: {
+            // Default to RDONLY if no rights or only FD_READ
             break :blk .RDONLY;
-        } else unreachable,
+        },
     };
 
     const mode = 0o644;
-    const opened_fd = posix.openat(host_fd, sub_path, flags, mode) catch |err| {
-        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
-        return;
+
+    // Try to open with the requested flags first
+    const opened_fd = posix.openat(host_fd, sub_path, flags, mode) catch |err| blk: {
+        // If ISDIR error and we didn't request O_DIRECTORY, try again with O_DIRECTORY and RDONLY
+        if (err == error.IsDir and !oflags.DIRECTORY) {
+            var retry_flags = flags;
+            retry_flags.DIRECTORY = true;
+            retry_flags.ACCMODE = .RDONLY;
+            break :blk posix.openat(host_fd, sub_path, retry_flags, mode) catch |retry_err| {
+                try vm.pushOperand(u64, @intFromEnum(toWasiError(retry_err)));
+                return;
+            };
+        } else {
+            try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+            return;
+        }
     };
 
+    // Return the host fd directly to WASM
+    // The opened file is not added to preopens (only preopened directories go there)
+    // WASM will use this host fd directly via passthrough in getHostFd()
     try memory.write(i32, fd_ptr, 0, opened_fd);
 
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
+/// Read the contents of a symbolic link.
+/// path_readlink(fd, path, path_len, buf, buf_len, bufused) -> errno
+pub fn path_readlink(vm: *VirtualMachine) WasmError!void {
+    const bufused_ptr = vm.popOperand(u32);
+    const buf_len = vm.popOperand(u32);
+    const buf_ptr = vm.popOperand(u32);
+    const path_len = vm.popOperand(u32);
+    const path_ptr = vm.popOperand(u32);
+    const dir_fd = vm.popOperand(i32);
+
+    const memory = try vm.inst.getMemory(0);
+    const data = memory.memory();
+
+    const sub_path = data[path_ptr..][0..path_len];
+    const buf = data[buf_ptr..][0..buf_len];
+
+    // Validate path for security: reject absolute paths and parent directory references
+    if (sub_path.len > 0 and sub_path[0] == '/') {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.NOTCAPABLE));
+        return;
+    }
+    if (mem.indexOf(u8, sub_path, "..") != null) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.NOTCAPABLE));
+        return;
+    }
+
+    const host_fd = vm.getHostFd(dir_fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
+
+    const result = posix.readlinkat(host_fd, sub_path, buf) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+
+    try memory.write(u32, bufused_ptr, 0, @intCast(result.len));
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+}
+
 // FIXME: implement
 pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
-    const param0 = vm.popOperand(i32);
-    const param1 = vm.popOperand(i32);
-    const param2 = vm.popOperand(i32);
-    const param3 = vm.popOperand(i32);
-    std.debug.print("Unimplemented: poll_oneoff({}, {}, {}, {})\n", .{ param0, param1, param2, param3 });
-    try vm.pushOperand(u64, 0);
-    @panic("Unimplemented: poll_oneoff");
+    const nevents_ptr = vm.popOperand(u32);
+    const nsubscriptions = vm.popOperand(u32);
+    const out_ptr = vm.popOperand(u32);
+    const in_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+    
+    // For now, implement a simple blocking poll that waits on file descriptors
+    // This is sufficient for basic socket operations
+    
+    if (nsubscriptions == 0) {
+        try memory.write(u32, nevents_ptr, 0, 0);
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        return;
+    }
+    
+    // Allocate poll_fds array
+    var poll_fds_buf: [64]posix.pollfd = undefined;
+    var poll_fds_count: usize = 0;
+    
+    // Read subscriptions and build poll structures
+    var i: u32 = 0;
+    while (i < nsubscriptions and poll_fds_count < poll_fds_buf.len) : (i += 1) {
+        const sub_offset = in_ptr + (i * 48); // Each subscription is 48 bytes
+        
+        // Read subscription type (u8 at offset 8)
+        const event_type = try memory.read(u8, sub_offset, 8);
+        
+        // Only handle FD_READ (2) and FD_WRITE (3) events
+        if (event_type == 0 or event_type == 1) { // CLOCK events
+            // Skip clock events for now
+            continue;
+        } else if (event_type == 2) { // FD_READ
+            const fd = try memory.read(i32, sub_offset, 16);
+            const host_fd = vm.getHostFd(fd);
+            
+            if (host_fd != @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+                poll_fds_buf[poll_fds_count] = .{
+                    .fd = host_fd,
+                    .events = posix.POLL.IN,
+                    .revents = 0,
+                };
+                poll_fds_count += 1;
+            }
+        } else if (event_type == 3) { // FD_WRITE
+            const fd = try memory.read(i32, sub_offset, 16);
+            const host_fd = vm.getHostFd(fd);
+            
+            if (host_fd != @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+                poll_fds_buf[poll_fds_count] = .{
+                    .fd = host_fd,
+                    .events = posix.POLL.OUT,
+                    .revents = 0,
+                };
+                poll_fds_count += 1;
+            }
+        }
+    }
+    
+    // If no valid fds, return immediately
+    if (poll_fds_count == 0) {
+        try memory.write(u32, nevents_ptr, 0, 0);
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        return;
+    }
+    
+    // Poll with a timeout (100ms to prevent blocking forever)
+    const poll_fds = poll_fds_buf[0..poll_fds_count];
+    _ = posix.poll(poll_fds, 100) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+    
+    // Write events back
+    var events_written: u32 = 0;
+    i = 0;
+    while (i < poll_fds_count) : (i += 1) {
+        const pfd = poll_fds[i];
+        if (pfd.revents != 0) {
+            const event_offset = out_ptr + (events_written * 32); // Each event is 32 bytes
+            
+            // Write userdata (copy from subscription)
+            const sub_offset = in_ptr + (i * 48);
+            const userdata = try memory.read(u64, sub_offset, 0);
+            try memory.write(u64, event_offset, 0, userdata);
+            
+            // Write error (0 = success)
+            try memory.write(u16, event_offset, 8, 0);
+            
+            // Write event type
+            if ((pfd.revents & posix.POLL.IN) != 0) {
+                try memory.write(u8, event_offset, 10, 2); // FD_READ
+            } else if ((pfd.revents & posix.POLL.OUT) != 0) {
+                try memory.write(u8, event_offset, 10, 3); // FD_WRITE
+            }
+            
+            events_written += 1;
+        }
+    }
+    
+    try memory.write(u32, nevents_ptr, 0, events_written);
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
 pub fn proc_exit(vm: *VirtualMachine) WasmError!void {
@@ -472,9 +677,11 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
+        error.NotLink => .INVAL, // EINVAL: Not a symbolic link (per POSIX/WASI spec for readlink)
         error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
         error.InvalidArgument => .INVAL,
         error.PermissionDenied => .PERM,
+        error.WouldBlock => .AGAIN, // EAGAIN: Resource temporarily unavailable (non-blocking I/O)
         else => std.debug.panic("WASI: Unhandled zig stdlib error: {s}", .{@errorName(err)}),
     };
 }
@@ -510,6 +717,10 @@ pub fn fd_tell(vm: *VirtualMachine) WasmError!void {
     const fd = vm.popOperand(i32);
 
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     const current_offset = posix.lseek_CUR_get(host_fd) catch |err| {
         try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
         return;
@@ -559,6 +770,10 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
     const memory = try vm.inst.getMemory(0);
     const mem_data = memory.memory();
     const host_fd = vm.getHostFd(fd);
+    if (host_fd == @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.BADF));
+        return;
+    }
     const dirent_size: u32 = @sizeOf(wasi.dirent_t);
 
     switch (native_os) {
@@ -570,6 +785,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 = undefined;
@@ -590,18 +806,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
@@ -614,6 +840,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
             var seek: i64 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
@@ -633,18 +860,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.ino, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
@@ -656,6 +893,7 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
             var entry_idx: u64 = 0;
             var bytes_used: u32 = 0;
+            var buffer_full = false;
 
             while (true) {
                 var kernel_buf: [8192]u8 align(@alignOf(std.c.dirent)) = undefined;
@@ -675,18 +913,28 @@ pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
 
                     const entry_size: u32 = dirent_size + @as(u32, @intCast(name.len));
                     if (bytes_used + entry_size > buf_len) {
-                        try memory.write(u32, bufused_ptr, 0, bytes_used);
-                        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
-                        return;
+                        // Buffer is full but there are more entries
+                        buffer_full = true;
+                        break;
                     }
 
                     try writeWasiDirent(mem_data, memory, buf_ptr + bytes_used, entry_idx + 1, entry.fileno, name, toWasiFiletype(entry.type));
                     bytes_used += entry_size;
                     entry_idx += 1;
                 }
+
+                if (buffer_full) break;
             }
 
-            try memory.write(u32, bufused_ptr, 0, bytes_used);
+            // WASI spec: bufused < buf_len signals EOF.
+            // If buffer is full but there are more entries, return buf_len to signal "continue reading".
+            // Zero-fill remaining buffer space to avoid garbage data.
+            if (buffer_full and bytes_used < buf_len) {
+                @memset(mem_data[buf_ptr + bytes_used .. buf_ptr + buf_len], 0);
+                try memory.write(u32, bufused_ptr, 0, buf_len);
+            } else {
+                try memory.write(u32, bufused_ptr, 0, bytes_used);
+            }
             try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
         },
 
