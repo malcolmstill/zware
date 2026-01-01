@@ -537,13 +537,108 @@ pub fn path_readlink(vm: *VirtualMachine) WasmError!void {
 
 // FIXME: implement
 pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
-    const param0 = vm.popOperand(i32);
-    const param1 = vm.popOperand(i32);
-    const param2 = vm.popOperand(i32);
-    const param3 = vm.popOperand(i32);
-    std.debug.print("Unimplemented: poll_oneoff({}, {}, {}, {})\n", .{ param0, param1, param2, param3 });
-    try vm.pushOperand(u64, 0);
-    @panic("Unimplemented: poll_oneoff");
+    const nevents_ptr = vm.popOperand(u32);
+    const nsubscriptions = vm.popOperand(u32);
+    const out_ptr = vm.popOperand(u32);
+    const in_ptr = vm.popOperand(u32);
+
+    const memory = try vm.inst.getMemory(0);
+    
+    // For now, implement a simple blocking poll that waits on file descriptors
+    // This is sufficient for basic socket operations
+    
+    if (nsubscriptions == 0) {
+        try memory.write(u32, nevents_ptr, 0, 0);
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        return;
+    }
+    
+    // Allocate poll_fds array
+    var poll_fds_buf: [64]posix.pollfd = undefined;
+    var poll_fds_count: usize = 0;
+    
+    // Read subscriptions and build poll structures
+    var i: u32 = 0;
+    while (i < nsubscriptions and poll_fds_count < poll_fds_buf.len) : (i += 1) {
+        const sub_offset = in_ptr + (i * 48); // Each subscription is 48 bytes
+        
+        // Read subscription type (u8 at offset 8)
+        const event_type = try memory.read(u8, sub_offset, 8);
+        
+        // Only handle FD_READ (2) and FD_WRITE (3) events
+        if (event_type == 0 or event_type == 1) { // CLOCK events
+            // Skip clock events for now
+            continue;
+        } else if (event_type == 2) { // FD_READ
+            const fd = try memory.read(i32, sub_offset, 16);
+            const host_fd = vm.getHostFd(fd);
+            
+            if (host_fd != @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+                poll_fds_buf[poll_fds_count] = .{
+                    .fd = host_fd,
+                    .events = posix.POLL.IN,
+                    .revents = 0,
+                };
+                poll_fds_count += 1;
+            }
+        } else if (event_type == 3) { // FD_WRITE
+            const fd = try memory.read(i32, sub_offset, 16);
+            const host_fd = vm.getHostFd(fd);
+            
+            if (host_fd != @as(posix.fd_t, @bitCast(@as(i32, -1)))) {
+                poll_fds_buf[poll_fds_count] = .{
+                    .fd = host_fd,
+                    .events = posix.POLL.OUT,
+                    .revents = 0,
+                };
+                poll_fds_count += 1;
+            }
+        }
+    }
+    
+    // If no valid fds, return immediately
+    if (poll_fds_count == 0) {
+        try memory.write(u32, nevents_ptr, 0, 0);
+        try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
+        return;
+    }
+    
+    // Poll with a timeout (100ms to prevent blocking forever)
+    const poll_fds = poll_fds_buf[0..poll_fds_count];
+    _ = posix.poll(poll_fds, 100) catch |err| {
+        try vm.pushOperand(u64, @intFromEnum(toWasiError(err)));
+        return;
+    };
+    
+    // Write events back
+    var events_written: u32 = 0;
+    i = 0;
+    while (i < poll_fds_count) : (i += 1) {
+        const pfd = poll_fds[i];
+        if (pfd.revents != 0) {
+            const event_offset = out_ptr + (events_written * 32); // Each event is 32 bytes
+            
+            // Write userdata (copy from subscription)
+            const sub_offset = in_ptr + (i * 48);
+            const userdata = try memory.read(u64, sub_offset, 0);
+            try memory.write(u64, event_offset, 0, userdata);
+            
+            // Write error (0 = success)
+            try memory.write(u16, event_offset, 8, 0);
+            
+            // Write event type
+            if ((pfd.revents & posix.POLL.IN) != 0) {
+                try memory.write(u8, event_offset, 10, 2); // FD_READ
+            } else if ((pfd.revents & posix.POLL.OUT) != 0) {
+                try memory.write(u8, event_offset, 10, 3); // FD_WRITE
+            }
+            
+            events_written += 1;
+        }
+    }
+    
+    try memory.write(u32, nevents_ptr, 0, events_written);
+    try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
 pub fn proc_exit(vm: *VirtualMachine) WasmError!void {
@@ -582,6 +677,7 @@ fn toWasiError(err: anyerror) wasi.errno_t {
         error.FileNotFound => .NOENT,
         error.PathAlreadyExists => .EXIST,
         error.IsDir => .ISDIR,
+        error.NotLink => .INVAL, // EINVAL: Not a symbolic link (per POSIX/WASI spec for readlink)
         error.Unseekable => .SPIPE, // ESPIPE: Illegal seek (e.g., on pipes/sockets)
         error.InvalidArgument => .INVAL,
         error.PermissionDenied => .PERM,
