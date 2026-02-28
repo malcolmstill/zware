@@ -16,7 +16,7 @@ const WasmError = @import("../instance/vm.zig").WasmError;
 // WebAssembly implementation? E.g. some of the wasi functions only seem to depend on a slice of memory + the zig std lib
 // functions.
 
-pub fn args_get(vm: *VirtualMachine) WasmError!void {
+pub fn args_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const argv_buf_ptr = vm.popOperand(u32);
     const argv_ptr = vm.popOperand(u32);
 
@@ -37,7 +37,7 @@ pub fn args_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn args_sizes_get(vm: *VirtualMachine) WasmError!void {
+pub fn args_sizes_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const argv_buf_size_ptr = vm.popOperand(u32);
     const argc_ptr = vm.popOperand(u32);
 
@@ -55,7 +55,7 @@ pub fn args_sizes_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn environ_get(vm: *VirtualMachine) WasmError!void {
+pub fn environ_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const environ_buf_ptr = vm.popOperand(u32);
     const environ_ptr = vm.popOperand(u32);
 
@@ -86,7 +86,7 @@ pub fn environ_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn environ_sizes_get(vm: *VirtualMachine) WasmError!void {
+pub fn environ_sizes_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const environ_buf_size_ptr = vm.popOperand(u32);
     const environc_ptr = vm.popOperand(u32);
 
@@ -106,7 +106,7 @@ pub fn environ_sizes_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn clock_time_get(vm: *VirtualMachine) WasmError!void {
+pub fn clock_time_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const timestamp_ptr = vm.popOperand(u32);
     const precision = vm.popOperand(i64); // FIXME: we should probably be using this
     _ = precision;
@@ -122,7 +122,7 @@ pub fn clock_time_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_close(vm: *VirtualMachine) WasmError!void {
+pub fn fd_close(vm: *VirtualMachine, _: usize) WasmError!void {
     const fd = vm.popOperand(i32);
 
     const host_fd = vm.getHostFd(fd);
@@ -131,7 +131,7 @@ pub fn fd_close(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_fdstat_get(vm: *VirtualMachine) WasmError!void {
+pub fn fd_fdstat_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const stat_ptr = vm.popOperand(u32);
     const fd = vm.popOperand(i32);
 
@@ -153,7 +153,7 @@ pub fn fd_fdstat_get(vm: *VirtualMachine) WasmError!void {
 }
 
 // FIXME: implement
-pub fn fd_fdstat_set_flags(vm: *VirtualMachine) WasmError!void {
+pub fn fd_fdstat_set_flags(vm: *VirtualMachine, _: usize) WasmError!void {
     const param0 = vm.popOperand(i32);
     const param1 = vm.popOperand(i32);
     std.debug.print("Unimplemented: fd_fdstat_set_flags({}, {})\n", .{ param0, param1 });
@@ -161,7 +161,7 @@ pub fn fd_fdstat_set_flags(vm: *VirtualMachine) WasmError!void {
     @panic("Unimplemented: fd_fdstat_set_flags");
 }
 
-pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
+pub fn fd_filestat_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const stat_ptr = vm.popOperand(u32);
     const fd = vm.popOperand(i32);
 
@@ -187,7 +187,7 @@ pub fn fd_filestat_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_prestat_get(vm: *VirtualMachine) WasmError!void {
+pub fn fd_prestat_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const prestat_ptr = vm.popOperand(u32);
     const fd = vm.popOperand(i32);
 
@@ -205,7 +205,7 @@ pub fn fd_prestat_get(vm: *VirtualMachine) WasmError!void {
     }
 }
 
-pub fn fd_prestat_dir_name(vm: *VirtualMachine) WasmError!void {
+pub fn fd_prestat_dir_name(vm: *VirtualMachine, _: usize) WasmError!void {
     const path_len = vm.popOperand(u32); // FIXME: we should probably be using this
     _ = path_len;
     const path_ptr = vm.popOperand(u32);
@@ -219,7 +219,7 @@ pub fn fd_prestat_dir_name(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_read(vm: *VirtualMachine) WasmError!void {
+pub fn fd_read(vm: *VirtualMachine, _: usize) WasmError!void {
     const n_read_ptr = vm.popOperand(u32);
     const iovs_len = vm.popOperand(u32);
     const iovs_ptr = vm.popOperand(u32);
@@ -254,7 +254,7 @@ pub fn fd_read(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_seek(vm: *VirtualMachine) WasmError!void {
+pub fn fd_seek(vm: *VirtualMachine, _: usize) WasmError!void {
     const new_offset_ptr = vm.popOperand(u32);
     const relative_to: wasi.whence_t = @enumFromInt(vm.popOperand(i32));
     const offset = vm.popOperand(i64);
@@ -292,7 +292,7 @@ pub fn fd_seek(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn fd_write(vm: *VirtualMachine) WasmError!void {
+pub fn fd_write(vm: *VirtualMachine, _: usize) WasmError!void {
     const ret_ptr = vm.popOperand(u32);
     const iovs_len = vm.popOperand(u32);
     const iovs_ptr = vm.popOperand(u32);
@@ -328,7 +328,7 @@ pub fn fd_write(vm: *VirtualMachine) WasmError!void {
 }
 
 // FIXME: implement
-pub fn path_create_directory(vm: *VirtualMachine) WasmError!void {
+pub fn path_create_directory(vm: *VirtualMachine, _: usize) WasmError!void {
     const param0 = vm.popOperand(i32);
     const param1 = vm.popOperand(i32);
     const param2 = vm.popOperand(i32);
@@ -337,7 +337,7 @@ pub fn path_create_directory(vm: *VirtualMachine) WasmError!void {
     @panic("Unimplemented: path_create_directory");
 }
 
-pub fn path_filestat_get(vm: *VirtualMachine) WasmError!void {
+pub fn path_filestat_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const stat_ptr = vm.popOperand(u32);
     const path_len = vm.popOperand(u32);
     const path_ptr = vm.popOperand(u32);
@@ -369,7 +369,7 @@ pub fn path_filestat_get(vm: *VirtualMachine) WasmError!void {
     try vm.pushOperand(u64, @intFromEnum(wasi.errno_t.SUCCESS));
 }
 
-pub fn path_open(vm: *VirtualMachine) WasmError!void {
+pub fn path_open(vm: *VirtualMachine, _: usize) WasmError!void {
     const fd_ptr = vm.popOperand(u32);
 
     const fs_flags: wasi.fdflags_t = @bitCast(@as(u16, @truncate(vm.popOperand(u32))));
@@ -426,7 +426,7 @@ pub fn path_open(vm: *VirtualMachine) WasmError!void {
 }
 
 // FIXME: implement
-pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
+pub fn poll_oneoff(vm: *VirtualMachine, _: usize) WasmError!void {
     const param0 = vm.popOperand(i32);
     const param1 = vm.popOperand(i32);
     const param2 = vm.popOperand(i32);
@@ -436,13 +436,13 @@ pub fn poll_oneoff(vm: *VirtualMachine) WasmError!void {
     @panic("Unimplemented: poll_oneoff");
 }
 
-pub fn proc_exit(vm: *VirtualMachine) WasmError!void {
+pub fn proc_exit(vm: *VirtualMachine, _: usize) WasmError!void {
     const param0 = vm.popOperand(i32);
     const code: u32 = @abs(param0);
     posix.exit(@truncate(code));
 }
 
-pub fn random_get(vm: *VirtualMachine) WasmError!void {
+pub fn random_get(vm: *VirtualMachine, _: usize) WasmError!void {
     const buf_len = vm.popOperand(u32);
     const buf_ptr = vm.popOperand(u32);
 
@@ -505,7 +505,7 @@ fn toWasiTimestamp(ns: i128) u64 {
 
 const _ = std.testing.refAllDecls();
 
-pub fn fd_tell(vm: *VirtualMachine) WasmError!void {
+pub fn fd_tell(vm: *VirtualMachine, _: usize) WasmError!void {
     const offset_ptr = vm.popOperand(u32);
     const fd = vm.popOperand(i32);
 
@@ -549,7 +549,7 @@ fn writeWasiDirent(
     @memcpy(mem_data[name_offset..][0..name.len], name);
 }
 
-pub fn fd_readdir(vm: *VirtualMachine) WasmError!void {
+pub fn fd_readdir(vm: *VirtualMachine, _: usize) WasmError!void {
     const bufused_ptr = vm.popOperand(u32);
     const cookie = vm.popOperand(u64);
     const buf_len = vm.popOperand(u32);
