@@ -75,7 +75,7 @@ pub const Instance = struct {
 
             .wasi_preopens = .empty,
             .wasi_args = .empty,
-            .wasi_env = .{},
+            .wasi_env = .empty,
         };
     }
 
@@ -323,9 +323,9 @@ pub const Instance = struct {
 
         const function = try self.getFunc(funcidx);
 
-        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
-        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = @splat(undefined);
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = @splat(undefined);
+        var op_stack: [options.operand_stack_size]u64 = @splat(0);
 
         switch (function.subtype) {
             .function => |f| {
@@ -386,9 +386,9 @@ pub const Instance = struct {
     pub fn invokeStart(self: *Instance, index: u32, comptime options: VirtualMachineOptions) !void {
         const function = try self.getFunc(index);
 
-        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
-        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = @splat(undefined);
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = @splat(undefined);
+        var op_stack: [options.operand_stack_size]u64 = @splat(0);
 
         switch (function.subtype) {
             .function => |f| {
@@ -427,9 +427,9 @@ pub const Instance = struct {
     }
 
     pub fn invokeExpression(self: *Instance, start: usize, comptime Result: type, comptime options: VirtualMachineOptions) !Result {
-        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** options.frame_stack_size;
-        var label_stack: [options.label_stack_size]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** options.label_stack_size;
-        var op_stack: [options.operand_stack_size]u64 = [_]u64{0} ** options.operand_stack_size;
+        var frame_stack: [options.frame_stack_size]VirtualMachine.Frame = @splat(undefined);
+        var label_stack: [options.label_stack_size]VirtualMachine.Label = @splat(undefined);
+        var op_stack: [options.operand_stack_size]u64 = @splat(0);
 
         var vm = VirtualMachine.init(op_stack[0..], frame_stack[0..], label_stack[0..], self);
 

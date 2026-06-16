@@ -3,12 +3,9 @@ const zware = @import("zware");
 const Store = zware.Store;
 const Module = zware.Module;
 const Instance = zware.Instance;
-const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
-var gpa = GeneralPurposeAllocator(.{}){};
 
-pub fn main() !void {
-    defer _ = gpa.deinit();
-    const alloc = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const alloc = init.gpa;
 
     const bytes = @embedFile("fib.wasm");
 

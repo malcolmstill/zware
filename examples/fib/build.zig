@@ -1,4 +1,5 @@
-const Build = @import("std").Build;
+const std = @import("std");
+const Build = std.Build;
 
 pub fn build(b: *Build) void {
     const target = b.standardTargetOptions(.{});
@@ -20,10 +21,19 @@ pub fn build(b: *Build) void {
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
+    passthroughArgs(b, run_cmd);
 
     const run_step = b.step("run", "Run the app");
     run_step.dependOn(&run_cmd.step);
+}
+
+// zig 0.17.0 and 0.16.0 compatible args passthrough function
+inline fn passthroughArgs(b: *Build, run: *Build.Step.Run) void {
+    if (comptime @import("builtin").zig_version.order(std.SemanticVersion.parse("0.16.0") catch unreachable) == .gt) {
+        run.addPassthruArgs();
+    } else {
+        if (b.args) |args| {
+            for (args) |arg| run.addArg(arg);
+        }
+    }
 }

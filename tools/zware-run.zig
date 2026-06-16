@@ -18,11 +18,11 @@ const global = struct {
         //.verbose_log = true,
     }){} else std.heap.ArenaAllocator.init(std.heap.page_allocator);
     const alloc = allocator_instance.allocator();
-    var import_stubs: std.ArrayListUnmanaged(ImportStub) = .{};
+    var import_stubs: std.ArrayListUnmanaged(ImportStub) = .empty;
 };
 
-pub fn main() !void {
-    try main2();
+pub fn main(init: std.process.Init) !void {
+    try main2(init);
     if (enable_leak_detection) {
         switch (global.allocator_instance.deinit()) {
             .ok => {},
@@ -30,16 +30,16 @@ pub fn main() !void {
         }
     }
 }
-fn main2() !void {
+fn main2(init: std.process.Init) !void {
     defer global.import_stubs.deinit(global.alloc);
 
-    const full_cmdline = try std.process.argsAlloc(global.alloc);
-    defer std.process.argsFree(global.alloc, full_cmdline);
+    const io = init.io;
+    const full_cmdline = try init.minimal.args.toSlice(init.arena.allocator());
 
     if (full_cmdline.len <= 1) {
-        const stderr_fd = std.fs.File.stderr();
+        const stderr_fd = std.Io.File.stderr();
         var stderr_buf: [4096]u8 = undefined;
-        var stderr_writer = stderr_fd.writer(&stderr_buf);
+        var stderr_writer = stderr_fd.writer(io, &stderr_buf);
         const stderr = &stderr_writer.interface;
         try stderr.writeAll("Usage: zware-run FILE.wasm FUNCTION\n");
         try stderr.flush();
@@ -57,21 +57,30 @@ fn main2() !void {
     var store = zware.Store.init(global.alloc);
     defer store.deinit();
 
-    const wasm_content = content_blk: {
-        var file = std.fs.cwd().openFile(wasm_path, .{}) catch |e| {
-            std.log.err("failed to open '{s}': {s}", .{ wasm_path, @errorName(e) });
-            std.process.exit(0xff);
-        };
-        defer file.close();
-        break :content_blk try file.readToEndAlloc(global.alloc, std.math.maxInt(usize));
+    const wasm_content = std.Io.Dir.cwd().readFileAlloc(
+        io,
+        wasm_path,
+        global.alloc,
+        .unlimited,
+    ) catch |err| {
+        std.log.err("failed to read '{s}': {s}", .{ wasm_path, @errorName(err) });
+        std.process.exit(0xff);
     };
+    // content_blk: {
+    //     var file = std.Io.Dir.cwd().openFile(io, wasm_path, .{}) catch |e| {
+    //         std.log.err("failed to open '{s}': {s}", .{ wasm_path, @errorName(e) });
+    //         std.process.exit(0xff);
+    //     };
+    //     defer file.close();
+    //     break :content_blk try file.readToEndAlloc(global.alloc, std.math.maxInt(usize));
+    // };
     defer global.alloc.free(wasm_content);
 
     var module = zware.Module.init(global.alloc, wasm_content);
     defer module.deinit();
     try module.decode();
 
-    const export_funcidx = try getExportFunction(&module, wasm_func_name);
+    const export_funcidx = try getExportFunction(io, &module, wasm_func_name);
     const export_funcdef = module.functions.list.items[export_funcidx];
     const export_functype = try module.types.lookup(export_funcdef.typeidx);
     if (export_functype.params.len != 0) {
@@ -104,12 +113,12 @@ fn main2() !void {
     }
 }
 
-fn getExportFunction(module: *const zware.Module, func_name: []const u8) !usize {
+fn getExportFunction(io: std.Io, module: *const zware.Module, func_name: []const u8) !usize {
     return module.getExport(.Func, func_name) catch |err| switch (err) {
         error.ExportNotFound => {
-            const stderr_fd = std.fs.File.stderr();
+            const stderr_fd = std.Io.File.stderr();
             var stderr_buf: [4096]u8 = undefined;
-            var stderr_writer = stderr_fd.writer(&stderr_buf);
+            var stderr_writer = stderr_fd.writer(io, &stderr_buf);
             const stderr = &stderr_writer.interface;
             var export_func_count: usize = 0;
             for (module.exports.list.items) |exp| {

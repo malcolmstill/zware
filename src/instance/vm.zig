@@ -2682,9 +2682,9 @@ pub const WasmError = error{
 const testing = std.testing;
 
 test "operand push / pop test" {
-    var op_stack: [6]u64 = [_]u64{0} ** 6;
-    var frame_stack_mem: [1024]VirtualMachine.Frame = [_]VirtualMachine.Frame{undefined} ** 1024;
-    var label_stack_mem: [1024]VirtualMachine.Label = [_]VirtualMachine.Label{undefined} ** 1024;
+    var op_stack: [6]u64 = @splat(0);
+    var frame_stack_mem: [1024]VirtualMachine.Frame = @splat(undefined);
+    var label_stack_mem: [1024]VirtualMachine.Label = @splat(undefined);
 
     var inst: Instance = undefined;
 
