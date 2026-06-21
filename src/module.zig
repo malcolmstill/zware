@@ -83,14 +83,14 @@ pub const Module = struct {
     pub fn decode(self: *Module) !void {
         if (self.decoded) return error.AlreadyDecoded;
         var decoder = Decoder{
-            .fbs = .{ .pos = 0, .buffer = self.wasm_bin },
+            .rd = .fixed(self.wasm_bin),
         };
-        const rd = decoder.fbs.reader();
+        const rd = &decoder.rd;
 
-        const magic = try rd.readBytesNoEof(4);
+        const magic = try rd.take(4);
         if (!mem.eql(u8, magic[0..], "\x00asm")) return error.MagicNumberNotFound;
 
-        const version = try rd.readInt(u32, .little);
+        const version = try rd.takeInt(u32, .little);
         if (version != 1) return error.UnknownBinaryVersion;
 
         // FIXME: in hindsight I don't like this:
@@ -148,17 +148,17 @@ pub const Module = struct {
 };
 
 pub const Decoder = struct {
-    fbs: std.Io.FixedBufferStream([]const u8),
+    rd: std.Io.Reader,
 
     pub fn decodeSection(self: *Decoder, module: *Module) !void {
-        const id: SectionType = self.readEnum(SectionType) catch |err| switch (err) {
+        const id: SectionType = self.takeEnum(SectionType) catch |err| switch (err) {
             error.EndOfStream => return error.WasmFileEnd,
             else => return err,
         };
 
-        const size = try self.readLEB128(u32);
+        const size = try self.takeLeb128(u32);
 
-        const section_start = self.fbs.pos;
+        const section_start = self.rd.seek;
 
         switch (id) {
             .Custom => try self.decodeCustomSection(module, size),
@@ -176,38 +176,38 @@ pub const Decoder = struct {
             .DataCount => try self.decodeDataCountSection(module, size),
         }
 
-        const section_end = self.fbs.pos;
+        const section_end = self.rd.seek;
         if (section_end - section_start != size) return error.MalformedSectionMismatchedSize;
     }
 
     fn decodeTypeSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.types.count = count;
 
         var f: usize = 0;
         while (f < count) : (f += 1) {
-            const tag = try self.readByte();
+            const tag = try self.takeByte();
             if (tag != 0x60) return error.ExpectedFuncTypeTag;
 
-            const param_count = try self.readLEB128(u32);
-            const params_start = self.fbs.pos;
+            const param_count = try self.takeLeb128(u32);
+            const params_start = self.rd.seek;
             {
                 var i: usize = 0;
                 while (i < param_count) : (i += 1) {
-                    _ = try self.readEnum(ValType);
+                    _ = try self.takeEnum(ValType);
                 }
             }
-            const params_end = self.fbs.pos;
+            const params_end = self.rd.seek;
 
-            const results_count = try self.readLEB128(u32);
-            const results_start = self.fbs.pos;
+            const results_count = try self.takeLeb128(u32);
+            const results_start = self.rd.seek;
             {
                 var i: usize = 0;
                 while (i < results_count) : (i += 1) {
-                    _ = try self.readEnum(ValType);
+                    _ = try self.takeEnum(ValType);
                 }
             }
-            const results_end = self.fbs.pos;
+            const results_end = self.rd.seek;
 
             const params = module.wasm_bin[params_start..params_end];
             const results = module.wasm_bin[results_start..results_end];
@@ -228,22 +228,22 @@ pub const Decoder = struct {
     }
 
     fn decodeImportSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.imports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const module_name_length = try self.readLEB128(u32);
-            const module_name = try self.readSlice(module_name_length);
+            const module_name_length = try self.takeLeb128(u32);
+            const module_name = try self.takeSlice(module_name_length);
 
             if (!unicode.utf8ValidateSlice(module_name)) return error.NameNotUTF8;
 
-            const name_length = try self.readLEB128(u32);
-            const name = try self.readSlice(name_length);
+            const name_length = try self.takeLeb128(u32);
+            const name = try self.takeSlice(name_length);
 
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-            const tag = try self.readEnum(Tag);
+            const tag = try self.takeEnum(Tag);
 
             if (i > math.maxInt(u32)) return error.ExpectedU32Index;
             const import_index: u32 = @truncate(i);
@@ -263,7 +263,7 @@ pub const Decoder = struct {
     }
 
     fn decodeFunctionSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.functions.count = count;
 
         var i: usize = 0;
@@ -273,7 +273,7 @@ pub const Decoder = struct {
     }
 
     fn decodeFunction(self: *Decoder, module: *Module, import: ?u32) !void {
-        const typeidx = try self.readLEB128(u32);
+        const typeidx = try self.takeLeb128(u32);
 
         if (typeidx >= module.types.list.items.len) return error.ValidatorInvalidTypeIndex;
 
@@ -288,7 +288,7 @@ pub const Decoder = struct {
     }
 
     fn decodeTableSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.tables.count = count;
 
         var i: usize = 0;
@@ -298,14 +298,14 @@ pub const Decoder = struct {
     }
 
     fn decodeTable(self: *Decoder, module: *Module, import: ?u32) !void {
-        const reftype = try self.readEnum(RefType);
-        const limit_type = try self.readEnum(LimitType);
-        const min = try self.readLEB128(u32);
+        const reftype = try self.takeEnum(RefType);
+        const limit_type = try self.takeEnum(LimitType);
+        const min = try self.takeLeb128(u32);
         const max: ?u32 = blk: {
             switch (limit_type) {
                 .Min => break :blk null,
                 .MinMax => {
-                    const max = try self.readLEB128(u32);
+                    const max = try self.takeLeb128(u32);
                     if (min > max) return error.ValidatorTableMinGreaterThanMax;
                     break :blk max;
                 },
@@ -322,7 +322,7 @@ pub const Decoder = struct {
     }
 
     fn decodeMemorySection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.memories.count = count;
 
         var i: usize = 0;
@@ -334,14 +334,14 @@ pub const Decoder = struct {
     fn decodeMemory(self: *Decoder, module: *Module, import: ?u32) !void {
         if (module.memories.list.items.len > 0) return error.ValidatorMultipleMemories;
 
-        const limit_type = try self.readEnum(LimitType);
-        const min = try self.readLEB128(u32);
+        const limit_type = try self.takeEnum(LimitType);
+        const min = try self.takeLeb128(u32);
         if (min > 65536) return error.ValidatorMemoryMinTooLarge;
         const max: ?u32 = blk: {
             switch (limit_type) {
                 .Min => break :blk null,
                 .MinMax => {
-                    const max = try self.readLEB128(u32);
+                    const max = try self.takeLeb128(u32);
                     if (min > max) return error.ValidatorMemoryMinGreaterThanMax;
                     if (max > 65536) return error.ValidatorMemoryMaxTooLarge;
                     break :blk max;
@@ -358,7 +358,7 @@ pub const Decoder = struct {
     }
 
     fn decodeGlobalSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.globals.count = count;
 
         var i: usize = 0;
@@ -368,8 +368,8 @@ pub const Decoder = struct {
     }
 
     fn decodeGlobal(self: *Decoder, module: *Module, import: ?u32) !void {
-        const global_type = try self.readEnum(ValType);
-        const mutability = try self.readEnum(Mutability);
+        const global_type = try self.takeEnum(ValType);
+        const mutability = try self.takeEnum(Mutability);
 
         var parsed_code: ?Parsed = null;
 
@@ -391,13 +391,13 @@ pub const Decoder = struct {
     }
 
     fn decodeExportSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.exports.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const name_length = try self.readLEB128(u32);
-            const name = try self.readSlice(name_length);
+            const name_length = try self.takeLeb128(u32);
+            const name = try self.takeSlice(name_length);
 
             if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
@@ -405,8 +405,8 @@ pub const Decoder = struct {
                 if (mem.eql(u8, name, exprt.name)) return error.ValidatorDuplicateExportName;
             }
 
-            const tag = try self.readEnum(Tag);
-            const index = try self.readLEB128(u32);
+            const tag = try self.takeEnum(Tag);
+            const index = try self.takeLeb128(u32);
 
             switch (tag) {
                 .Func => {
@@ -429,7 +429,7 @@ pub const Decoder = struct {
     fn decodeStartSection(self: *Decoder, module: *Module) !void {
         if (module.start != null) return error.MultipleStartSections;
 
-        const funcidx = try self.readLEB128(u32);
+        const funcidx = try self.takeLeb128(u32);
         const func = try module.functions.lookup(funcidx);
         const functype = try module.types.lookup(func.typeidx);
 
@@ -439,12 +439,12 @@ pub const Decoder = struct {
     }
 
     fn decodeElementSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.elements.count = count;
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const elem_type = try self.readLEB128(u32);
+            const elem_type = try self.takeLeb128(u32);
 
             switch (elem_type) {
                 0 => {
@@ -453,13 +453,13 @@ pub const Decoder = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readLEB128(u32);
+                    const data_length = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readLEB128(u32);
+                        const funcidx = try self.takeLeb128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -482,15 +482,15 @@ pub const Decoder = struct {
                     });
                 },
                 1 => {
-                    _ = try self.readEnum(ElemKind);
+                    _ = try self.takeEnum(ElemKind);
 
-                    const data_length = try self.readLEB128(u32);
+                    const data_length = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readLEB128(u32);
+                        const funcidx = try self.takeLeb128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -510,20 +510,20 @@ pub const Decoder = struct {
                     });
                 },
                 2 => {
-                    const tableidx = try self.readLEB128(u32);
+                    const tableidx = try self.takeLeb128(u32);
 
                     if (tableidx >= module.tables.list.items.len) return error.ValidatorElemUnknownTable;
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
-                    _ = try self.readEnum(ElemKind);
-                    const data_length = try self.readLEB128(u32);
+                    _ = try self.takeEnum(ElemKind);
+                    const data_length = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readLEB128(u32);
+                        const funcidx = try self.takeLeb128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -546,14 +546,14 @@ pub const Decoder = struct {
                     });
                 },
                 3 => {
-                    _ = try self.readEnum(ElemKind);
-                    const data_length = try self.readLEB128(u32);
+                    _ = try self.takeEnum(ElemKind);
+                    const data_length = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
                     var j: usize = 0;
                     while (j < data_length) : (j += 1) {
-                        const funcidx = try self.readLEB128(u32);
+                        const funcidx = try self.takeLeb128(u32);
 
                         if (funcidx >= module.functions.list.items.len) return error.ValidatorElemUnknownFunctionIndex;
 
@@ -578,7 +578,7 @@ pub const Decoder = struct {
 
                     const parsed_offset_code = try self.readConstantExpression(module, .I32);
 
-                    const init_expression_count = try self.readLEB128(u32);
+                    const init_expression_count = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -599,8 +599,8 @@ pub const Decoder = struct {
                     });
                 },
                 5 => { // Passive
-                    const reftype = try self.readEnum(RefType);
-                    const expr_count = try self.readLEB128(u32);
+                    const reftype = try self.takeEnum(RefType);
+                    const expr_count = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -619,8 +619,8 @@ pub const Decoder = struct {
                     });
                 },
                 7 => { // Declarative
-                    const reftype = try self.readEnum(RefType);
-                    const expr_count = try self.readLEB128(u32);
+                    const reftype = try self.takeEnum(RefType);
+                    const expr_count = try self.takeLeb128(u32);
 
                     const first_init_offset = module.element_init_offsets.items.len;
 
@@ -646,11 +646,11 @@ pub const Decoder = struct {
 
     fn decodeDataCountSection(self: *Decoder, module: *Module, size: u32) !void {
         if (size == 0) return;
-        module.data_count = try self.readLEB128(u32);
+        module.data_count = try self.takeLeb128(u32);
     }
 
     fn decodeCodeSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
         module.codes.count = count;
 
         try module.parsed_code.ensureTotalCapacity(module.alloc, count * 32);
@@ -662,9 +662,9 @@ pub const Decoder = struct {
         var i: usize = 0;
         while (i < count) : (i += 1) {
             // size: the number of bytes defining the function, includes bytes defining locals
-            _ = try self.readLEB128(u32);
+            _ = try self.takeLeb128(u32);
 
-            const locals_definitions_count = try self.readLEB128(u32);
+            const locals_definitions_count = try self.takeLeb128(u32);
 
             const locals_start = module.local_types.items.len;
 
@@ -672,8 +672,8 @@ pub const Decoder = struct {
             var j: usize = 0;
             var locals_count: usize = 0;
             while (j < locals_definitions_count) : (j += 1) {
-                const type_count = try self.readLEB128(u32);
-                const local_type = try self.readEnum(ValType);
+                const type_count = try self.takeLeb128(u32);
+                const local_type = try self.takeEnum(ValType);
                 locals_count += type_count;
 
                 try module.local_types.append(module.alloc, .{ .count = type_count, .valtype = local_type });
@@ -694,7 +694,7 @@ pub const Decoder = struct {
     }
 
     fn decodeDataSection(self: *Decoder, module: *Module) !void {
-        const count = try self.readLEB128(u32);
+        const count = try self.takeLeb128(u32);
 
         if (module.data_count) |data_count| {
             if (count != data_count) return error.DataCountSectionDataSectionCountMismatch;
@@ -704,7 +704,7 @@ pub const Decoder = struct {
 
         var i: usize = 0;
         while (i < count) : (i += 1) {
-            const data_section_type = try self.readLEB128(u32);
+            const data_section_type = try self.takeLeb128(u32);
 
             switch (data_section_type) {
                 0 => {
@@ -714,8 +714,8 @@ pub const Decoder = struct {
 
                     const parsed_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readLEB128(u32);
-                    const data = try self.readSlice(data_length);
+                    const data_length = try self.takeLeb128(u32);
+                    const data = try self.takeSlice(data_length);
 
                     try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
@@ -727,8 +727,8 @@ pub const Decoder = struct {
                     });
                 },
                 1 => {
-                    const data_length = try self.readLEB128(u32);
-                    const data = try self.readSlice(data_length);
+                    const data_length = try self.takeLeb128(u32);
+                    const data = try self.takeSlice(data_length);
 
                     try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
@@ -737,14 +737,14 @@ pub const Decoder = struct {
                     });
                 },
                 2 => {
-                    const memidx = try self.readLEB128(u32);
+                    const memidx = try self.takeLeb128(u32);
 
                     if (memidx >= module.memories.list.items.len) return error.ValidatorDataMemoryReferenceInvalid;
 
                     const parsed_code = try self.readConstantExpression(module, .I32);
 
-                    const data_length = try self.readLEB128(u32);
-                    const data = try self.readSlice(data_length);
+                    const data_length = try self.takeLeb128(u32);
+                    const data = try self.takeSlice(data_length);
 
                     try module.datas.list.append(module.alloc, DataSegment{
                         .count = data_length,
@@ -763,15 +763,15 @@ pub const Decoder = struct {
     }
 
     fn decodeCustomSection(self: *Decoder, module: *Module, size: u32) !void {
-        const offset = self.fbs.pos;
+        const offset = self.rd.seek;
 
-        const name_length = try self.readLEB128(u32);
-        const name = try self.readSlice(name_length);
+        const name_length = try self.takeLeb128(u32);
+        const name = try self.takeSlice(name_length);
 
         if (!unicode.utf8ValidateSlice(name)) return error.NameNotUTF8;
 
-        const data_length = try math.sub(usize, size, (self.fbs.pos - offset));
-        const data = try self.readSlice(data_length);
+        const data_length = try math.sub(usize, size, (self.rd.seek - offset));
+        const data = try self.takeSlice(data_length);
 
         try module.customs.list.append(module.alloc, Custom{
             .name = name,
@@ -780,8 +780,8 @@ pub const Decoder = struct {
     }
 
     pub fn readConstantExpression(self: *Decoder, module: *Module, valtype: ValType) !Parsed {
-        const rd = self.fbs.reader();
-        const code = module.wasm_bin[rd.context.pos..];
+        const rd = self.rd;
+        const code = module.wasm_bin[rd.seek..];
 
         var parser = Parser.init(module, self);
         defer parser.deinit();
@@ -790,7 +790,7 @@ pub const Decoder = struct {
     }
 
     pub fn readFunction(self: *Decoder, module: *Module, locals: []LocalType, funcidx: usize) !Parsed {
-        const code = module.wasm_bin[self.fbs.pos..];
+        const code = module.wasm_bin[self.rd.seek..];
 
         var parser = Parser.init(module, self);
         defer parser.deinit();
@@ -798,29 +798,46 @@ pub const Decoder = struct {
         return parser.parseFunction(funcidx, locals, code);
     }
 
-    fn readByte(self: *Decoder) !u8 {
-        return self.fbs.reader().readByte();
+    fn takeByte(self: *Decoder) !u8 {
+        return self.rd.takeByte();
     }
 
-    fn readEnum(self: *Decoder, comptime T: type) !T {
-        return self.fbs.reader().readEnum(T, .little);
+    fn takeEnum(self: *Decoder, comptime T: type) !T {
+        return self.rd.takeEnum(T, .little);
     }
 
-    fn readLEB128(self: *Decoder, comptime T: type) !T {
-        const readFn = switch (@typeInfo(T).int.signedness) {
-            .signed => std.leb.readILEB128,
-            .unsigned => std.leb.readUleb128,
+    fn takeLeb128(self: *Decoder, comptime T: type) !T {
+        return takeLeb128Exact(&self.rd, T);
+    }
+
+    pub fn takeSlice(self: *Decoder, count: usize) ![]const u8 {
+        return self.rd.take(count);
+    }
+
+    /// a wrapper around `std.Io.Reader.takeLeb128` that checks
+    /// that at most 8/7 times the integer size rounded up bytes are consumed,
+    /// which is the maximum number of bytes any leb128 should need.
+    /// the webassembly testsuite expects the decoder to error
+    /// on such "overlong" values with "integer representation tool long"
+    pub inline fn takeLeb128Exact(rd: *std.Io.Reader, comptime T: type) !T {
+        const leb_size = comptime std.math.divCeil(usize, @sizeOf(T) * 8, 7) catch unreachable;
+        // we need to prevent rebasing during takeLeb128 call,
+        // so fill ensure we have the leb_size buffered
+        rd.fill(leb_size) catch |err| {
+            switch (err) {
+                error.EndOfStream => {},
+                error.ReadFailed => return err,
+            }
         };
-        return readFn(T, self.fbs.reader());
-    }
-
-    pub fn readSlice(self: *Decoder, count: usize) ![]const u8 {
-        const start = self.fbs.pos;
-        const end = self.fbs.pos + count;
-        if (end > self.fbs.buffer.len)
-            return error.EndOfStream;
-        self.fbs.pos = end;
-        return self.fbs.buffer[start..self.fbs.pos];
+        const seek_pre = rd.seek;
+        const value = try rd.takeLeb128(T);
+        const rd_was_rebased = seek_pre > rd.seek;
+        if (rd_was_rebased or (rd.seek - seek_pre) > leb_size) {
+            // the leb128 representation is bigger than 8/7 of the requested
+            // integer size which is bigger than necessary
+            return error.InvalidValue;
+        }
+        return value;
     }
 };
 

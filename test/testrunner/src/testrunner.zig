@@ -1,5 +1,4 @@
 const std = @import("std");
-const fs = std.fs;
 const fmt = std.fmt;
 const mem = std.mem;
 const math = std.math;
@@ -14,7 +13,6 @@ const Memory = zware.Memory;
 const Function = zware.Function;
 const Global = zware.Global;
 const VirtualMachine = zware.VirtualMachine;
-const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
 const ArenaAllocator = std.heap.ArenaAllocator;
 const StringHashMap = std.hash_map.StringHashMap;
 const ArrayList = std.ArrayList;
@@ -31,8 +29,6 @@ const WasmError = zware.WasmError;
 //
 // See https://github.com/WebAssembly/spec/blob/master/interpreter/README.md#s-expression-syntax
 // for information on the format of the .wast files.
-
-var gpa = GeneralPurposeAllocator(.{}){};
 
 fn print(_: *VirtualMachine, _: usize) WasmError!void {
     std.debug.print("print\n", .{});
@@ -70,23 +66,18 @@ fn print_f64_f64(vm: *VirtualMachine, _: usize) WasmError!void {
     std.debug.print("print_f64_f64: {}, {}\n", .{ value_f64_1, value_f64_2 });
 }
 
-pub fn main() anyerror!void {
-    defer _ = gpa.deinit();
+pub fn main(init: std.process.Init) anyerror!void {
+    const alloc = init.arena.allocator();
+    const io = init.io;
 
     // 1. Get .json file from command line
-    var args = try process.argsWithAllocator(gpa.allocator());
-    defer args.deinit();
+    var args = try init.minimal.args.iterateAllocator(init.arena.allocator());
     _ = args.skip();
     const filename = args.next() orelse return error.NoFilename;
     std.log.info("testing: {s}", .{filename});
 
-    var arena = ArenaAllocator.init(gpa.allocator());
-    defer _ = arena.deinit();
-
-    const alloc = arena.allocator();
-
     // 2. Parse json and find .wasm file
-    const json_string = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
+    const json_string = try std.Io.Dir.cwd().readFileAlloc(io, filename, alloc, .unlimited);
 
     const dynamic_tree = try std.json.parseFromSliceLeaky(std.json.Value, alloc, json_string, .{});
     const r = try std.json.parseFromValueLeaky(Wast, alloc, dynamic_tree, .{});
@@ -130,7 +121,7 @@ pub fn main() anyerror!void {
                 wasm_filename = command.module.filename;
 
                 std.debug.print("(module): {s}:{} ({s})\n", .{ r.source_filename, command.module.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                program = try std.Io.Dir.cwd().readFileAlloc(io, wasm_filename, alloc, .unlimited);
 
                 errdefer {
                     std.debug.print("(module): {s} at {}:{s}\n", .{ r.source_filename, command.module.line, wasm_filename });
@@ -405,7 +396,7 @@ pub fn main() anyerror!void {
                 wasm_filename = command.assert_invalid.filename;
                 std.debug.print("(invalid): {s}:{} ({s})\n", .{ r.source_filename, command.assert_invalid.line, wasm_filename });
 
-                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                program = try std.Io.Dir.cwd().readFileAlloc(io, wasm_filename, alloc, .unlimited);
                 module = Module.init(alloc, program);
 
                 errdefer {
@@ -469,7 +460,7 @@ pub fn main() anyerror!void {
                 if (mem.endsWith(u8, command.assert_malformed.filename, ".wat")) continue;
                 wasm_filename = command.assert_malformed.filename;
                 std.debug.print("(malformed): {s}:{} ({s})\n", .{ r.source_filename, command.assert_malformed.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                program = try std.Io.Dir.cwd().readFileAlloc(io, wasm_filename, alloc, .unlimited);
                 module = Module.init(alloc, program);
 
                 const trap = command.assert_malformed.text;
@@ -502,7 +493,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed reference type")) {
                         switch (err) {
-                            error.InvalidValue => continue,
+                            error.InvalidEnumTag => continue,
                             else => {},
                         }
                     }
@@ -523,7 +514,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed section id")) {
                         switch (err) {
-                            error.InvalidValue => continue,
+                            error.InvalidEnumTag => continue,
                             else => {},
                         }
                     }
@@ -547,6 +538,7 @@ pub fn main() anyerror!void {
                             error.InvalidValue => continue,
                             error.ExpectedFuncTypeTag => continue,
                             error.Overflow => continue,
+                            error.InvalidEnumTag => continue,
                             else => {},
                         }
                     }
@@ -594,7 +586,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed import kind")) {
                         switch (err) {
-                            error.InvalidValue => continue,
+                            error.InvalidEnumTag => continue,
                             else => {},
                         }
                     }
@@ -602,7 +594,7 @@ pub fn main() anyerror!void {
                     if (mem.eql(u8, trap, "integer too large")) {
                         switch (err) {
                             error.Overflow => continue,
-                            error.InvalidValue => continue, // test/testsuite/binary.wast:601 I think the test is wrong
+                            error.InvalidEnumTag => continue, // test/testsuite/binary.wast:1463
                             else => {},
                         }
                     }
@@ -616,7 +608,7 @@ pub fn main() anyerror!void {
 
                     if (mem.eql(u8, trap, "malformed mutability")) {
                         switch (err) {
-                            error.InvalidValue => continue,
+                            error.InvalidEnumTag => continue,
                             else => {},
                         }
                     }
@@ -666,7 +658,7 @@ pub fn main() anyerror!void {
             .assert_unlinkable => {
                 wasm_filename = command.assert_unlinkable.filename;
                 std.debug.print("(unlinkable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_unlinkable.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                program = try std.Io.Dir.cwd().readFileAlloc(io, wasm_filename, alloc, .unlimited);
 
                 module = Module.init(alloc, program);
                 try module.decode();
@@ -693,7 +685,7 @@ pub fn main() anyerror!void {
             .assert_uninstantiable => {
                 wasm_filename = command.assert_uninstantiable.filename;
                 std.debug.print("(uninstantiable): {s}:{} ({s})\n", .{ r.source_filename, command.assert_uninstantiable.line, wasm_filename });
-                program = try fs.cwd().readFileAlloc(alloc, wasm_filename, 0xFFFFFFF);
+                program = try std.Io.Dir.cwd().readFileAlloc(io, wasm_filename, alloc, .unlimited);
 
                 module = Module.init(alloc, program);
                 try module.decode();

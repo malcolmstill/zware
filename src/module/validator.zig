@@ -85,7 +85,7 @@ pub const Validator = struct {
 
             if (!(arity <= 64)) return error.TODOAllocation;
 
-            var temp = [_]Type{.{ .Known = .I32 }} ** 64; // TODO: allocate some memory for this
+            var temp: [64]Type = @splat(.{ .Known = .I32 }); // TODO: allocate some memory for this
             for (labelTypes(frame_n), 0..) |_, i| {
                 temp[i] = try v.popOperandExpecting(Type{ .Known = labelTypes(frame_n)[arity - i - 1] });
             }
@@ -687,8 +687,8 @@ test "validate add i32" {
     var v = Validator.init(arena.allocator(), false);
     defer v.deinit();
 
-    var in: [0]ValType = [_]ValType{} ** 0;
-    var out: [1]ValType = [_]ValType{.I32} ** 1;
+    var in: [0]ValType = .{};
+    var out: [1]ValType = @splat(.I32);
     _ = try v.pushControlFrame(.block, in[0..], out[0..]);
     _ = try v.validate(.@"i32.const");
     _ = try v.validate(.drop);
@@ -705,8 +705,8 @@ test "validate add i64" {
     var v = Validator.init(arena.allocator(), false);
     defer v.deinit();
 
-    var in: [0]ValType = [_]ValType{} ** 0;
-    var out: [1]ValType = [_]ValType{.I64} ** 1;
+    var in: [0]ValType = .{};
+    var out: [1]ValType = @splat(.I64);
     _ = try v.pushControlFrame(.block, in[0..], out[0..]);
     _ = try v.validate(.@"i64.const");
     _ = try v.validate(.@"i64.const");
@@ -721,8 +721,8 @@ test "validate add f32" {
     var v = Validator.init(arena.allocator(), false);
     defer v.deinit();
 
-    var in: [0]ValType = [_]ValType{} ** 0;
-    var out: [1]ValType = [_]ValType{.F32} ** 1;
+    var in: [0]ValType = .{};
+    var out: [1]ValType = @splat(.F32);
     _ = try v.pushControlFrame(.block, in[0..], out[0..]);
     _ = try v.validate(.@"f32.const");
     _ = try v.validate(.@"f32.const");
@@ -737,8 +737,8 @@ test "validate add f64" {
     var v = Validator.init(arena.allocator(), false);
     defer v.deinit();
 
-    var in: [0]ValType = [_]ValType{} ** 0;
-    var out: [1]ValType = [_]ValType{.F64} ** 1;
+    var in: [0]ValType = .{};
+    var out: [1]ValType = @splat(.F64);
     _ = try v.pushControlFrame(.block, in[0..], out[0..]);
     _ = try v.validate(.@"f64.const");
     _ = try v.validate(.@"f64.const");
@@ -753,8 +753,8 @@ test "validate: add error on mismatched types" {
     var v = Validator.init(arena.allocator(), false);
     defer v.deinit();
 
-    var in: [0]ValType = [_]ValType{} ** 0;
-    var out: [1]ValType = [_]ValType{.I32} ** 1;
+    var in: [0]ValType = .{};
+    var out: [1]ValType = @splat(.I32);
     _ = try v.pushControlFrame(.block, in[0..], out[0..]);
     _ = try v.validate(.@"i64.const");
     _ = try v.validate(.@"i32.const");

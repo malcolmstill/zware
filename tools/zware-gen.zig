@@ -1,6 +1,5 @@
 const std = @import("std");
 const mem = std.mem;
-const fs = std.fs;
 const fmt = std.fmt;
 const process = std.process;
 const zware = @import("zware");
@@ -8,28 +7,25 @@ const ArrayList = std.ArrayList;
 const Module = zware.Module;
 const Store = zware.Store;
 const Instance = zware.Instance;
-const GeneralPurposeAllocator = std.heap.GeneralPurposeAllocator;
-var gpa = GeneralPurposeAllocator(.{}){};
 
-pub fn main() !void {
-    defer _ = gpa.deinit();
-    var alloc = gpa.allocator();
+pub fn main(init: std.process.Init) !void {
+    const alloc = init.gpa;
+    const io = init.io;
 
-    var args = try process.argsWithAllocator(alloc);
-    defer args.deinit();
+    var args = try init.minimal.args.iterateAllocator(init.arena.allocator());
     _ = args.skip();
     const filename = args.next() orelse return error.NoFilename;
 
-    const program = try fs.cwd().readFileAlloc(alloc, filename, 0xFFFFFFF);
+    const program = try std.Io.Dir.cwd().readFileAlloc(init.io, filename, alloc, .unlimited);
     defer alloc.free(program);
 
     var module = Module.init(alloc, program);
     defer module.deinit();
     try module.decode();
 
-    const stdout_fd = std.fs.File.stdout();
+    const stdout_fd = std.Io.File.stdout();
     var stdout_buf: [4096]u8 = undefined;
-    var stdout_writer = stdout_fd.writer(&stdout_buf);
+    var stdout_writer = stdout_fd.writer(io, &stdout_buf);
     const stdout = &stdout_writer.interface;
 
     try stdout.print("const std = @import(\"std\");\n", .{});
